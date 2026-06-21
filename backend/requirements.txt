@@ -9,6 +9,14 @@ pydantic-settings==2.7.0
 # ── Configuration file parsing ────────────────────────────────────────────────
 pyyaml==6.0.2
 
+# ── Database — ORM + migrations ───────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+alembic==1.14.0
+
+# ── Database — drivers ────────────────────────────────────────────────────────
+asyncpg==0.30.0          # async driver used by the application at runtime
+psycopg2-binary==2.9.10  # sync driver used only by Alembic for migrations
+
 # ── HTTP client (for external API calls: market data, FX, AI providers) ──────
 httpx==0.28.1
 
