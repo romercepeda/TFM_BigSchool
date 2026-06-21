@@ -14,8 +14,10 @@ import logging
 
 from fastapi import FastAPI
 
+from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
+from app.api.holdings import router as holdings_router
 from app.api.portfolios import router as portfolios_router
 from app.config import get_config
 
@@ -36,3 +38,5 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(portfolios_router)
+app.include_router(holdings_router)
+app.include_router(assets_router)

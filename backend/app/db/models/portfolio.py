@@ -54,6 +54,7 @@ class Portfolio(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="portfolios")  # type: ignore[name-defined]
+    holdings: Mapped[list["Holding"]] = relationship(back_populates="portfolio", cascade="all, delete-orphan")  # type: ignore[name-defined]
 
     def __repr__(self) -> str:
         return (

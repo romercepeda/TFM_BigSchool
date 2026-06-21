@@ -1,0 +1,76 @@
+"""Sale and SaleLotConsumption ORM models — Spec D03 §3.4 and §3.5.
+
+Sale: a single sale event within a Holding.
+SaleLotConsumption: the FIFO junction — records exactly which lots each sale consumed
+and how many units were taken from each. Source of truth for realized-gain accounting.
+"""
+
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.db.models.lot import _FX_ORIGIN_ENUM
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    holding_id: Mapped[UUID] = mapped_column(
+        ForeignKey("holdings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sale_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Must be > 0. Validated at the service layer.
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+    # Price per unit at sale, in the asset's quote_currency.
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+    # Null only when fx_rate_origin = 'manual_pending'.
+    fx_rate_at_sale: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    fx_rate_origin: Mapped[str] = mapped_column(
+        _FX_ORIGIN_ENUM, nullable=False, server_default="manual"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    holding: Mapped["Holding"] = relationship(back_populates="sales")  # type: ignore[name-defined]
+    lot_consumptions: Mapped[list["SaleLotConsumption"]] = relationship(
+        back_populates="sale", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Sale id={self.id} date={self.sale_date} qty={self.quantity}>"
+
+
+class SaleLotConsumption(Base):
+    """FIFO junction — which lots a sale consumed, and how many units from each."""
+
+    __tablename__ = "sale_lot_consumptions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    sale_id: Mapped[UUID] = mapped_column(
+        ForeignKey("sales.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    lot_id: Mapped[UUID] = mapped_column(
+        ForeignKey("lots.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Exact units taken from this lot by this sale.
+    quantity_consumed: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+
+    sale: Mapped["Sale"] = relationship(back_populates="lot_consumptions")
+    lot: Mapped["Lot"] = relationship(back_populates="sale_consumptions")
+
+    def __repr__(self) -> str:
+        return (
+            f"<SaleLotConsumption sale={self.sale_id} lot={self.lot_id} "
+            f"qty={self.quantity_consumed}>"
+        )
