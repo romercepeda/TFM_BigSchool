@@ -3,17 +3,18 @@
 Starts the FastAPI application, loads and validates config.yaml (fail-fast),
 and registers all API routers.
 
-Run locally (without Docker):
-    uvicorn app.main:app --reload
-
 Run via Docker Compose:
     docker compose up backend
+
+Run locally (requires local Python env with requirements.txt installed):
+    uvicorn app.main:app --reload
 """
 
 import logging
 
 from fastapi import FastAPI
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.config import get_config
 
@@ -32,3 +33,4 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router)
