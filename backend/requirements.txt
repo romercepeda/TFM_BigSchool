@@ -1,0 +1,18 @@
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# ── Data validation & settings ────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# ── Configuration file parsing ────────────────────────────────────────────────
+pyyaml==6.0.2
+
+# ── HTTP client (for external API calls: market data, FX, AI providers) ──────
+httpx==0.28.1
+
+# ── Development & testing ─────────────────────────────────────────────────────
+ruff==0.8.4
+pytest==8.3.4
+pytest-cov==6.0.0

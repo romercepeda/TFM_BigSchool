@@ -1,0 +1,62 @@
+# BigSchool — application configuration
+# All tunable behavioral values live here (not secrets — those go in .env).
+# See specs/00-engineering/spec-00f-global-configuration.md for the full spec.
+#
+# Changing any value here requires a backend restart to take effect.
+
+portfolios:
+  max_active_per_user: 10
+  name_max_length: 60
+
+uploads:
+  max_file_size_mb: 20
+
+authentication:
+  methods:
+    google:
+      enabled: true
+    microsoft:
+      enabled: true
+    password:
+      enabled: true
+    guest:
+      enabled: true
+
+indicators:
+  scheduled_job:
+    daily_run_hour_utc: 2
+
+alerts:
+  near_crossing_pct: 0.03
+
+ai:
+  provider: anthropic
+  anthropic:
+    model: claude-opus-4-7
+  openai:
+    model: gpt-4o
+  gemini:
+    model: gemini-2.5-pro
+  per_call_timeout_seconds: 120
+  notifications:
+    poll_interval_seconds: 30
+
+i18n:
+  default_language: es
+  supported_languages:
+    - es
+    - en
+
+market_data:
+  provider: twelve_data
+  twelve_data:
+    base_url: https://api.twelvedata.com
+    daily_call_budget: 800
+  finnhub:
+    base_url: https://finnhub.io/api/v1
+    per_minute_call_budget: 60
+
+fx_data:
+  provider: frankfurter
+  frankfurter:
+    base_url: https://api.frankfurter.dev/v2

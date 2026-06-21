@@ -1,0 +1,82 @@
+services:
+  # ── Backend API (FastAPI + Uvicorn) ─────────────────────────────────────────
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot-reload during development.
+      # The image has dependencies pre-installed; this overlay provides the code.
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/bigschool
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      # .env is optional — DATABASE_URL and REDIS_URL are set above.
+      # Copy .env.example to .env and fill in OAuth/AI keys when you need them.
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bigschool
+    ports:
+      # Exposed so you can connect from a DB client (e.g. DBeaver, pgAdmin)
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis (Celery broker & result backend) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      # Exposed so you can inspect the queue with redis-cli if needed
+      - "6379:6379"
+    restart: unless-stopped
+
+  # ── Frontend (React + Vite) ───────────────────────────────────────────────────
+  # Uncomment when the frontend is scaffolded (next iteration).
+  # frontend:
+  #   build: ./frontend
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   restart: unless-stopped
+
+  # ── Celery worker (async PDF analysis) ───────────────────────────────────────
+  # Uncomment when Celery is wired up (Spec D07 iteration).
+  # worker:
+  #   build: ./backend
+  #   command: celery -A app.worker worker --loglevel=info
+  #   volumes:
+  #     - ./backend:/app
+  #   environment:
+  #     DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/bigschool
+  #     REDIS_URL: redis://redis:6379/0
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - backend
+  #     - redis
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
