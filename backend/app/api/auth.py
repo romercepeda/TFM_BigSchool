@@ -1,12 +1,13 @@
-"""Authentication API endpoints — Spec D01.
+"""Authentication API endpoints — Spec D01 / D08.
 
 Endpoints:
-    POST /auth/register  — create account with email + password
-    POST /auth/login     — log in with email + password
-    POST /auth/guest     — log in or register as guest (email only)
-    POST /auth/refresh   — exchange refresh cookie for new access token
-    POST /auth/logout    — clear the refresh token cookie
-    GET  /auth/me        — return the currently authenticated user (protected)
+    POST  /auth/register         — create account with email + password
+    POST  /auth/login            — log in with email + password
+    POST  /auth/guest            — log in or register as guest (email only)
+    POST  /auth/refresh          — exchange refresh cookie for new access token
+    POST  /auth/logout           — clear the refresh token cookie
+    GET   /auth/me               — return the currently authenticated user (protected)
+    PATCH /auth/me/language      — update the user's preferred language (D08 §6.2)
 
 Token strategy (Spec 00b §2):
     - Access token  → returned in the JSON response body, short-lived (15 min).
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.d08_schemas import LanguageUpdateRequest, LanguageUpdateResponse
 from app.auth.dependencies import get_current_user
 from app.auth.jwt import (
     REFRESH_COOKIE_NAME,
@@ -39,6 +41,7 @@ from app.auth.schemas import (
     TokenResponse,
     UserResponse,
 )
+from app.config import get_config
 from app.db.models.user import User
 from app.db.session import get_db
 from app.services.user_service import (
@@ -174,7 +177,7 @@ async def refresh_token(
         payload = decode_refresh_token(refresh_token_cookie)
         user_id = UUID(payload["sub"])
     except (InvalidTokenError, KeyError, ValueError):
-        raise credentials_exception
+        raise credentials_exception from None
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -198,3 +201,28 @@ async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse
     It is the canonical way to verify that a token works and to fetch user info.
     """
     return UserResponse.model_validate(current_user)
+
+
+@router.patch("/me/language", response_model=LanguageUpdateResponse)
+async def update_language(
+    body: LanguageUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LanguageUpdateResponse:
+    """Update the authenticated user's preferred UI language (D08 §6.2).
+
+    The change takes effect immediately — all subsequent authenticated requests
+    will use the new language for translations.
+    Returns 400 if the requested language is not in i18n.supported_languages.
+    """
+    cfg = get_config()
+    if body.language not in cfg.i18n.supported_languages:
+        supported = ", ".join(cfg.i18n.supported_languages)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Language '{body.language}' is not supported. Supported: {supported}.",
+        )
+
+    current_user.preferred_language = body.language
+    await db.commit()
+    return LanguageUpdateResponse(preferred_language=current_user.preferred_language)

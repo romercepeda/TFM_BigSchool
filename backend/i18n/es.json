@@ -1,0 +1,51 @@
+{
+  "indicator.ma_200.name": "Media Móvil 200",
+  "indicator.ma_50_200_cross.name": "Cruce MA50/MA200",
+  "indicator.rsi_14.name": "RSI 14",
+  "indicator.macd.name": "MACD",
+  "indicator.rvol.name": "Volumen Relativo",
+  "indicator.per.name": "PER",
+  "indicator.roe.name": "ROE",
+  "indicator.debt_ebitda.name": "Deuda/EBITDA",
+  "indicator.revenue_growth_yoy.name": "Crecimiento de Ingresos",
+  "indicator.analyst_sentiment.name": "Sentimiento de Analistas",
+  "indicator.twr.name": "Rentabilidad Total (TWR)",
+  "indicator.cagr.name": "CAGR",
+  "indicator.max_drawdown.name": "Máxima Caída",
+  "indicator.volatility.name": "Volatilidad",
+  "indicator.sharpe.name": "Ratio Sharpe",
+
+  "indicator.ma_50_200_cross.state.golden_cross": "Cruce Dorado",
+  "indicator.ma_50_200_cross.state.near_cross": "Próximo al Cruce",
+  "indicator.ma_50_200_cross.state.death_cross": "Cruce de la Muerte",
+
+  "indicator.analyst_sentiment.state.bullish": "Alcista",
+  "indicator.analyst_sentiment.state.mixed": "Mixto",
+  "indicator.analyst_sentiment.state.bearish": "Bajista",
+
+  "enum.global_signal.bullish": "Alcista",
+  "enum.global_signal.neutral": "Neutral",
+  "enum.global_signal.bearish": "Bajista",
+
+  "enum.price_level.direction.buy": "Compra",
+  "enum.price_level.direction.sell": "Venta",
+
+  "error.auth.invalid_credentials": "Email o contraseña incorrectos.",
+  "error.auth.email_exists": "Ya existe una cuenta con este email.",
+  "error.auth.session_expired": "Sesión expirada. Por favor, inicia sesión de nuevo.",
+  "error.auth.language_not_supported": "El idioma '{language}' no está disponible. Idiomas soportados: {supported}.",
+
+  "error.portfolio.not_found": "Cartera no encontrada.",
+  "error.portfolio.archived": "No se puede realizar esta acción en una cartera archivada.",
+
+  "error.holding.not_found": "Posición no encontrada.",
+  "error.asset.not_found": "Activo no encontrado o no está en tus carteras.",
+
+  "error.upload.invalid_pdf": "El archivo no es un PDF válido.",
+  "error.upload.too_large": "El archivo supera el tamaño máximo de {max_mb} MB.",
+  "error.report.not_found": "Informe no encontrado.",
+
+  "notification.analysis.queued": "Tu informe se está procesando. Te avisaremos cuando esté listo.",
+  "notification.analysis.succeeded": "Análisis completado para {ticker}.",
+  "notification.analysis.failed": "El análisis de {ticker} ha fallado. Inténtalo de nuevo."
+}

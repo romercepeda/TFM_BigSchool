@@ -1,0 +1,51 @@
+{
+  "indicator.ma_200.name": "200-Day Moving Average",
+  "indicator.ma_50_200_cross.name": "MA50/MA200 Cross",
+  "indicator.rsi_14.name": "RSI 14",
+  "indicator.macd.name": "MACD",
+  "indicator.rvol.name": "Relative Volume",
+  "indicator.per.name": "P/E Ratio",
+  "indicator.roe.name": "ROE",
+  "indicator.debt_ebitda.name": "Debt/EBITDA",
+  "indicator.revenue_growth_yoy.name": "Revenue Growth YoY",
+  "indicator.analyst_sentiment.name": "Analyst Sentiment",
+  "indicator.twr.name": "Total Return (TWR)",
+  "indicator.cagr.name": "CAGR",
+  "indicator.max_drawdown.name": "Maximum Drawdown",
+  "indicator.volatility.name": "Volatility",
+  "indicator.sharpe.name": "Sharpe Ratio",
+
+  "indicator.ma_50_200_cross.state.golden_cross": "Golden Cross",
+  "indicator.ma_50_200_cross.state.near_cross": "Near Cross",
+  "indicator.ma_50_200_cross.state.death_cross": "Death Cross",
+
+  "indicator.analyst_sentiment.state.bullish": "Bullish",
+  "indicator.analyst_sentiment.state.mixed": "Mixed",
+  "indicator.analyst_sentiment.state.bearish": "Bearish",
+
+  "enum.global_signal.bullish": "Bullish",
+  "enum.global_signal.neutral": "Neutral",
+  "enum.global_signal.bearish": "Bearish",
+
+  "enum.price_level.direction.buy": "Buy",
+  "enum.price_level.direction.sell": "Sell",
+
+  "error.auth.invalid_credentials": "Invalid email or password.",
+  "error.auth.email_exists": "An account with this email already exists.",
+  "error.auth.session_expired": "Session expired. Please log in again.",
+  "error.auth.language_not_supported": "Language '{language}' is not available. Supported languages: {supported}.",
+
+  "error.portfolio.not_found": "Portfolio not found.",
+  "error.portfolio.archived": "Cannot perform this action on an archived portfolio.",
+
+  "error.holding.not_found": "Holding not found.",
+  "error.asset.not_found": "Asset not found or not in your portfolios.",
+
+  "error.upload.invalid_pdf": "The file is not a valid PDF.",
+  "error.upload.too_large": "The file exceeds the maximum size of {max_mb} MB.",
+  "error.report.not_found": "Report not found.",
+
+  "notification.analysis.queued": "Your report is being processed. We'll notify you when it's ready.",
+  "notification.analysis.succeeded": "Analysis completed for {ticker}.",
+  "notification.analysis.failed": "Analysis failed for {ticker}. Please try again."
+}

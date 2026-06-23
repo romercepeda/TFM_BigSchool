@@ -3,6 +3,10 @@
 GET /indicators                           — list all active indicators
 GET /assets/{asset_id}/indicators         — asset-level snapshots (current + last 2)
 GET /portfolios/{portfolio_id}/indicators — portfolio KPIs (on-demand, v1: no stored snapshots)
+
+D08: all responses include translated indicator names (IndicatorOut.name) and
+translated state labels (SnapshotOut.value_text_display) based on the user's
+preferred_language.
 """
 
 from uuid import UUID
@@ -13,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.d05_schemas import IndicatorOut, IndicatorSnapshotHistoryOut, SnapshotOut
 from app.auth.dependencies import get_current_user
+from app.config import get_config
 from app.db.models.holding import Holding
 from app.db.models.indicator import Indicator
 from app.db.models.portfolio import Portfolio
 from app.db.models.user import User
 from app.db.session import get_db
+from app.services.i18n_service import translate_indicator_name, translate_state
 from app.services.indicator_service import (
     get_asset_indicator_history,
     get_indicators_by_scope,
@@ -26,16 +32,53 @@ from app.services.indicator_service import (
 router = APIRouter(tags=["indicators"])
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _build_indicator_out(indicator: Indicator, lang: str, default_lang: str) -> IndicatorOut:
+    """Construct an IndicatorOut with the translated name field set."""
+    out = IndicatorOut.model_validate(indicator)
+    return out.model_copy(
+        update={"name": translate_indicator_name(indicator.name_key, lang, default_lang)}
+    )
+
+
+def _build_snapshot_out(
+    snapshot_dict: dict,
+    indicator: Indicator,
+    lang: str,
+    default_lang: str,
+) -> SnapshotOut:
+    """Construct a SnapshotOut with value_text_display set for qualitative indicators."""
+    out = SnapshotOut(**snapshot_dict)
+    if indicator.data_type == "qualitative" and out.value_text:
+        out = out.model_copy(
+            update={
+                "value_text_display": translate_state(
+                    indicator.code, out.value_text, lang, default_lang
+                )
+            }
+        )
+    return out
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
 @router.get("/indicators", response_model=list[IndicatorOut])
 async def list_indicators(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[IndicatorOut]:
-    """Return all active indicator catalog entries (D05 §3)."""
+    """Return all active indicator catalog entries (D05 §3), names translated."""
+    cfg = get_config()
+    lang = current_user.preferred_language
+    default_lang = cfg.i18n.default_language
+
     asset_indicators = await get_indicators_by_scope(db, "asset")
     portfolio_indicators = await get_indicators_by_scope(db, "portfolio")
     all_indicators = asset_indicators + portfolio_indicators
-    return [IndicatorOut.model_validate(i) for i in all_indicators]
+    return [_build_indicator_out(i, lang, default_lang) for i in all_indicators]
 
 
 @router.get(
@@ -67,14 +110,21 @@ async def get_asset_indicators(
             detail="Asset not found or not in your portfolios.",
         )
 
+    cfg = get_config()
+    lang = current_user.preferred_language
+    default_lang = cfg.i18n.default_language
+
     indicators = await get_indicators_by_scope(db, "asset")
     result = []
     for indicator in indicators:
         history = await get_asset_indicator_history(db, asset_id, indicator)
         result.append(
             IndicatorSnapshotHistoryOut(
-                indicator=IndicatorOut.model_validate(indicator),
-                snapshots=[SnapshotOut(**s) for s in history],
+                indicator=_build_indicator_out(indicator, lang, default_lang),
+                snapshots=[
+                    _build_snapshot_out(s, indicator, lang, default_lang)
+                    for s in history
+                ],
             )
         )
     return result
@@ -107,10 +157,14 @@ async def get_portfolio_indicators(
             detail="Portfolio not found.",
         )
 
+    cfg = get_config()
+    lang = current_user.preferred_language
+    default_lang = cfg.i18n.default_language
+
     indicators = await get_indicators_by_scope(db, "portfolio")
     return [
         IndicatorSnapshotHistoryOut(
-            indicator=IndicatorOut.model_validate(ind),
+            indicator=_build_indicator_out(ind, lang, default_lang),
             snapshots=[],
         )
         for ind in indicators
