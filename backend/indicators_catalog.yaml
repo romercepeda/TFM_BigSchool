@@ -1,0 +1,239 @@
+# Indicator catalog — Spec D05 §3.3
+#
+# Loaded at startup and upserted by code (stable key). Adding a new indicator here
+# and registering its calculator_code is all that is required — no domain code change.
+#
+# Threshold values are the source of truth per spec §3.3.
+
+indicators:
+
+  # ── Asset-level technical (scope=asset, update_strategy=scheduled_daily) ────
+
+  - code: ma_200
+    name_key: "indicator.ma_200.name"
+    description_key: "indicator.ma_200.description"
+    scope: asset
+    nature: technical
+    data_type: quantitative
+    unit: null
+    calculator_code: calc_ma_200
+    ai_extraction_key: null
+    update_strategy: scheduled_daily
+    threshold_config:
+      model: price_vs_reference
+      neutral_band_pct: 0.02
+
+  - code: ma_50_200_cross
+    name_key: "indicator.ma_50_200_cross.name"
+    description_key: "indicator.ma_50_200_cross.description"
+    scope: asset
+    nature: technical
+    data_type: qualitative
+    unit: null
+    calculator_code: calc_ma_50_200_cross
+    ai_extraction_key: null
+    update_strategy: scheduled_daily
+    threshold_config:
+      model: categorical_state
+      mapping:
+        golden_cross: positive
+        near_cross: neutral
+        death_cross: attention
+
+  - code: rsi_14
+    name_key: "indicator.rsi_14.name"
+    description_key: "indicator.rsi_14.description"
+    scope: asset
+    nature: technical
+    data_type: quantitative
+    unit: null
+    calculator_code: calc_rsi_14
+    ai_extraction_key: null
+    update_strategy: scheduled_daily
+    threshold_config:
+      model: three_band_numeric
+      attention_low:  {min: null, max: 30}
+      neutral_low:    {min: 30,   max: 40}
+      positive:       {min: 40,   max: 70}
+      neutral_high:   {min: 70,   max: 80}
+      attention_high: {min: 80,   max: null}
+
+  - code: macd
+    name_key: "indicator.macd.name"
+    description_key: "indicator.macd.description"
+    scope: asset
+    nature: technical
+    data_type: quantitative
+    unit: null
+    calculator_code: calc_macd
+    ai_extraction_key: null
+    update_strategy: scheduled_daily
+    threshold_config:
+      model: signed_with_trend
+      near_zero_threshold: 0.5
+
+  - code: rvol
+    name_key: "indicator.rvol.name"
+    description_key: "indicator.rvol.description"
+    scope: asset
+    nature: technical
+    data_type: quantitative
+    unit: "x"
+    calculator_code: calc_rvol
+    ai_extraction_key: null
+    update_strategy: scheduled_daily
+    threshold_config:
+      model: numeric_thresholds
+      positive: {min: 1.5,  max: null}
+      neutral:  {min: 0.8,  max: 1.5}
+      attention: {min: null, max: 0.8}
+
+  # ── Asset-level fundamental (scope=asset, update_strategy=on_ai_analysis) ───
+
+  - code: per
+    name_key: "indicator.per.name"
+    description_key: "indicator.per.description"
+    scope: asset
+    nature: fundamental
+    data_type: quantitative
+    unit: null
+    calculator_code: pull_from_latest_ai_analysis
+    ai_extraction_key: per
+    update_strategy: on_ai_analysis
+    threshold_config:
+      model: numeric_thresholds
+      positive: {min: null, max: 15}
+      neutral:  {min: 15,   max: 25}
+      attention: {min: 25,  max: null}
+
+  - code: roe
+    name_key: "indicator.roe.name"
+    description_key: "indicator.roe.description"
+    scope: asset
+    nature: fundamental
+    data_type: quantitative
+    unit: "%"
+    calculator_code: pull_from_latest_ai_analysis
+    ai_extraction_key: roe
+    update_strategy: on_ai_analysis
+    threshold_config:
+      model: numeric_thresholds
+      positive: {min: 15,   max: null}
+      neutral:  {min: 8,    max: 15}
+      attention: {min: null, max: 8}
+
+  - code: debt_ebitda
+    name_key: "indicator.debt_ebitda.name"
+    description_key: "indicator.debt_ebitda.description"
+    scope: asset
+    nature: fundamental
+    data_type: quantitative
+    unit: "x"
+    calculator_code: pull_from_latest_ai_analysis
+    ai_extraction_key: debt_ebitda
+    update_strategy: on_ai_analysis
+    threshold_config:
+      model: numeric_thresholds
+      positive: {min: null, max: 2}
+      neutral:  {min: 2,    max: 4}
+      attention: {min: 4,   max: null}
+
+  - code: revenue_growth_yoy
+    name_key: "indicator.revenue_growth_yoy.name"
+    description_key: "indicator.revenue_growth_yoy.description"
+    scope: asset
+    nature: fundamental
+    data_type: quantitative
+    unit: "%"
+    calculator_code: pull_from_latest_ai_analysis
+    ai_extraction_key: revenue_growth_yoy
+    update_strategy: on_ai_analysis
+    threshold_config:
+      model: numeric_thresholds
+      positive: {min: 8,    max: null}
+      neutral:  {min: 0,    max: 8}
+      attention: {min: null, max: 0}
+
+  - code: analyst_sentiment
+    name_key: "indicator.analyst_sentiment.name"
+    description_key: "indicator.analyst_sentiment.description"
+    scope: asset
+    nature: fundamental
+    data_type: qualitative
+    unit: null
+    calculator_code: pull_from_latest_ai_analysis
+    ai_extraction_key: analyst_sentiment
+    update_strategy: on_ai_analysis
+    threshold_config:
+      model: categorical_state
+      mapping:
+        bullish: positive
+        mixed: neutral
+        bearish: attention
+
+  # ── Portfolio-level KPIs (scope=portfolio, update_strategy=on_demand_calculated)
+
+  - code: twr
+    name_key: "indicator.twr.name"
+    description_key: "indicator.twr.description"
+    scope: portfolio
+    nature: portfolio_kpi
+    data_type: quantitative
+    unit: "%"
+    calculator_code: calc_portfolio_twr
+    ai_extraction_key: null
+    update_strategy: on_demand_calculated
+    threshold_config:
+      model: informational_only
+
+  - code: cagr
+    name_key: "indicator.cagr.name"
+    description_key: "indicator.cagr.description"
+    scope: portfolio
+    nature: portfolio_kpi
+    data_type: quantitative
+    unit: "%"
+    calculator_code: calc_portfolio_cagr
+    ai_extraction_key: null
+    update_strategy: on_demand_calculated
+    threshold_config:
+      model: informational_only
+
+  - code: max_drawdown
+    name_key: "indicator.max_drawdown.name"
+    description_key: "indicator.max_drawdown.description"
+    scope: portfolio
+    nature: portfolio_kpi
+    data_type: quantitative
+    unit: "%"
+    calculator_code: calc_portfolio_max_drawdown
+    ai_extraction_key: null
+    update_strategy: on_demand_calculated
+    threshold_config:
+      model: informational_only
+
+  - code: volatility
+    name_key: "indicator.volatility.name"
+    description_key: "indicator.volatility.description"
+    scope: portfolio
+    nature: portfolio_kpi
+    data_type: quantitative
+    unit: "%"
+    calculator_code: calc_portfolio_volatility
+    ai_extraction_key: null
+    update_strategy: on_demand_calculated
+    threshold_config:
+      model: informational_only
+
+  - code: sharpe
+    name_key: "indicator.sharpe.name"
+    description_key: "indicator.sharpe.description"
+    scope: portfolio
+    nature: portfolio_kpi
+    data_type: quantitative
+    unit: null
+    calculator_code: calc_portfolio_sharpe
+    ai_extraction_key: null
+    update_strategy: on_demand_calculated
+    threshold_config:
+      model: informational_only

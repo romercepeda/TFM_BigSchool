@@ -6,6 +6,7 @@ detect its tables and will not generate migrations for them.
 
 from app.db.models.asset import Asset
 from app.db.models.holding import Holding
+from app.db.models.indicator import Indicator, IndicatorSnapshot
 from app.db.models.lot import Lot
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
 from app.db.models.portfolio import Portfolio
@@ -18,4 +19,5 @@ __all__ = [
     "Lot", "Sale", "SaleLotConsumption",
     "PriceLevel", "PriceLevelHistoryEntry",
     "AssetPriceHistory", "FxRateHistory",
+    "Indicator", "IndicatorSnapshot",
 ]

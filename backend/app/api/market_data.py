@@ -144,5 +144,6 @@ async def run_daily_update(
         assets_processed=summary["assets_processed"],
         assets_failed=summary["assets_failed"],
         alerts_triggered=summary["alerts_triggered"],
+        indicator_snapshots=summary.get("indicator_snapshots", 0),
         ran_at=datetime.now(UTC),
     )

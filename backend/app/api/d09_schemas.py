@@ -40,4 +40,5 @@ class DailyUpdateResponse(BaseModel):
     assets_processed: int
     assets_failed: int
     alerts_triggered: int
+    indicator_snapshots: int = 0
     ran_at: datetime

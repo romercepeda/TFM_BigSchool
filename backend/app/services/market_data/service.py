@@ -147,9 +147,12 @@ class MarketDataService:
         assets = list(assets_result.scalars().all())
         logger.info("Daily update: %d assets to process.", len(assets))
 
+        from app.services.indicator_service import run_daily_indicators
+
         processed = 0
         failed = 0
         alerts = 0
+        indicator_snapshots = 0
 
         for asset in assets:
             try:
@@ -182,7 +185,15 @@ class MarketDataService:
                 )
                 await db.execute(stmt)
 
-            # Get the two most recent stored closes for the alert engine.
+            # D05: compute scheduled_daily technical indicators from the fetched series.
+            prices_sorted = [p.price for p in sorted(points, key=lambda p: p.as_of_date)]
+            try:
+                written = await run_daily_indicators(db, asset, prices_sorted, today)
+                indicator_snapshots += written
+            except Exception as exc:
+                logger.error("Indicator job failed for %s: %s", asset.ticker, exc)
+
+            # Get the two most recent stored closes for the alert engine (D06).
             recent_result = await db.execute(
                 select(AssetPriceHistory)
                 .where(AssetPriceHistory.asset_id == asset.id)
@@ -213,10 +224,15 @@ class MarketDataService:
 
         await db.commit()
         logger.info(
-            "Daily update complete: processed=%d failed=%d alerts=%d",
-            processed, failed, alerts,
+            "Daily update complete: processed=%d failed=%d alerts=%d indicators=%d",
+            processed, failed, alerts, indicator_snapshots,
         )
-        return {"assets_processed": processed, "assets_failed": failed, "alerts_triggered": alerts}
+        return {
+            "assets_processed": processed,
+            "assets_failed": failed,
+            "alerts_triggered": alerts,
+            "indicator_snapshots": indicator_snapshots,
+        }
 
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
