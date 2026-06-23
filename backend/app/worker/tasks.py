@@ -19,7 +19,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -53,15 +53,16 @@ async def _run_analysis(job_id: str) -> None:
     """Full analysis pipeline. Raises on any failure (retryable or not)."""
     from app.config import get_config
     from app.db.models.ai_report import AnalysisJob, AnalysisReport, UploadedFile
-    from app.db.models.indicator import Indicator, IndicatorSnapshot
     from app.services.ai_providers.factory import (
         NonRetryableError as FactoryError,
+    )
+    from app.services.ai_providers.factory import (
         get_ai_provider,
     )
     from app.services.ai_report_service import load_prompt, load_schema
 
     cfg = get_config()
-    SessionLocal = _make_db_session()
+    SessionLocal = _make_db_session()  # noqa: N806
     now = datetime.now(UTC)
 
     async with SessionLocal() as db:
@@ -85,8 +86,9 @@ async def _run_analysis(job_id: str) -> None:
         pdf_bytes = uploaded_file.content
 
         # Load holding → asset context
-        from app.db.models.holding import Holding
         from sqlalchemy.orm import selectinload
+
+        from app.db.models.holding import Holding
 
         holding_result = await db.execute(
             select(Holding)
@@ -131,7 +133,9 @@ async def _run_analysis(job_id: str) -> None:
             try:
                 report_date = date.fromisoformat(report_date_str)
             except ValueError:
-                logger.warning("Job %s: invalid report_date %r — using None.", job_id, report_date_str)
+                logger.warning(
+                    "Job %s: invalid report_date %r — using None.", job_id, report_date_str
+                )
 
         report = AnalysisReport(
             holding_id=job.holding_id,
@@ -238,7 +242,7 @@ async def _set_job_failed(job_id: str, error_msg: str) -> None:
     """Persist failed status on the AnalysisJob row."""
     from app.db.models.ai_report import AnalysisJob
 
-    SessionLocal = _make_db_session()
+    SessionLocal = _make_db_session()  # noqa: N806
     async with SessionLocal() as db:
         job = await db.get(AnalysisJob, UUID(job_id))
         if job:
@@ -266,6 +270,6 @@ def analyze_report_task(self, job_id: str) -> None:
                 "Job %s attempt %d failed (%s) — retrying in %ds.",
                 job_id, self.request.retries + 1, type(exc).__name__, countdown,
             )
-            raise self.retry(exc=exc, countdown=countdown)
+            raise self.retry(exc=exc, countdown=countdown) from exc
         # Max retries exhausted
         asyncio.run(_set_job_failed(job_id, str(exc)))

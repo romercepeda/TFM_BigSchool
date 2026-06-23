@@ -7,7 +7,6 @@ The synchronous client is wrapped in asyncio.to_thread for non-blocking operatio
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
 from app.services.ai_providers.base import AIExtractionResult, AIProvider

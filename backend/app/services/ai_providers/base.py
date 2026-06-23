@@ -17,7 +17,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
-
 # ── Pydantic model matching ai_extraction_schema.json §4.2 ───────────────────
 
 
@@ -87,7 +86,8 @@ class AIProvider(ABC):
         """Format the prompt template with asset context and append the JSON schema."""
         formatted = prompt_template.format(**asset_context)
         schema_json = json.dumps(schema, indent=2)
-        return formatted + f"\n\n---\nExtraction Schema (JSON Schema):\n\n```json\n{schema_json}\n```"
+        suffix = f"\n\n---\nExtraction Schema (JSON Schema):\n\n```json\n{schema_json}\n```"
+        return formatted + suffix
 
     @staticmethod
     def _parse_response(

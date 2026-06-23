@@ -49,6 +49,7 @@ async def _require_holding(
 ):
     """Verify portfolio belongs to user and holding belongs to that portfolio."""
     from sqlalchemy import select
+
     from app.db.models.holding import Holding
 
     portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
@@ -104,7 +105,7 @@ async def upload_report(
             max_size_mb=cfg.uploads.max_file_size_mb,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     job = await ai_report_service.create_upload_and_job(
         db=db,
