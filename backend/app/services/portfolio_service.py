@@ -139,11 +139,16 @@ async def delete_portfolio(db: AsyncSession, portfolio: Portfolio) -> None:
     """Permanently delete an archived portfolio and all its data. Caller must commit.
 
     Raises ValueError if the portfolio is not archived (Spec D02 §8 — must archive first).
-    Cascading deletes are handled by the FK constraints on child tables.
+    PriceLevelHistoryEntry rows have no FK cascade to holdings (Spec D06 §11), so they
+    are explicitly deleted here before the ORM cascade removes the rest.
     """
     if portfolio.status != "archived":
         raise ValueError(
             "Only archived portfolios can be permanently deleted. Archive it first."
         )
+    # History entries have no FK cascade — must be deleted explicitly (Spec D06 §11).
+    from app.services.price_level_service import delete_history_for_portfolio
+    await delete_history_for_portfolio(db, portfolio.id)
+
     await db.delete(portfolio)
     await db.flush()

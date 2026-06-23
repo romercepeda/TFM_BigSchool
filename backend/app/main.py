@@ -20,6 +20,7 @@ from app.api.fx_calc import router as fx_calc_router
 from app.api.health import router as health_router
 from app.api.holdings import router as holdings_router
 from app.api.portfolios import router as portfolios_router
+from app.api.price_levels import router as price_levels_router
 from app.config import get_config
 
 logging.basicConfig(level=logging.INFO)
@@ -42,3 +43,4 @@ app.include_router(portfolios_router)
 app.include_router(holdings_router)
 app.include_router(assets_router)
 app.include_router(fx_calc_router)
+app.include_router(price_levels_router)
