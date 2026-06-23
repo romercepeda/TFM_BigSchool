@@ -16,6 +16,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 
+from app.api.ai_reports import router as ai_reports_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
 from app.api.fx_calc import router as fx_calc_router
@@ -64,3 +65,4 @@ app.include_router(fx_calc_router)
 app.include_router(price_levels_router)
 app.include_router(market_data_router)
 app.include_router(indicators_router)
+app.include_router(ai_reports_router)

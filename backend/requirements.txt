@@ -22,8 +22,22 @@ alembic==1.14.0
 asyncpg==0.30.0          # async driver used by the application at runtime
 psycopg2-binary==2.9.10  # sync driver used only by Alembic for migrations
 
-# ── HTTP client (for external API calls: market data, FX, AI providers) ──────
+# ── HTTP client (for external API calls: market data, FX) ─────────────────────
 httpx==0.28.1
+
+# ── Async task queue (Spec D07) ───────────────────────────────────────────────
+celery[redis]==5.4.0
+
+# ── AI provider SDKs (Spec D07) ───────────────────────────────────────────────
+anthropic==0.40.0         # Anthropic Claude (default provider)
+openai==1.57.0            # OpenAI GPT (alternative provider)
+google-genai==1.5.0       # Google Gemini (alternative provider)
+
+# ── PDF text extraction (OpenAI provider — no native PDF document blocks) ─────
+pypdf==4.3.1
+
+# ── Multipart form support (required for FastAPI UploadFile) ──────────────────
+python-multipart==0.0.20
 
 # ── Development & testing ─────────────────────────────────────────────────────
 ruff==0.8.4

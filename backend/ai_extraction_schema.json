@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIExtractionOutput",
+  "description": "Structured output from the AI financial report analysis (Spec D07 §4.2)",
+  "type": "object",
+  "required": ["report_date", "metrics", "executive_summary", "global_signal"],
+  "additionalProperties": false,
+  "properties": {
+    "report_date": {
+      "description": "ISO 8601 date of the financial report, or null if not determinable",
+      "oneOf": [
+        {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        {"type": "null"}
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["per", "roe", "debt_ebitda", "revenue_growth_yoy", "analyst_sentiment"],
+      "additionalProperties": false,
+      "properties": {
+        "per": {
+          "description": "Price-to-Earnings ratio (trailing or reported), or null",
+          "oneOf": [{"type": "number"}, {"type": "null"}]
+        },
+        "roe": {
+          "description": "Return on Equity as a decimal fraction (e.g. 0.15 for 15%), or null",
+          "oneOf": [{"type": "number"}, {"type": "null"}]
+        },
+        "debt_ebitda": {
+          "description": "Debt/EBITDA leverage ratio, or null",
+          "oneOf": [{"type": "number"}, {"type": "null"}]
+        },
+        "revenue_growth_yoy": {
+          "description": "Year-over-year revenue growth as a decimal (e.g. 0.08 for +8%), or null",
+          "oneOf": [{"type": "number"}, {"type": "null"}]
+        },
+        "analyst_sentiment": {
+          "description": "Overall analyst/management tone from the document",
+          "oneOf": [
+            {"type": "string", "enum": ["bullish", "mixed", "bearish"]},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "executive_summary": {
+      "type": "string",
+      "description": "3–5 bullet-point summary of the report's key findings"
+    },
+    "global_signal": {
+      "description": "Overall investment signal derived from the report",
+      "oneOf": [
+        {"type": "string", "enum": ["bullish", "neutral", "bearish"]},
+        {"type": "null"}
+      ]
+    },
+    "confidence_notes": {
+      "description": "Optional notes on data quality, missing fields, or confidence level",
+      "oneOf": [{"type": "string"}, {"type": "null"}]
+    }
+  }
+}

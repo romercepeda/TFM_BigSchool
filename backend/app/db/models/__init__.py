@@ -4,6 +4,7 @@ Any new model file must be imported here; otherwise Alembic will not
 detect its tables and will not generate migrations for them.
 """
 
+from app.db.models.ai_report import AnalysisJob, AnalysisReport, UploadedFile
 from app.db.models.asset import Asset
 from app.db.models.holding import Holding
 from app.db.models.indicator import Indicator, IndicatorSnapshot
@@ -20,4 +21,5 @@ __all__ = [
     "PriceLevel", "PriceLevelHistoryEntry",
     "AssetPriceHistory", "FxRateHistory",
     "Indicator", "IndicatorSnapshot",
+    "UploadedFile", "AnalysisJob", "AnalysisReport",
 ]

@@ -64,22 +64,24 @@ services:
   #     - /app/node_modules
   #   restart: unless-stopped
 
-  # ── Celery worker (async PDF analysis) ───────────────────────────────────────
-  # Uncomment when Celery is wired up (Spec D07 iteration).
-  # worker:
-  #   build: ./backend
-  #   command: celery -A app.worker worker --loglevel=info
-  #   volumes:
-  #     - ./backend:/app
-  #   environment:
-  #     DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/bigschool
-  #     REDIS_URL: redis://redis:6379/0
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     - backend
-  #     - redis
-  #   restart: unless-stopped
+  # ── Celery worker (async PDF analysis — Spec D07) ────────────────────────────
+  worker:
+    build: ./backend
+    command: celery -A app.worker:celery_app worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/bigschool
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:
