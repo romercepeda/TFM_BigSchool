@@ -38,9 +38,34 @@ from app.db.models.holding import Holding
 from app.db.models.user import User
 from app.db.session import get_db
 from app.services import asset_service, lot_service, sale_service
+from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
 
 router = APIRouter(prefix="/portfolios/{portfolio_id}/holdings", tags=["holdings"])
+
+
+async def _resolve_fx_rate(
+    db,
+    quote_currency: str,
+    base_currency: str,
+    on_date,
+    requested_origin: str,
+    provided_rate,
+):
+    """If fx_rate_origin='auto' and no rate was provided, auto-fetch from D09.
+
+    Returns (resolved_rate, resolved_origin). On fetch failure falls back to
+    (None, 'manual_pending') per D09 §7.1.
+    """
+    if requested_origin != "auto" or provided_rate is not None:
+        return provided_rate, requested_origin
+
+    from app.services.market_data.types import ProviderError
+    svc = get_market_data_service()
+    rate = await svc.get_historical_fx_rate(db, quote_currency, base_currency, on_date)
+    if rate is not None:
+        return rate, "auto"
+    return None, "manual_pending"
 
 _NOT_FOUND_PORTFOLIO = HTTPException(
     status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found."
@@ -121,9 +146,10 @@ async def add_holding(
     """Add an asset to a portfolio with its first lot. Atomic: all-or-nothing.
 
     If the asset ticker already exists, the existing Asset record is reused.
+    Set lot.fx_rate_origin='auto' to have the FX rate resolved from Frankfurter.
     Returns 409 if the asset is already in this portfolio (use POST .../lots to add more).
     """
-    await _require_portfolio(portfolio_id, current_user, db)
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
 
     asset, _ = await asset_service.get_or_create_asset(
         db,
@@ -153,14 +179,23 @@ async def add_holding(
     db.add(holding)
     await db.flush()
 
+    fx_rate, fx_origin = await _resolve_fx_rate(
+        db,
+        quote_currency=asset.quote_currency,
+        base_currency=portfolio.base_currency,
+        on_date=body.lot.purchase_date,
+        requested_origin=body.lot.fx_rate_origin,
+        provided_rate=body.lot.fx_rate_at_purchase,
+    )
+
     try:
         await lot_service.add_lot(
             db, holding,
             purchase_date=body.lot.purchase_date,
             quantity=body.lot.quantity,
             unit_price=body.lot.unit_price,
-            fx_rate_at_purchase=body.lot.fx_rate_at_purchase,
-            fx_rate_origin=body.lot.fx_rate_origin,
+            fx_rate_at_purchase=fx_rate,
+            fx_rate_origin=fx_origin,
             notes=body.lot.notes,
         )
     except ValueError as exc:
@@ -213,11 +248,23 @@ async def add_lot(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> LotResponse:
-    """Add a purchase lot to an existing holding."""
-    await _require_portfolio(portfolio_id, current_user, db)
+    """Add a purchase lot to an existing holding.
+
+    Set fx_rate_origin='auto' to have the FX rate resolved from Frankfurter.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
     holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
     if holding is None:
         raise _NOT_FOUND_HOLDING
+
+    fx_rate, fx_origin = await _resolve_fx_rate(
+        db,
+        quote_currency=holding.asset.quote_currency,
+        base_currency=portfolio.base_currency,
+        on_date=body.purchase_date,
+        requested_origin=body.fx_rate_origin,
+        provided_rate=body.fx_rate_at_purchase,
+    )
 
     try:
         lot = await lot_service.add_lot(
@@ -225,8 +272,8 @@ async def add_lot(
             purchase_date=body.purchase_date,
             quantity=body.quantity,
             unit_price=body.unit_price,
-            fx_rate_at_purchase=body.fx_rate_at_purchase,
-            fx_rate_origin=body.fx_rate_origin,
+            fx_rate_at_purchase=fx_rate,
+            fx_rate_origin=fx_origin,
             notes=body.notes,
         )
     except ValueError as exc:
@@ -311,11 +358,23 @@ async def create_sale(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SaleResponse:
-    """Register a sale. FIFO lot consumption is applied atomically."""
-    await _require_portfolio(portfolio_id, current_user, db)
+    """Register a sale. FIFO lot consumption is applied atomically.
+
+    Set fx_rate_origin='auto' to have the FX rate resolved from Frankfurter.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
     holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
     if holding is None:
         raise _NOT_FOUND_HOLDING
+
+    fx_rate, fx_origin = await _resolve_fx_rate(
+        db,
+        quote_currency=holding.asset.quote_currency,
+        base_currency=portfolio.base_currency,
+        on_date=body.sale_date,
+        requested_origin=body.fx_rate_origin,
+        provided_rate=body.fx_rate_at_sale,
+    )
 
     try:
         sale = await sale_service.create_sale(
@@ -323,8 +382,8 @@ async def create_sale(
             sale_date=body.sale_date,
             quantity=body.quantity,
             unit_price=body.unit_price,
-            fx_rate_at_sale=body.fx_rate_at_sale,
-            fx_rate_origin=body.fx_rate_origin,
+            fx_rate_at_sale=fx_rate,
+            fx_rate_origin=fx_origin,
             notes=body.notes,
         )
     except ValueError as exc:

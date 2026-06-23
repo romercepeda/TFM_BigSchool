@@ -1,8 +1,8 @@
 """Pydantic schemas for D04 — FX Calculation Engine API.
 
-The engine is stateless and pure; the API layer accepts current market data
-as caller-supplied inputs (D09 will provide these automatically in a later
-iteration) and returns the calculated FX metrics for a holding and its lots.
+With D09 implemented, current_unit_price and fx_rate_current are optional:
+omit them to have the server resolve them automatically via the market data
+service. Supply them explicitly to override (manual mode / testing).
 """
 
 from decimal import Decimal
@@ -14,9 +14,13 @@ from app.services.fx_engine import LotCalcStatus
 
 
 class FxCalcRequest(BaseModel):
-    """Caller-supplied current market data for the holding's asset."""
-    current_unit_price: Decimal = Field(gt=0, decimal_places=8)
-    fx_rate_current: Decimal = Field(gt=0, decimal_places=8)
+    """Current market data for the holding's asset.
+
+    Both fields are optional: if omitted, D09 resolves them automatically.
+    If provided, the caller-supplied values are used as-is (override mode).
+    """
+    current_unit_price: Decimal | None = Field(default=None, gt=0, decimal_places=8)
+    fx_rate_current: Decimal | None = Field(default=None, gt=0, decimal_places=8)
 
 
 class LotCalcResponse(BaseModel):

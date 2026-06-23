@@ -1,13 +1,15 @@
-"""D04 — FX Calculation Engine API endpoints (Spec D04).
+"""D04 — FX Calculation Engine API endpoint (Spec D04).
 
 POST /portfolios/{portfolio_id}/holdings/{holding_id}/calculate
-    Body: { current_unit_price, fx_rate_current }
+    Body: { current_unit_price?, fx_rate_current? }
     Returns: HoldingCalcResponse with per-lot and aggregated FX metrics.
 
-The engine is pure and stateless: it does not fetch market data. The caller
-supplies the current price and FX rate. When D09 (market-data integration) is
-implemented, these values will be resolved automatically; this endpoint remains
-available for manual overrides and testing.
+With D09 implemented, both body fields are optional.  If omitted, the server
+resolves them automatically via the market data service:
+  - current_unit_price  ← fetched from the active market data provider
+  - fx_rate_current     ← fetched from Frankfurter and persisted to FxRateHistory
+
+Supply either field explicitly to override the auto-resolved value.
 """
 
 from uuid import UUID
@@ -24,6 +26,8 @@ from app.db.models.user import User
 from app.db.session import get_db
 from app.services import fx_engine
 from app.services.fx_engine import LotCalcInput
+from app.services.market_data.service import get_market_data_service
+from app.services.market_data.types import ProviderError
 from app.services.portfolio_service import get_portfolio_by_id
 
 router = APIRouter(prefix="/portfolios", tags=["fx-calc"])
@@ -47,8 +51,8 @@ async def calculate_holding_fx(
 ) -> HoldingCalcResponse:
     """Return asset_return, base_return, and fx_effect per lot and aggregated.
 
-    current_unit_price and fx_rate_current are caller-supplied (D09 will
-    resolve these automatically in a future iteration).
+    Omit current_unit_price and/or fx_rate_current to auto-resolve from D09.
+    Provide them explicitly to override (manual mode or testing).
     """
     portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
     if portfolio is None:
@@ -57,11 +61,51 @@ async def calculate_holding_fx(
     result = await db.execute(
         select(Holding)
         .where(Holding.id == holding_id, Holding.portfolio_id == portfolio_id)
-        .options(selectinload(Holding.lots))
+        .options(selectinload(Holding.lots), selectinload(Holding.asset))
     )
     holding = result.scalar_one_or_none()
     if holding is None:
         raise _NOT_FOUND
+
+    svc = get_market_data_service()
+
+    # ── Resolve current_unit_price ────────────────────────────────────────────
+    current_price = body.current_unit_price
+    if current_price is None:
+        try:
+            point = await svc.get_current_price(holding.asset.ticker)
+            current_price = point.price
+        except ProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": "Datos no disponibles — no se pudo obtener el precio actual.",
+                    "error_kind": exc.error_kind,
+                    "retryable": exc.retryable,
+                    "upstream": exc.upstream_message,
+                },
+            )
+
+    # ── Resolve fx_rate_current ───────────────────────────────────────────────
+    fx_rate = body.fx_rate_current
+    if fx_rate is None:
+        try:
+            fx_rate = await svc.get_current_fx_rate(
+                db,
+                quote=holding.asset.quote_currency,
+                base=portfolio.base_currency,
+            )
+            await db.commit()
+        except ProviderError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "message": "Datos no disponibles — no se pudo obtener el tipo de cambio actual.",
+                    "error_kind": exc.error_kind,
+                    "retryable": exc.retryable,
+                    "upstream": exc.upstream_message,
+                },
+            )
 
     lot_inputs = [
         LotCalcInput(
@@ -69,8 +113,8 @@ async def calculate_holding_fx(
             quantity_remaining=lot.quantity_remaining,
             unit_price_at_purchase=lot.unit_price,
             fx_rate_at_purchase=lot.fx_rate_at_purchase,
-            current_unit_price=body.current_unit_price,
-            fx_rate_current=body.fx_rate_current,
+            current_unit_price=current_price,
+            fx_rate_current=fx_rate,
         )
         for lot in holding.lots
     ]
