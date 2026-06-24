@@ -1,6 +1,6 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
-import { listPriceLevels, dismissAlert } from '../api/price-levels.js';
+import { dismissAlert } from '../api/price-levels.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import type { PriceLevel } from '../api/types.js';

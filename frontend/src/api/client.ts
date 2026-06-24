@@ -7,7 +7,7 @@ import { currentLanguage } from '../state/language-state.js';
 import { navigate } from '../router/router.js';
 import { clearAuthState } from '../state/auth-state.js';
 
-const BASE_URL: string = (import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
+const BASE_URL: string = import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
 
 function getCsrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)pi_csrf=([^;]+)/);

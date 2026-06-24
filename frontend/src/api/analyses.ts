@@ -6,7 +6,7 @@ export const uploadPdf       = (holdingId: string, file: File) => {
   form.append('file', file);
   // Use raw fetch — client.ts wraps JSON; PDF upload is multipart.
   return fetch(
-    `${(import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000'}/holdings/${holdingId}/analyses`,
+    `${import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000'}/holdings/${holdingId}/analyses`,
     { method: 'POST', body: form, credentials: 'include' },
   ).then((r) => r.json() as Promise<AiReport>);
 };
