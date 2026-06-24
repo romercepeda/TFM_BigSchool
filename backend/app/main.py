@@ -11,10 +11,12 @@ Run locally (requires local Python env with requirements.txt installed):
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.csrf import csrf_middleware
 from app.api.ai_reports import router as ai_reports_router
@@ -55,6 +57,17 @@ app = FastAPI(
     version="0.1.0",
     description="Financial portfolio management API — TFM BigSchool",
     lifespan=lifespan,
+)
+
+# CORS — must be added before CSRF so OPTIONS preflights are answered first.
+# allow_credentials=True requires explicit origins (no wildcard).
+_frontend_origin = os.environ.get("FRONTEND_BASE_URL", "http://localhost:5173")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[_frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.middleware("http")(csrf_middleware)
