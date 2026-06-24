@@ -30,10 +30,27 @@ class GuestLoginRequest(BaseModel):
 # ── Response bodies ───────────────────────────────────────────────────────────
 
 
-class TokenResponse(BaseModel):
-    """Returned on successful login / register. The refresh token is in a cookie."""
-    access_token: str
-    token_type: str = "bearer"
+class LoginUserOut(BaseModel):
+    """User fields returned in the login response body (C01 §4)."""
+    id: UUID
+    email: str
+    display_name: str | None
+    preferred_language: str
+
+    model_config = {"from_attributes": True}
+
+
+class LoginSessionOut(BaseModel):
+    """Session metadata returned in the login response body (C01 §4)."""
+    portfolios_count: int
+    notifications_poll_interval_seconds: int
+
+
+class LoginResponse(BaseModel):
+    """Returned on successful login / register.
+    The session token itself travels in the httpOnly pi_session cookie."""
+    user: LoginUserOut
+    session: LoginSessionOut
 
 
 class UserResponse(BaseModel):
@@ -44,4 +61,4 @@ class UserResponse(BaseModel):
     display_name: str | None
     preferred_language: str
 
-    model_config = {"from_attributes": True}  # allows model_validate(orm_instance)
+    model_config = {"from_attributes": True}

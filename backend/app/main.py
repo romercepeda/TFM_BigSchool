@@ -16,6 +16,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 
+from app.auth.csrf import csrf_middleware
 from app.api.ai_reports import router as ai_reports_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
@@ -55,6 +56,8 @@ app = FastAPI(
     description="Financial portfolio management API — TFM BigSchool",
     lifespan=lifespan,
 )
+
+app.middleware("http")(csrf_middleware)
 
 app.include_router(health_router)
 app.include_router(auth_router)

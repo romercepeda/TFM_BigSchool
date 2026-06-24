@@ -53,16 +53,15 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
-  # ── Frontend (React + Vite) ───────────────────────────────────────────────────
-  # Uncomment when the frontend is scaffolded (next iteration).
-  # frontend:
-  #   build: ./frontend
-  #   ports:
-  #     - "5173:5173"
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   restart: unless-stopped
+  # ── Frontend (Web Components + Vite) ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_BACKEND_BASE_URL: ${VITE_BACKEND_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:80"
+    restart: unless-stopped
 
   # ── Celery worker (async PDF analysis — Spec D07) ────────────────────────────
   worker:
