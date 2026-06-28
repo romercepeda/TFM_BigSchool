@@ -51,7 +51,7 @@ export class LoginScreen extends BaseComponent {
         <h1>${t('login.title')}</h1>
         <div class="field">
           <label for="email">${t('login.email')}</label>
-          <input type="email" id="email" autocomplete="email" />
+          <input type="email" id="email" autocomplete="email" value="romer@romer.com" />
         </div>
         <div class="field">
           <label for="password">${t('login.password')}</label>

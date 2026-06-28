@@ -1,6 +1,16 @@
 // Shared TypeScript types mirroring backend Pydantic models (Spec D10 §13).
 // Kept in manual sync with the backend's API contract.
 
+// ── Market data ───────────────────────────────────────────────────────────────
+
+export interface AssetSearchResult {
+  ticker: string;
+  name: string;
+  asset_type: string;
+  quote_currency: string;
+  market: string | null;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface LoginUserOut {
@@ -56,37 +66,64 @@ export interface PortfolioKpis {
 
 // ── Holdings ──────────────────────────────────────────────────────────────────
 
-export interface Holding {
+export interface HoldingAsset {
   id: string;
-  portfolio_id: string;
-  asset_id: string;
   ticker: string;
   name: string;
-  asset_class: string;
-  quantity: number;
-  average_cost: number;
-  current_price: number | null;
-  current_value: number | null;
-  unrealized_gain_loss: number | null;
-  unrealized_gain_loss_pct: number | null;
+  asset_type: string;
+  quote_currency: string;
+  market: string | null;
+  created_at: string;
+}
+
+export interface HoldingAggregates {
+  quantity_held: number;
+  total_invested_base: number;
+  avg_purchase_price_quote: number;
+  avg_purchase_price_base: number;
+}
+
+export interface Holding {
+  id: string;
+  asset: HoldingAsset;
+  aggregates: HoldingAggregates;
+  lot_count?: number;
+  sale_count?: number;
+  lots?: Lot[];
+  sales?: Sale[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LotConsumption {
+  lot_id: string;
+  quantity_consumed: number;
 }
 
 export interface Lot {
   id: string;
-  holding_id: string;
+  purchase_date: string;
   quantity: number;
-  cost_per_unit: number;
-  acquired_at: string;
+  unit_price: number;
+  fx_rate_at_purchase: number | null;
+  fx_rate_origin: string;
   notes: string | null;
+  quantity_consumed: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Sale {
   id: string;
-  lot_id: string;
+  sale_date: string;
   quantity: number;
-  price_per_unit: number;
-  sold_at: string;
-  realized_gain_loss: number;
+  unit_price: number;
+  fx_rate_at_sale: number | null;
+  fx_rate_origin: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  lot_consumptions: LotConsumption[];
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────
@@ -102,25 +139,34 @@ export interface Asset {
 // ── Indicators ────────────────────────────────────────────────────────────────
 
 export interface Indicator {
+  id: string;
   code: string;
   name_key: string;
   name: string;
-  data_type: 'quantitative' | 'qualitative';
+  description_key: string;
+  scope: string;
+  nature: string;
+  data_type: string;
   unit: string | null;
-  description_key: string | null;
-  is_active: boolean;
+  update_strategy: string;
+  threshold_config: Record<string, unknown>;
+  active: boolean;
 }
 
 export interface IndicatorSnapshot {
   id: string;
-  holding_id: string;
-  indicator_code: string;
+  as_of_date: string;
   value_numeric: number | null;
   value_text: string | null;
   value_text_display: string | null;
   zone: string | null;
-  computed_at: string;
-  period_label: string | null;
+  source: string;
+  created_at: string;
+}
+
+export interface IndicatorSnapshotHistory {
+  indicator: Indicator;
+  snapshots: IndicatorSnapshot[];
 }
 
 // ── Price Levels ──────────────────────────────────────────────────────────────
@@ -142,26 +188,51 @@ export interface PriceLevel {
 
 // ── AI Analysis ───────────────────────────────────────────────────────────────
 
-export type AnalysisStatus = 'pending' | 'running' | 'succeeded' | 'failed';
-
-export interface AiReport {
+export interface AiReportSummary {
   id: string;
   holding_id: string;
-  status: AnalysisStatus;
-  pdf_filename: string | null;
-  summary: string | null;
+  report_date: string | null;
+  provider: string;
+  model_version: string;
+  global_signal: 'bullish' | 'neutral' | 'bearish' | null;
+  executive_summary: string;
   created_at: string;
-  completed_at: string | null;
-  error_message: string | null;
 }
 
-// ── Notifications ─────────────────────────────────────────────────────────────
+export interface AiReportDetail extends AiReportSummary {
+  uploaded_file_id: string | null;
+  analysis_job_id: string;
+  extracted_metrics: {
+    per: number | null;
+    roe: number | null;
+    debt_ebitda: number | null;
+    revenue_growth_yoy: number | null;
+    analyst_sentiment: 'bullish' | 'mixed' | 'bearish' | null;
+  };
+  confidence_notes: string | null;
+}
+
+// ── Upload response ───────────────────────────────────────────────────────────
+
+export interface UploadReportResponse {
+  job_id: string;
+  status: string;
+  message: string;
+}
+
+// ── Notifications (mirrors AnalysisJobResponse) ───────────────────────────────
 
 export interface Notification {
-  report_id: string;
+  id: string;
   holding_id: string;
-  ticker: string;
-  status: AnalysisStatus;
+  status: string;
+  provider: string | null;
+  model_version: string | null;
+  attempt_count: number;
+  last_error: string | null;
+  analysis_report_id: string | null;
+  created_at: string;
+  started_at: string | null;
   completed_at: string | null;
 }
 

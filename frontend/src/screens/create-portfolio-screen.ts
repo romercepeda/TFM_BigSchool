@@ -10,7 +10,8 @@ export class CreatePortfolioScreen extends BaseComponent {
   protected render(): string {
     return `
       <style>
-        :host { display: block; max-width: 480px; margin: 0 auto; padding: var(--space-6); }
+        :host { display: block; }
+        .page { padding: var(--space-6); max-width: 480px; margin: 0 auto; }
         h2 { font-size: var(--font-size-xl); margin-bottom: var(--space-6); }
         .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
         label { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
@@ -26,21 +27,23 @@ export class CreatePortfolioScreen extends BaseComponent {
           border-radius: var(--radius-sm); color: var(--color-text-secondary); }
         .error { color: var(--color-danger); font-size: var(--font-size-sm); }
       </style>
-      <h2>${t('create_portfolio.title')}</h2>
-      <div class="field">
-        <label>${t('create_portfolio.name')}</label>
-        <input type="text" id="name" maxlength="60" />
-      </div>
-      <div class="field">
-        <label>${t('create_portfolio.currency')}</label>
-        <select id="currency">
-          ${CURRENCIES.map((c) => `<option value="${c}">${c}</option>`).join('')}
-        </select>
-      </div>
-      <div id="error" class="error"></div>
-      <div class="actions">
-        <button class="btn-primary" id="submit-btn">${t('common.button.create')}</button>
-        <button class="btn-secondary" id="back-btn">${t('common.button.cancel')}</button>
+      <div class="page">
+        <h2>${t('create_portfolio.title')}</h2>
+        <div class="field">
+          <label>${t('create_portfolio.name')}</label>
+          <input type="text" id="name" maxlength="60" />
+        </div>
+        <div class="field">
+          <label>${t('create_portfolio.currency')}</label>
+          <select id="currency">
+            ${CURRENCIES.map((c) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div id="error" class="error"></div>
+        <div class="actions">
+          <button class="btn-primary" id="submit-btn">${t('common.button.create')}</button>
+          <button class="btn-secondary" id="back-btn">${t('common.button.cancel')}</button>
+        </div>
       </div>
     `;
   }

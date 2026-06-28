@@ -1,32 +1,25 @@
 // i18n — Spec D10 §9 + Spec D08 §5.
 // t(key, params) → translated string with {placeholder} interpolation.
+//
+// Locales are statically imported so Vite tracks them for HMR and tree-shaking.
 
 import { currentLanguage } from '../state/language-state.js';
+import esBundle from './locales/es.json';
+import enBundle from './locales/en.json';
 
 type Bundle = Record<string, string>;
 
-const _cache = new Map<string, Bundle>();
+const BUNDLES: Record<string, Bundle> = {
+  es: esBundle as Bundle,
+  en: enBundle as Bundle,
+};
 
-async function _loadBundle(lang: string): Promise<Bundle> {
-  const cached = _cache.get(lang);
-  if (cached) return cached;
-  try {
-    const mod = await import(`./locales/${lang}.json`, { assert: { type: 'json' } }) as { default: Bundle };
-    _cache.set(lang, mod.default);
-    return mod.default;
-  } catch {
-    return {};
-  }
-}
-
-let _activeBundle: Bundle = {};
-let _fallbackBundle: Bundle = {};
+let _activeBundle: Bundle = BUNDLES['es'] ?? {};
+let _fallbackBundle: Bundle = BUNDLES['es'] ?? {};
 
 export async function loadLocale(lang: string, fallback = 'es'): Promise<void> {
-  [_activeBundle, _fallbackBundle] = await Promise.all([
-    _loadBundle(lang),
-    _loadBundle(fallback),
-  ]);
+  _activeBundle   = BUNDLES[lang]     ?? BUNDLES[fallback] ?? {};
+  _fallbackBundle = BUNDLES[fallback] ?? {};
   currentLanguage.value = lang;
 }
 

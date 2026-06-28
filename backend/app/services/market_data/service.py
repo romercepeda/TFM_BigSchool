@@ -26,7 +26,7 @@ from app.services.market_data.types import AssetSearchResult, FxPoint, PricePoin
 
 logger = logging.getLogger(__name__)
 
-_LOOKBACK_DAYS = 200  # MA200 lookback (D09 §6.1)
+_LOOKBACK_DAYS = 400  # MA200 needs 200 trading days ≈ 285 calendar days; 400 gives safe margin
 
 
 class MarketDataService:
@@ -172,23 +172,29 @@ class MarketDataService:
             # Persist new dates (ON CONFLICT DO NOTHING keeps history immutable).
             now = datetime.now(UTC)
             for point in points:
-                stmt = (
-                    pg_insert(AssetPriceHistory)
-                    .values(
-                        asset_id=asset.id,
-                        as_of_date=point.as_of_date,
-                        close_price=point.price,
-                        provider=self._provider_name,
-                        fetched_at=now,
-                    )
-                    .on_conflict_do_nothing()
+                ins = pg_insert(AssetPriceHistory).values(
+                    asset_id=asset.id,
+                    as_of_date=point.as_of_date,
+                    close_price=point.price,
+                    volume=point.volume,
+                    provider=self._provider_name,
+                    fetched_at=now,
+                )
+                # Backfill volume on rows that were inserted before we stored it.
+                # close_price is kept immutable (not in set_).
+                stmt = ins.on_conflict_do_update(
+                    constraint="uq_asset_price_date",
+                    set_={"volume": ins.excluded.volume},
+                    where=AssetPriceHistory.volume.is_(None),
                 )
                 await db.execute(stmt)
 
             # D05: compute scheduled_daily technical indicators from the fetched series.
-            prices_sorted = [p.price for p in sorted(points, key=lambda p: p.as_of_date)]
+            sorted_points = sorted(points, key=lambda p: p.as_of_date)
+            prices_sorted = [p.price for p in sorted_points]
+            volumes_sorted = [p.volume for p in sorted_points]
             try:
-                written = await run_daily_indicators(db, asset, prices_sorted, today)
+                written = await run_daily_indicators(db, asset, prices_sorted, today, volumes=volumes_sorted)
                 indicator_snapshots += written
             except Exception as exc:
                 logger.error("Indicator job failed for %s: %s", asset.ticker, exc)

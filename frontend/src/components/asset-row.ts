@@ -1,5 +1,4 @@
 import { BaseComponent } from './common/base-component.js';
-import { formatCurrency, formatPercent } from '../utils/format.js';
 import { navigate } from '../router/router.js';
 import type { Holding } from '../api/types.js';
 
@@ -19,9 +18,6 @@ export class AssetRow extends BaseComponent {
   protected render(): string {
     const h = this._holding;
     if (!h) return '<style>:host{display:block}</style>';
-    const gain = h.unrealized_gain_loss ?? 0;
-    const gainPct = h.unrealized_gain_loss_pct ?? 0;
-    const gainColor = gain >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
     return `
       <style>
         :host { display: block; }
@@ -36,17 +32,17 @@ export class AssetRow extends BaseComponent {
         .ticker { font-weight: var(--font-weight-semibold); }
         .name   { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .right  { text-align: right; }
-        .value  { font-weight: var(--font-weight-medium); }
-        .gain   { font-size: var(--font-size-sm); }
+        .price  { font-weight: var(--font-weight-medium); }
+        .qty    { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
       </style>
       <div class="row" id="row">
         <div class="left">
-          <span class="ticker">${h.ticker}</span>
-          <span class="name">${h.name}</span>
+          <span class="ticker">${h.asset.ticker}</span>
+          <span class="name">${h.asset.name}</span>
         </div>
         <div class="right">
-          <div class="value">${h.current_value != null ? formatCurrency(h.current_value, 'EUR') : '—'}</div>
-          <div class="gain" style="color:${gainColor}">${formatPercent(gainPct)}</div>
+          <div class="price">${Number(h.aggregates.avg_purchase_price_quote).toFixed(2)} ${h.asset.quote_currency}</div>
+          <div class="qty">${Number(h.aggregates.quantity_held).toLocaleString()}</div>
         </div>
       </div>
     `;

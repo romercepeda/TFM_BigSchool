@@ -10,6 +10,11 @@ Run locally (requires local Python env with requirements.txt installed):
     uvicorn app.main:app --reload
 """
 
+# Load .env from project root for local dev — no-op in Docker (env vars already injected).
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent.parent / '.env', override=False)
+
 import logging
 import os
 from contextlib import asynccontextmanager

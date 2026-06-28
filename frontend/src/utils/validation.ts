@@ -19,7 +19,7 @@ export function maxLength(value: string, max: number): string | null {
 
 export function positiveNumber(value: string): string | null {
   const n = Number(value);
-  return !isNaN(n) && n > 0 ? null : 'validation.positive_number';
+  return !isNaN(n) && n > 0 ? null : 'validation.number.positive';
 }
 
 export function nonNegativeNumber(value: string): string | null {

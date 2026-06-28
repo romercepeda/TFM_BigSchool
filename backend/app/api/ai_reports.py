@@ -66,7 +66,7 @@ async def _require_holding(
     if holding is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Holding not found.")
 
-    if portfolio.archived:
+    if portfolio.archived_at is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Cannot upload to an archived portfolio.",

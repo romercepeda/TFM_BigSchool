@@ -1,0 +1,35 @@
+/* Dark theme — Catppuccin Mocha inspired.
+   Override only color tokens; all spacing/typography tokens stay from tokens.css. */
+
+[data-theme="dark"] {
+  /* Backgrounds */
+  --color-bg-primary:   #1e1e2e;
+  --color-bg-secondary: #181825;
+  --color-bg-surface:   #313244;
+
+  /* Text */
+  --color-text-primary:   #cdd6f4;
+  --color-text-secondary: #a6adc8;
+  --color-text-muted:     #585b70;
+
+  /* Accent */
+  --color-accent:       #89b4fa;
+  --color-accent-hover: #74c7ec;
+  --color-accent-light: #1e3a5f;
+
+  /* Danger */
+  --color-danger:       #f38ba8;
+  --color-danger-light: #3b1a23;
+
+  /* Success */
+  --color-success:       #a6e3a1;
+  --color-success-light: #1a3b1a;
+
+  /* Warning */
+  --color-warning:       #f9e2af;
+  --color-warning-light: #3b2e0d;
+
+  /* Borders */
+  --color-border:       #45475a;
+  --color-border-focus: #89b4fa;
+}

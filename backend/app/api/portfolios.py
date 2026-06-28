@@ -82,6 +82,19 @@ async def list_all(
     return [PortfolioResponse.model_validate(p) for p in portfolios]
 
 
+@router.get("/{portfolio_id}", response_model=PortfolioResponse)
+async def get_one(
+    portfolio_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PortfolioResponse:
+    """Return a single portfolio by ID."""
+    portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
+    if portfolio is None:
+        raise _NOT_FOUND
+    return PortfolioResponse.model_validate(portfolio)
+
+
 @router.patch("/{portfolio_id}", response_model=PortfolioResponse)
 async def rename(
     portfolio_id: UUID,

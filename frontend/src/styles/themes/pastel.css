@@ -1,0 +1,37 @@
+/* Pastel theme — soft lavender-violet palette.
+   All rules are scoped to [data-theme="pastel"] on <html>, which is set at
+   runtime from APP_CONFIG.theme. CSS custom properties cascade through Shadow
+   DOM boundaries, so Web Components pick up every override automatically. */
+
+[data-theme="pastel"] {
+  /* Backgrounds */
+  --color-bg-primary:   #faf9ff;
+  --color-bg-secondary: #f0ebff;
+  --color-bg-surface:   #e4dcff;
+
+  /* Text */
+  --color-text-primary:   #2d2857;
+  --color-text-secondary: #6b669a;
+  --color-text-muted:     #b5b0d4;
+
+  /* Accent */
+  --color-accent:       #8677f0;
+  --color-accent-hover: #7163d8;
+  --color-accent-light: #eeebff;
+
+  /* Semantic — danger */
+  --color-danger:       #f0758b;
+  --color-danger-light: #fde8ef;
+
+  /* Semantic — success */
+  --color-success:       #52c49a;
+  --color-success-light: #ddfaee;
+
+  /* Semantic — warning */
+  --color-warning:       #f0a870;
+  --color-warning-light: #fef3e2;
+
+  /* Borders */
+  --color-border:       #ddd6ff;
+  --color-border-focus: #8677f0;
+}

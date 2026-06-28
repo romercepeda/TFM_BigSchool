@@ -95,6 +95,12 @@ class TwelveDataProvider(MarketDataProvider):
     async def get_historical_series(
         self, ticker: str, start_date: date, end_date: date
     ) -> list[PricePoint]:
+        if not self._api_key:
+            raise ProviderError(
+                error_kind="api_error",
+                retryable=False,
+                upstream_message="MARKET_DATA_TWELVE_DATA_API_KEY no está configurado — edita el fichero .env y reinicia el backend.",
+            )
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(
@@ -121,6 +127,7 @@ class TwelveDataProvider(MarketDataProvider):
                 as_of_date=date.fromisoformat(item["datetime"][:10]),
                 price=Decimal(str(item["close"])),
                 currency="",
+                volume=int(item["volume"]) if item.get("volume") else None,
             )
             for item in body.get("values", [])
         ]

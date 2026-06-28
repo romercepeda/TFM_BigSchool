@@ -4,7 +4,8 @@ import type { Portfolio, PortfolioKpis } from './types.js';
 export interface CreatePortfolioBody { name: string; base_currency: string; }
 export interface UpdatePortfolioBody { name?: string; }
 
-export const listPortfolios   = ()                           => get<Portfolio[]>('/portfolios');
+export const listPortfolios   = (include_archived = false)   =>
+  get<Portfolio[]>(`/portfolios${include_archived ? '?include_archived=true' : ''}`);
 export const getPortfolio     = (id: string)                 => get<Portfolio>(`/portfolios/${id}`);
 export const createPortfolio  = (body: CreatePortfolioBody)  => post<Portfolio>('/portfolios', body);
 export const updatePortfolio  = (id: string, body: UpdatePortfolioBody) =>

@@ -94,9 +94,16 @@ def calc_macd(prices: list[Decimal]) -> CalcResult:
     return Decimal(str(round(float(macd_val), 8))), None
 
 
-def calc_rvol(prices: list[Decimal]) -> CalcResult:
-    # Volume data is not stored in AssetPriceHistory — silently skip (D05 §6.1).
-    return None, None
+def calc_rvol(prices: list[Decimal], *, volumes: list[int | None] | None = None) -> CalcResult:
+    if not volumes or len(volumes) < 21:
+        return None, None
+    recent = volumes[-21:]
+    if any(v is None for v in recent):
+        return None, None
+    avg_20 = sum(recent[:-1]) / 20
+    if avg_20 == 0:
+        return None, None
+    return Decimal(str(round(recent[-1] / avg_20, 4))), None
 
 
 # ── Fundamental stubs (populated by D07 AI analysis) ─────────────────────────
@@ -324,6 +331,8 @@ async def run_daily_indicators(
     asset: Asset,
     prices: list[Decimal],
     as_of_date: date,
+    *,
+    volumes: list[int | None] | None = None,
 ) -> int:
     """Compute all active scheduled_daily asset indicators and upsert snapshots.
 
@@ -346,7 +355,10 @@ async def run_daily_indicators(
     for indicator in indicators:
         try:
             calc = CALCULATOR_REGISTRY[indicator.calculator_code]
-            value_numeric, value_text = calc(prices)
+            if indicator.calculator_code == 'calc_rvol':
+                value_numeric, value_text = calc(prices, volumes=volumes)
+            else:
+                value_numeric, value_text = calc(prices)
         except Exception as exc:
             logger.error(
                 "Calculator %r failed for %s / %s: %s",

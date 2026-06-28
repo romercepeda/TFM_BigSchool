@@ -20,8 +20,8 @@ export class HistoryScreen extends BaseComponent {
 
   private async _load(): Promise<void> {
     [this._lots, this._sales] = await Promise.all([
-      listLots(this._holdingId),
-      listSales(this._holdingId),
+      listLots(this._portfolioId, this._holdingId),
+      listSales(this._portfolioId, this._holdingId),
     ]);
     this.shadow.innerHTML = this.render();
   }
@@ -29,7 +29,8 @@ export class HistoryScreen extends BaseComponent {
   protected render(): string {
     return `
       <style>
-        :host { display: block; padding: var(--space-6); max-width: 640px; margin: 0 auto; }
+        :host { display: block; }
+        .page { padding: var(--space-6); max-width: 640px; margin: 0 auto; }
         h2 { font-size: var(--font-size-xl); margin-bottom: var(--space-4); }
         h3 { font-size: var(--font-size-base); color: var(--color-text-secondary); margin: var(--space-6) 0 var(--space-3); }
         table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
@@ -38,35 +39,34 @@ export class HistoryScreen extends BaseComponent {
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-6); }
       </style>
-      <h2>${t('history.title')}</h2>
-      <h3>${t('history.lots')}</h3>
-      <table>
-        <thead><tr><th>${t('history.date')}</th><th>${t('history.qty')}</th><th>${t('history.cost')}</th></tr></thead>
-        <tbody>
-          ${this._lots.map((l) => `
-            <tr>
-              <td>${formatDate(l.acquired_at)}</td>
-              <td>${l.quantity}</td>
-              <td>${formatCurrency(l.cost_per_unit, 'EUR')}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-      <h3>${t('history.sales')}</h3>
-      <table>
-        <thead><tr><th>${t('history.date')}</th><th>${t('history.qty')}</th><th>${t('history.price')}</th><th>${t('history.gain_loss')}</th></tr></thead>
-        <tbody>
-          ${this._sales.map((s) => `
-            <tr>
-              <td>${formatDate(s.sold_at)}</td>
-              <td>${s.quantity}</td>
-              <td>${formatCurrency(s.price_per_unit, 'EUR')}</td>
-              <td style="color:${s.realized_gain_loss >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}">
-                ${formatCurrency(s.realized_gain_loss, 'EUR')}
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-      <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
+      <div class="page">
+        <h2>${t('history.title')}</h2>
+        <h3>${t('history.lots')}</h3>
+        <table>
+          <thead><tr><th>${t('history.date')}</th><th>${t('history.qty')}</th><th>${t('history.cost')}</th></tr></thead>
+          <tbody>
+            ${this._lots.map((l) => `
+              <tr>
+                <td>${formatDate(l.purchase_date + 'T12:00:00')}</td>
+                <td>${l.quantity}</td>
+                <td>${formatCurrency(Number(l.unit_price), 'EUR')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <h3>${t('history.sales')}</h3>
+        <table>
+          <thead><tr><th>${t('history.date')}</th><th>${t('history.qty')}</th><th>${t('history.price')}</th></tr></thead>
+          <tbody>
+            ${this._sales.map((s) => `
+              <tr>
+                <td>${formatDate(s.sale_date + 'T12:00:00')}</td>
+                <td>${s.quantity}</td>
+                <td>${formatCurrency(Number(s.unit_price), 'EUR')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
+      </div>
     `;
   }
 

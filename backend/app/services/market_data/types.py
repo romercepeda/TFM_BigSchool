@@ -20,6 +20,7 @@ class PricePoint:
     as_of_date: date
     price: Decimal
     currency: str
+    volume: int | None = None
 
 
 @dataclass(frozen=True)

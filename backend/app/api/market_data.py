@@ -139,7 +139,15 @@ async def run_daily_update(
     This endpoint is available for development, testing, and emergency manual runs.
     """
     svc = get_market_data_service()
-    summary = await svc.run_daily_update(db)
+    try:
+        summary = await svc.run_daily_update(db)
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).exception("Daily update failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Error en actualización diaria: {exc}",
+        )
     return DailyUpdateResponse(
         assets_processed=summary["assets_processed"],
         assets_failed=summary["assets_failed"],

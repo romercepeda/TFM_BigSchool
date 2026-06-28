@@ -27,7 +27,8 @@ export class SetLevelsScreen extends BaseComponent {
   protected render(): string {
     return `
       <style>
-        :host { display: block; padding: var(--space-6); max-width: 560px; margin: 0 auto; }
+        :host { display: block; }
+        .page { padding: var(--space-6); max-width: 560px; margin: 0 auto; }
         h2 { font-size: var(--font-size-xl); margin-bottom: var(--space-4); }
         h3 { font-size: var(--font-size-base); color: var(--color-text-secondary); margin: var(--space-6) 0 var(--space-3); }
         .level { display: flex; align-items: center; justify-content: space-between;
@@ -37,18 +38,20 @@ export class SetLevelsScreen extends BaseComponent {
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-4); }
       </style>
-      <h2>${t('set_levels.title')}</h2>
-      <pi-price-level-form id="form"></pi-price-level-form>
-      <h3>${t('set_levels.existing')}</h3>
-      <div id="levels-list">
-        ${this._levels.map((l) => `
-          <div class="level">
-            <span>${formatCurrency(l.price, 'EUR')} ${t('price_level.direction.' + l.direction)} ${l.label ? `— ${l.label}` : ''}</span>
-            <button class="del-btn" data-id="${l.id}">${t('common.button.delete')}</button>
-          </div>
-        `).join('')}
+      <div class="page">
+        <h2>${t('set_levels.title')}</h2>
+        <pi-price-level-form id="form"></pi-price-level-form>
+        <h3>${t('set_levels.existing')}</h3>
+        <div id="levels-list">
+          ${this._levels.map((l) => `
+            <div class="level">
+              <span>${formatCurrency(l.price, 'EUR')} ${t('price_level.direction.' + l.direction)} ${l.label ? `— ${l.label}` : ''}</span>
+              <button class="del-btn" data-id="${l.id}">${t('common.button.delete')}</button>
+            </div>
+          `).join('')}
+        </div>
+        <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
       </div>
-      <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
     `;
   }
 

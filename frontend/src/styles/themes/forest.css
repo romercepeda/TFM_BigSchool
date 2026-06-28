@@ -1,0 +1,34 @@
+/* Forest theme — natural green / earthy palette. */
+
+[data-theme="forest"] {
+  /* Backgrounds */
+  --color-bg-primary:   #fafaf5;
+  --color-bg-secondary: #f0f4e8;
+  --color-bg-surface:   #dfebd0;
+
+  /* Text */
+  --color-text-primary:   #1a2e1a;
+  --color-text-secondary: #4a6741;
+  --color-text-muted:     #8aab78;
+
+  /* Accent */
+  --color-accent:       #2d7a22;
+  --color-accent-hover: #236018;
+  --color-accent-light: #dff0d8;
+
+  /* Danger */
+  --color-danger:       #c0392b;
+  --color-danger-light: #fde8e8;
+
+  /* Success */
+  --color-success:       #27ae60;
+  --color-success-light: #d5f5e3;
+
+  /* Warning */
+  --color-warning:       #d4890e;
+  --color-warning-light: #fef0c7;
+
+  /* Borders */
+  --color-border:       #c5d9b0;
+  --color-border-focus: #2d7a22;
+}

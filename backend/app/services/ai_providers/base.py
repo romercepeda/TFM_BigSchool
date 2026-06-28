@@ -83,8 +83,14 @@ class AIProvider(ABC):
 
     @staticmethod
     def _build_full_prompt(prompt_template: str, schema: dict, asset_context: dict) -> str:
-        """Format the prompt template with asset context and append the JSON schema."""
-        formatted = prompt_template.format(**asset_context)
+        """Format the prompt template with asset context and append the JSON schema.
+
+        Uses str.replace() instead of str.format() so that literal { } in the
+        JSON example section of the prompt are not misinterpreted as format fields.
+        """
+        formatted = prompt_template
+        for key, value in asset_context.items():
+            formatted = formatted.replace(f"{{{key}}}", str(value))
         schema_json = json.dumps(schema, indent=2)
         suffix = f"\n\n---\nExtraction Schema (JSON Schema):\n\n```json\n{schema_json}\n```"
         return formatted + suffix

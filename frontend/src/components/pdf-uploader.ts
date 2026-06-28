@@ -3,8 +3,13 @@ import { t } from '../i18n/i18n.js';
 import { uploadPdf } from '../api/analyses.js';
 
 export class PdfUploader extends BaseComponent {
+  private _portfolioId = '';
   private _holdingId = '';
   private _uploading = false;
+
+  set portfolioId(value: string) {
+    this._portfolioId = value;
+  }
 
   set holdingId(value: string) {
     this._holdingId = value;
@@ -19,13 +24,14 @@ export class PdfUploader extends BaseComponent {
           padding: var(--space-8); text-align: center; cursor: pointer;
           transition: border-color 0.15s, background 0.15s;
         }
+        .drop-zone.uploading { pointer-events: none; opacity: 0.6; }
         .drop-zone.over { border-color: var(--color-accent); background: var(--color-accent-light); }
         .hint { color: var(--color-text-muted); font-size: var(--font-size-sm); margin-top: var(--space-2); }
         input[type=file] { display: none; }
         .status { margin-top: var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .error  { color: var(--color-danger); }
       </style>
-      <div class="drop-zone" id="drop">
+      <div class="drop-zone${this._uploading ? ' uploading' : ''}" id="drop">
         <div>${this._uploading ? t('analysis.uploading') : t('analysis.drop_pdf')}</div>
         <div class="hint">${t('analysis.or_click')}</div>
         <input type="file" id="file-input" accept=".pdf" />
@@ -54,20 +60,26 @@ export class PdfUploader extends BaseComponent {
   }
 
   private async _upload(file: File): Promise<void> {
-    const status = this.shadow.getElementById('status')!;
     this._uploading = true;
     this.shadow.innerHTML = this.render();
+    this.afterRender();
     try {
-      const report = await uploadPdf(this._holdingId, file);
-      status.textContent = t('analysis.upload_success');
-      this.dispatchEvent(new CustomEvent('upload-complete', {
-        detail: report, bubbles: true, composed: true,
+      const response = await uploadPdf(this._portfolioId, this._holdingId, file);
+      this._uploading = false;
+      this.shadow.innerHTML = this.render();
+      this.afterRender();
+      this.dispatchEvent(new CustomEvent('upload-queued', {
+        detail: { job_id: response.job_id },
+        bubbles: true,
+        composed: true,
       }));
     } catch (ex) {
-      status.classList.add('error');
-      status.textContent = (ex as Error).message;
-    } finally {
       this._uploading = false;
+      this.shadow.innerHTML = this.render();
+      this.afterRender();
+      const statusEl = this.shadow.getElementById('status')!;
+      statusEl.classList.add('error');
+      statusEl.textContent = (ex as Error).message;
     }
   }
 }

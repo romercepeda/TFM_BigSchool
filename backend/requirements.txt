@@ -9,6 +9,7 @@ email-validator==2.2.0   # enables pydantic.EmailStr
 
 # ── Configuration file parsing ────────────────────────────────────────────────
 pyyaml==6.0.2
+python-dotenv>=1.0.0
 
 # ── Authentication ────────────────────────────────────────────────────────────
 PyJWT==2.9.0             # JWT token creation and validation

@@ -1,0 +1,20 @@
+/* Global app-level styles (light DOM only).
+   CSS custom properties defined in tokens.css and overridden by the active
+   theme cascade into every Shadow DOM, so no component code needs to change. */
+
+body {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Webkit scrollbar */
+::-webkit-scrollbar             { width: 6px; height: 6px; }
+::-webkit-scrollbar-track       { background: var(--color-bg-surface); }
+::-webkit-scrollbar-thumb       { background: var(--color-text-muted); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }

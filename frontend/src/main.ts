@@ -1,6 +1,15 @@
 // App bootstrap — Spec D10 §3.
 // Registers all custom elements, initialises i18n, and wires the router.
 
+// Theme CSS: each file is scoped to [data-theme="<name>"] on <html>.
+// To add a new theme: create src/styles/themes/<name>.css and import it here.
+import './styles/themes/pastel.css';
+import './styles/themes/dark.css';
+import './styles/themes/ocean.css';
+import './styles/themes/forest.css';
+
+import { applyTheme, currentTheme } from './state/theme-state.js';
+
 import './components/common/base-component.js';
 import './components/header-bar.js';
 import './components/kpi-strip.js';
@@ -20,9 +29,13 @@ import './screens/analysis-screen.js';
 import './screens/history-screen.js';
 import './screens/alerts-screen.js';
 import './screens/settings-screen.js';
+import './screens/indicators-legend-screen.js';
 
 import { loadLocale } from './i18n/i18n.js';
 import { onRouteChange, resolveRoute, replace } from './router/router.js';
+
+// Apply stored theme before any component renders.
+applyTheme(currentTheme.value);
 
 const appEl = document.getElementById('app')!;
 

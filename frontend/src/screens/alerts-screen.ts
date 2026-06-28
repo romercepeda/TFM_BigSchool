@@ -29,7 +29,8 @@ export class AlertsScreen extends BaseComponent {
     const triggered = this._levels.filter((l) => l.alert_status === 'triggered');
     return `
       <style>
-        :host { display: block; padding: var(--space-6); max-width: 640px; margin: 0 auto; }
+        :host { display: block; }
+        .page { padding: var(--space-6); max-width: 640px; margin: 0 auto; }
         h2 { font-size: var(--font-size-xl); margin-bottom: var(--space-4); }
         .alert { border-left: 4px solid var(--color-warning); padding: var(--space-3) var(--space-4);
           margin-bottom: var(--space-3); background: var(--color-warning-light); border-radius: var(--radius-sm); }
@@ -40,18 +41,20 @@ export class AlertsScreen extends BaseComponent {
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-4); }
       </style>
-      <h2>${t('alerts.title')}</h2>
-      ${triggered.length === 0
-        ? `<div class="empty">${t('alerts.empty')}</div>`
-        : triggered.map((l) => `
-          <div class="alert">
-            <div class="alert-price">${formatCurrency(l.price, 'EUR')} ${t('price_level.direction.' + l.direction)}</div>
-            ${l.label ? `<div class="alert-meta">${l.label}</div>` : ''}
-            ${l.triggered_at ? `<div class="alert-meta">${formatDateTime(l.triggered_at)}</div>` : ''}
-            <button class="dismiss-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.dismiss')}</button>
-          </div>
-        `).join('')}
-      <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
+      <div class="page">
+        <h2>${t('alerts.title')}</h2>
+        ${triggered.length === 0
+          ? `<div class="empty">${t('alerts.empty')}</div>`
+          : triggered.map((l) => `
+            <div class="alert">
+              <div class="alert-price">${formatCurrency(l.price, 'EUR')} ${t('price_level.direction.' + l.direction)}</div>
+              ${l.label ? `<div class="alert-meta">${l.label}</div>` : ''}
+              ${l.triggered_at ? `<div class="alert-meta">${formatDateTime(l.triggered_at)}</div>` : ''}
+              <button class="dismiss-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.dismiss')}</button>
+            </div>
+          `).join('')}
+        <button class="back-btn" id="back-btn">${t('common.button.back')}</button>
+      </div>
     `;
   }
 

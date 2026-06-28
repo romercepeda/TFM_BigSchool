@@ -30,6 +30,7 @@ function route(
 
 const ROUTES: RouteDef[] = [
   route('/login',                                                               'pi-login-screen',            false),
+  route('/indicators/legend',                                                   'pi-indicators-legend-screen'),
   route('/portfolios/new',                                                      'pi-create-portfolio-screen'),
   route('/portfolios/:portfolioId/add-asset',                                   'pi-add-asset-screen'),
   route('/portfolios/:portfolioId/assets/:holdingId/levels',                    'pi-set-levels-screen'),

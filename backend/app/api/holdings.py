@@ -8,6 +8,7 @@ Endpoints:
     GET    /portfolios/{pid}/holdings                       — list holdings with aggregates
     POST   /portfolios/{pid}/holdings                       — add asset + first lot (atomic)
     GET    /portfolios/{pid}/holdings/{hid}                 — detail: asset, lots, sales
+    DELETE /portfolios/{pid}/holdings/{hid}                 — delete holding + all child records
     POST   /portfolios/{pid}/holdings/{hid}/lots            — add another lot
     PATCH  /portfolios/{pid}/holdings/{hid}/lots/{lid}      — edit lot
     DELETE /portfolios/{pid}/holdings/{hid}/lots/{lid}      — delete lot (blocks if consumed)
@@ -235,6 +236,22 @@ async def get_holding(
         created_at=detail.created_at,
         updated_at=detail.updated_at,
     )
+
+
+@router.delete("/{holding_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_holding(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a holding and all its lots, sales, and price levels."""
+    await _require_portfolio(portfolio_id, current_user, db)
+    holding = await lot_service.get_holding_detail(db, holding_id, portfolio_id)
+    if holding is None:
+        raise _NOT_FOUND_HOLDING
+    await db.delete(holding)
+    await db.commit()
 
 
 # ── Lot endpoints ─────────────────────────────────────────────────────────────

@@ -30,13 +30,13 @@ alerts:
   near_crossing_pct: 0.03
 
 ai:
-  provider: anthropic
+  provider: gemini
   anthropic:
     model: claude-opus-4-7
   openai:
     model: gpt-4o
   gemini:
-    model: gemini-2.5-pro
+    model: models/gemini-3-flash-preview
   per_call_timeout_seconds: 120
   notifications:
     poll_interval_seconds: 30
