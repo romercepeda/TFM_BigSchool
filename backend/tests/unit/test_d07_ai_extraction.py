@@ -20,28 +20,42 @@ _VALID_EXTRACTION = {
     "report_date": "2024-03-31",
     "metrics": {
         "per": 18.5,
+        "per_basis": "GAAP",
         "roe": 0.14,
         "debt_ebitda": 2.3,
         "revenue_growth_yoy": 0.07,
         "analyst_sentiment": "bullish",
+        "management_tone": "bullish",
+        "fundamentals_signal": "mixed",
     },
     "executive_summary": "• Revenue grew 7% YoY\n• ROE improved to 14%\n• Strong balance sheet",
     "global_signal": "bullish",
     "confidence_notes": None,
+    "calculations_detail": {
+        "per": "Used system.current_price=20.0 / eps_ttm=1.08 (PDF Q1 EPS ×4). GAAP.",
+    },
+    "data_provenance": {
+        "current_price": {"source": "system", "timestamp": "2024-03-31"},
+    },
 }
 
 _MINIMAL_VALID_EXTRACTION = {
     "report_date": None,
     "metrics": {
         "per": None,
+        "per_basis": None,
         "roe": None,
         "debt_ebitda": None,
         "revenue_growth_yoy": None,
         "analyst_sentiment": None,
+        "management_tone": None,
+        "fundamentals_signal": None,
     },
     "executive_summary": "No specific metrics found in the document.",
     "global_signal": None,
     "confidence_notes": "Insufficient financial data.",
+    "calculations_detail": None,
+    "data_provenance": None,
 }
 
 _DUMMY_SCHEMA: dict = {}  # _parse_response uses Pydantic, not the JSON schema dict
@@ -174,20 +188,24 @@ class TestExtractionOutputModel:
 
 
 class TestIndicatorKeyMapping:
-    """Verify the keys in ExtractedMetrics match the ai_extraction_key values in
-    the indicator catalog (indicators_catalog.yaml). This test encodes the mapping
-    contract so any catalog change that breaks D07 is caught immediately.
+    """Verify that ai_extraction_key values from the indicator catalog are all
+    present as fields in ExtractedMetrics. ExtractedMetrics may carry additional
+    metadata fields (per_basis, management_tone, fundamentals_signal) that are
+    not catalog keys — the subset check is intentional.
     """
 
-    _EXPECTED_KEYS = {"per", "roe", "debt_ebitda", "revenue_growth_yoy", "analyst_sentiment"}
+    # Keys that map to ai_extraction_key entries in indicators_catalog.yaml
+    _CATALOG_KEYS = {"per", "roe", "debt_ebitda", "revenue_growth_yoy", "analyst_sentiment"}
 
-    def test_extracted_metrics_model_fields_match_catalog_keys(self):
+    def test_catalog_keys_are_subset_of_model_fields(self):
         model_fields = set(ExtractedMetrics.model_fields.keys())
-        assert model_fields == self._EXPECTED_KEYS
+        assert self._CATALOG_KEYS.issubset(model_fields), (
+            f"Missing catalog keys in ExtractedMetrics: {self._CATALOG_KEYS - model_fields}"
+        )
 
     def test_all_catalog_keys_present_in_valid_extraction(self):
         metrics = _VALID_EXTRACTION["metrics"]
-        for key in self._EXPECTED_KEYS:
+        for key in self._CATALOG_KEYS:
             assert key in metrics, f"Key '{key}' missing from extraction fixture"
 
     def test_quantitative_keys_accept_floats(self):

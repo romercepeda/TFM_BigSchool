@@ -35,8 +35,9 @@ class GeminiProvider(AIProvider):
         prompt_template: str,
         schema: dict,
         asset_context: dict,
+        system_context: dict | None = None,
     ) -> AIExtractionResult:
-        full_prompt = self._build_full_prompt(prompt_template, schema, asset_context)
+        full_prompt = self._build_full_prompt(prompt_template, schema, asset_context, system_context)
 
         try:
             raw_text = await asyncio.wait_for(

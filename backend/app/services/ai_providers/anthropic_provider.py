@@ -36,9 +36,10 @@ class AnthropicProvider(AIProvider):
         prompt_template: str,
         schema: dict,
         asset_context: dict,
+        system_context: dict | None = None,
     ) -> AIExtractionResult:
         b64_pdf = base64.standard_b64encode(pdf_bytes).decode()
-        system_text = self._build_full_prompt(prompt_template, schema, asset_context)
+        system_text = self._build_full_prompt(prompt_template, schema, asset_context, system_context)
 
         try:
             response = await asyncio.wait_for(

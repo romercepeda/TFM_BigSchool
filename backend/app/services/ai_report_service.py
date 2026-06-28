@@ -6,6 +6,7 @@ Responsibilities:
   - Query helpers: reports for a holding, single report, pending jobs
   - Delete report (cascade to job, uploaded file, indicator snapshots)
   - Load prompt template and extraction schema (cached at module level)
+  - fetch_system_context: gather available system data to enrich the AI prompt
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.ai_report import AnalysisJob, AnalysisReport, UploadedFile
-from app.db.models.indicator import IndicatorSnapshot
+from app.db.models.indicator import Indicator, IndicatorSnapshot
+from app.db.models.market_data import AssetPriceHistory
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,103 @@ def load_schema() -> dict:
             raise RuntimeError(f"ai_extraction_schema.json not found at {_SCHEMA_PATH}")
         _schema_cache = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
     return _schema_cache
+
+
+# ── System context fetch (enriches the AI prompt with DB data) ────────────────
+
+#: Qualitative metrics are excluded from historical context (not useful for computation).
+_SKIP_CONTEXT_KEYS = {"analyst_sentiment"}
+
+#: Maximum number of prior snapshots returned per metric key.
+_MAX_HISTORY_PER_KEY = 4
+
+
+async def fetch_system_context(
+    asset_id: UUID,
+    quote_currency: str,
+    db: AsyncSession,
+) -> dict:
+    """Return a dict of system-available data for an asset to enrich the AI prompt.
+
+    Each data source is fetched independently and failures are silently swallowed
+    so that a missing source never aborts the analysis.
+
+    Returns an empty dict when nothing is available (caller treats it as no context).
+
+    Keys returned (all optional):
+        current_price    — float, latest close price
+        price_as_of      — ISO date string of latest price row
+        quote_currency   — currency code (e.g. "USD")
+        historical_indicators — list of {metric, value, as_of} dicts, at most
+                                 _MAX_HISTORY_PER_KEY entries per metric key
+    """
+    ctx: dict = {}
+
+    # ── Latest close price ────────────────────────────────────────────────────
+    try:
+        price_row = await db.scalar(
+            select(AssetPriceHistory)
+            .where(AssetPriceHistory.asset_id == asset_id)
+            .order_by(AssetPriceHistory.as_of_date.desc())
+            .limit(1)
+        )
+        if price_row is not None:
+            ctx["current_price"] = float(price_row.close_price)
+            ctx["price_as_of"] = price_row.as_of_date.isoformat()
+            ctx["quote_currency"] = quote_currency
+            logger.debug(
+                "System context [%s]: current_price=%.4f as_of=%s",
+                asset_id, price_row.close_price, price_row.as_of_date,
+            )
+    except Exception as exc:
+        logger.debug("System context [%s]: price fetch failed — %s", asset_id, exc)
+
+    # ── Prior AI-derived indicator snapshots ──────────────────────────────────
+    try:
+        rows = (await db.execute(
+            select(
+                IndicatorSnapshot.as_of_date,
+                IndicatorSnapshot.value_numeric,
+                Indicator.ai_extraction_key,
+            )
+            .join(Indicator, Indicator.id == IndicatorSnapshot.indicator_id)
+            .where(
+                IndicatorSnapshot.subject_type == "asset",
+                IndicatorSnapshot.subject_id == asset_id,
+                IndicatorSnapshot.source == "ai_analysis",
+                Indicator.ai_extraction_key.isnot(None),
+                IndicatorSnapshot.value_numeric.isnot(None),
+            )
+            .order_by(IndicatorSnapshot.as_of_date.desc())
+            .limit(20)
+        )).all()
+
+        seen: dict[str, int] = {}
+        history = []
+        for as_of_date, value_numeric, key in rows:
+            if key in _SKIP_CONTEXT_KEYS:
+                continue
+            count = seen.get(key, 0)
+            if count >= _MAX_HISTORY_PER_KEY:
+                continue
+            history.append({
+                "metric": key,
+                "value": float(value_numeric),
+                "as_of": as_of_date.isoformat(),
+            })
+            seen[key] = count + 1
+
+        if history:
+            ctx["historical_indicators"] = history
+            logger.debug(
+                "System context [%s]: %d historical indicator entries injected.",
+                asset_id, len(history),
+            )
+    except Exception as exc:
+        logger.debug("System context [%s]: indicator fetch failed — %s", asset_id, exc)
+
+    logger.debug("System context [%s]: final keys=%s", asset_id, list(ctx.keys()))
+    return ctx
 
 
 # ── PDF validation ────────────────────────────────────────────────────────────

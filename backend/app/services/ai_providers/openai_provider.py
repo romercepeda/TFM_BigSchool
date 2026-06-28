@@ -38,13 +38,14 @@ class OpenAIProvider(AIProvider):
         prompt_template: str,
         schema: dict,
         asset_context: dict,
+        system_context: dict | None = None,
     ) -> AIExtractionResult:
         # Extract text in a thread pool (pypdf is synchronous)
         pdf_text = await asyncio.to_thread(self._extract_text, pdf_bytes)
         if not pdf_text.strip():
             raise ValueError("PDF text extraction yielded empty content.")
 
-        system_text = self._build_full_prompt(prompt_template, schema, asset_context)
+        system_text = self._build_full_prompt(prompt_template, schema, asset_context, system_context)
 
         try:
             response = await asyncio.wait_for(

@@ -19,15 +19,22 @@
       "additionalProperties": false,
       "properties": {
         "per": {
-          "description": "Price-to-Earnings ratio (trailing or reported), or null",
+          "description": "Price-to-Earnings ratio (trailing), or null",
           "oneOf": [{"type": "number"}, {"type": "null"}]
+        },
+        "per_basis": {
+          "description": "Which EPS basis was used to calculate PER",
+          "oneOf": [
+            {"type": "string", "enum": ["GAAP", "non-GAAP"]},
+            {"type": "null"}
+          ]
         },
         "roe": {
           "description": "Return on Equity as a decimal fraction (e.g. 0.15 for 15%), or null",
           "oneOf": [{"type": "number"}, {"type": "null"}]
         },
         "debt_ebitda": {
-          "description": "Debt/EBITDA leverage ratio, or null",
+          "description": "Debt/EBITDA leverage ratio (GAAP), or null",
           "oneOf": [{"type": "number"}, {"type": "null"}]
         },
         "revenue_growth_yoy": {
@@ -35,7 +42,21 @@
           "oneOf": [{"type": "number"}, {"type": "null"}]
         },
         "analyst_sentiment": {
-          "description": "Overall analyst/management tone from the document",
+          "description": "Synthesis of management_tone and fundamentals_signal",
+          "oneOf": [
+            {"type": "string", "enum": ["bullish", "mixed", "bearish"]},
+            {"type": "null"}
+          ]
+        },
+        "management_tone": {
+          "description": "Tone of CEO/CFO language and forward guidance",
+          "oneOf": [
+            {"type": "string", "enum": ["bullish", "mixed", "bearish"]},
+            {"type": "null"}
+          ]
+        },
+        "fundamentals_signal": {
+          "description": "Signal derived from quantitative results (growth, margins, leverage)",
           "oneOf": [
             {"type": "string", "enum": ["bullish", "mixed", "bearish"]},
             {"type": "null"}
@@ -45,7 +66,7 @@
     },
     "executive_summary": {
       "type": "string",
-      "description": "3–5 bullet-point summary of the report's key findings"
+      "description": "3-5 bullet-point summary of the report's key findings"
     },
     "global_signal": {
       "description": "Overall investment signal derived from the report",
@@ -55,8 +76,38 @@
       ]
     },
     "confidence_notes": {
-      "description": "Optional notes on data quality, missing fields, or confidence level",
+      "description": "Optional notes on data quality, missing fields, or approximations used",
       "oneOf": [{"type": "string"}, {"type": "null"}]
+    },
+    "calculations_detail": {
+      "description": "Per-metric explanation of inputs, formula, sources, and caveats",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{"type": "string"}, {"type": "null"}]
+          }
+        },
+        {"type": "null"}
+      ]
+    },
+    "data_provenance": {
+      "description": "For each key input, records whether it came from the PDF or the system",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["source"],
+            "additionalProperties": true,
+            "properties": {
+              "source": {"type": "string", "enum": ["pdf", "system"]},
+              "timestamp": {"oneOf": [{"type": "string"}, {"type": "null"}]}
+            }
+          }
+        },
+        {"type": "null"}
+      ]
     }
   }
 }

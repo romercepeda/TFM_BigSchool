@@ -59,7 +59,7 @@ async def _run_analysis(job_id: str) -> None:
     from app.services.ai_providers.factory import (
         get_ai_provider,
     )
-    from app.services.ai_report_service import load_prompt, load_schema
+    from app.services.ai_report_service import fetch_system_context, load_prompt, load_schema
 
     cfg = get_config()
     SessionLocal = _make_db_session()  # noqa: N806
@@ -116,8 +116,19 @@ async def _run_analysis(job_id: str) -> None:
         prompt_template = load_prompt()
         schema = load_schema()
 
+        # Fetch system context (price + prior indicator history) to enrich the prompt.
+        # Failures are silently swallowed inside fetch_system_context — never aborts the job.
+        system_context = await fetch_system_context(
+            asset_id=holding.asset_id,
+            quote_currency=holding.asset.quote_currency,
+            db=db,
+        )
+        logger.debug("Job %s: system context keys=%s", job_id, list(system_context.keys()))
+
         # Call the LLM
-        result = await provider.extract_from_pdf(pdf_bytes, prompt_template, schema, asset_context)
+        result = await provider.extract_from_pdf(
+            pdf_bytes, prompt_template, schema, asset_context, system_context
+        )
         job.model_version = result.model_version
 
         if not result.succeeded:
