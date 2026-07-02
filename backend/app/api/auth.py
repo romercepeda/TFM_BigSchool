@@ -1,4 +1,4 @@
-"""Authentication API endpoints — Spec D01 / D08 / Changeset C01.
+"""Authentication API endpoints — Spec D01 / D08 / Changeset C01 / C02.
 
 Endpoints:
     POST  /auth/register         — create account with email + password
@@ -7,6 +7,7 @@ Endpoints:
     POST  /auth/logout           — clear session and CSRF cookies
     GET   /auth/me               — return the currently authenticated user (protected)
     PATCH /auth/me/language      — update the user's preferred language (D08 §6.2)
+    POST  /auth/change-password  — change the current user's password (D11 §6.4, §7.4)
 
 Token strategy (Spec 00b §2, updated by C01):
     - A single session JWT is stored in the httpOnly pi_session cookie (7 days).
@@ -31,7 +32,9 @@ from app.auth.jwt import (
     SESSION_TOKEN_EXPIRE_DAYS,
     create_session_token,
 )
+from app.auth.password import hash_password, verify_password
 from app.auth.schemas import (
+    ChangePasswordRequest,
     GuestLoginRequest,
     LoginRequest,
     LoginResponse,
@@ -103,6 +106,7 @@ async def _build_user_out(db: AsyncSession, user: User) -> LoginUserOut:
         email=user.email,
         display_name=user.display_name,
         preferred_language=user.preferred_language,
+        auth_provider=user.auth_provider,
         must_change_password=user.must_change_password,
         roles=roles,
         permissions=sorted(permissions),
@@ -251,3 +255,50 @@ async def update_language(
     current_user.preferred_language = body.language
     await db.commit()
     return LanguageUpdateResponse(preferred_language=current_user.preferred_language)
+
+
+@router.post(
+    "/change-password",
+    response_model=LoginUserOut,
+    dependencies=[Depends(require_permission("user.change_own_password"))],
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LoginUserOut:
+    """Change the current user's password (D11 §6.4, §6.5, §7.4).
+
+    current_password is required unless must_change_password is true (the
+    initial password was just shown once in the startup log; re-typing it adds
+    no security value). Rejects the new password if it equals the current one.
+
+    Uses 400, not 401, for a wrong current_password: the frontend API client
+    treats 401 as "session expired" and force-logs-out on it (Changeset C01),
+    which would be the wrong behavior for a simple form-validation failure.
+    """
+    if current_user.auth_provider != "password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password change is not available for this account type.",
+        )
+
+    if not current_user.must_change_password:
+        if not body.current_password or not verify_password(
+            body.current_password, current_user.password_hash or ""
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect.",
+            )
+
+    if verify_password(body.new_password, current_user.password_hash or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The new password must be different from the current password.",
+        )
+
+    current_user.password_hash = hash_password(body.new_password)
+    current_user.must_change_password = False
+    await db.commit()
+    return await _build_user_out(db, current_user)

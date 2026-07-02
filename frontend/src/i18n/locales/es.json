@@ -112,6 +112,13 @@
   "screen.asset.market_value": "Valor mercado",
   "screen.asset.unrealized_pl": "P&L latente",
   "screen.asset.price_na": "No disponible",
+  "screen.asset.edit_asset": "Editar activo",
+  "screen.asset.edit.ticker": "Ticker",
+  "screen.asset.edit.market": "Mercado",
+  "screen.asset.edit.name": "Nombre",
+  "screen.asset.edit.warning": "Atención: ticker, mercado y nombre son datos compartidos. El cambio afecta a todos los usuarios que tengan este activo.",
+  "screen.asset.edit.ticker_hint_market": "Mercado detectado: {market}. Para bolsas no estadounidenses, el ticker y el código de mercado se combinan automáticamente al consultar datos (p. ej. TEF + BME). Corrige el campo Mercado con el código de bolsa correcto si el proveedor no reconoce el activo.",
+  "screen.asset.edit.ticker_hint_us": "Mercado USA. Usa el ticker estándar sin mercado (AAPL, MSFT, INTC…).",
 
   "screen.lot.consumed": "consumido",
 
@@ -181,7 +188,17 @@
   "screen.config.language.es": "Español",
   "screen.config.language.en": "English",
 
+  "screen.change_password.title": "Cambiar contraseña",
+  "screen.change_password.current_password": "Contraseña actual",
+  "screen.change_password.new_password": "Nueva contraseña",
+  "screen.change_password.confirm_password": "Confirmar nueva contraseña",
+  "screen.change_password.forced_notice": "Debes cambiar tu contraseña para continuar.",
+  "screen.change_password.provider_oauth": "El cambio de contraseña lo gestiona tu proveedor de acceso.",
+  "screen.change_password.provider_guest": "Las cuentas de invitado no tienen contraseña.",
+  "screen.change_password.success": "Contraseña actualizada correctamente.",
+
   "settings.section.account": "Cuenta",
+  "settings.change_password.link": "Cambiar contraseña",
   "settings.section.appearance": "Apariencia",
   "settings.section.market_data": "Datos de mercado",
   "settings.saving": "Guardando…",
@@ -200,7 +217,7 @@
   "settings.market_data.assets_failed": "Activos con error",
   "settings.market_data.indicators": "Indicadores calculados",
   "settings.market_data.alerts": "Alertas disparadas",
-  "settings.market_data.failed_hint": "Verifica que MARKET_DATA_TWELVE_DATA_API_KEY esté en el fichero .env y reinicia el backend.",
+  "settings.market_data.failed_hint": "Uno o más activos no pudieron actualizarse. La causa más común es un ticker o código de mercado no reconocido por el proveedor de datos activo, o que el proveedor no ofrezca histórico para esa bolsa en su plan gratuito. Revisa el ticker y el mercado del activo fallido en su ficha.",
 
   "add_asset.title": "Añadir activo",
   "add_asset.ticker": "Ticker / símbolo",
@@ -216,6 +233,7 @@
   "validation.number.positive": "El valor debe ser positivo.",
   "validation.number.min": "El valor mínimo es {min}.",
   "validation.password.min_length": "La contraseña debe tener al menos {min} caracteres.",
+  "validation.password.mismatch": "Las contraseñas no coinciden.",
 
   "zone.positive": "Positivo",
   "zone.neutral": "Neutral",

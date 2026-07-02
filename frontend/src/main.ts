@@ -29,6 +29,7 @@ import './screens/analysis-screen.js';
 import './screens/history-screen.js';
 import './screens/alerts-screen.js';
 import './screens/settings-screen.js';
+import './screens/change-password-screen.js';
 import './screens/indicators-legend-screen.js';
 
 import { loadLocale } from './i18n/i18n.js';

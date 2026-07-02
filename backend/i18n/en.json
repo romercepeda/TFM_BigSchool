@@ -42,6 +42,7 @@
   "error.asset.not_found": "Asset not found or not in your portfolios.",
 
   "error.permission_denied": "You do not have permission to perform this operation.",
+  "error.must_change_password": "You must change your password to continue.",
 
   "error.upload.invalid_pdf": "The file is not a valid PDF.",
   "error.upload.too_large": "The file exceeds the maximum size of {max_mb} MB.",

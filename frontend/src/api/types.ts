@@ -18,6 +18,10 @@ export interface LoginUserOut {
   email: string;
   display_name: string | null;
   preferred_language: string;
+  auth_provider: string;
+  must_change_password: boolean;
+  roles: string[];
+  permissions: string[];
 }
 
 export interface LoginSessionOut {

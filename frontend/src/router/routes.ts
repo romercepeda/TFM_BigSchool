@@ -41,6 +41,7 @@ const ROUTES: RouteDef[] = [
   route('/portfolios/:portfolioId',                                             'pi-dashboard-screen'),
   route('/portfolios',                                                          'pi-portfolios-screen'),
   route('/settings',                                                            'pi-settings-screen'),
+  route('/settings/change-password',                                            'pi-change-password-screen'),
 ];
 
 export function matchRoute(path: string): RouteMatch | null {

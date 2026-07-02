@@ -134,6 +134,15 @@ export class SettingsScreen extends BaseComponent {
             <button class="btn-danger-outline" id="logout-btn">${t('nav.logout')}</button>
           </div>
           ${this._saved ? `<div class="feedback success">✓ ${t('settings.saved')}</div>` : ''}
+
+          ${user ? `<div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">
+            <button class="btn-outline" id="change-password-btn" ${user.auth_provider !== 'password' ? 'disabled' : ''}>
+              ${t('settings.change_password.link')}
+            </button>
+            ${user.auth_provider !== 'password'
+              ? `<span class="hint">${user.auth_provider === 'guest' ? t('screen.change_password.provider_guest') : t('screen.change_password.provider_oauth')}</span>`
+              : ''}
+          </div>` : ''}
         </div>
 
         <!-- ── Apariencia ───────────────────────────── -->
@@ -222,6 +231,10 @@ export class SettingsScreen extends BaseComponent {
         this.afterRender();
       }
     });
+
+    // Change password
+    this.shadow.getElementById('change-password-btn')?.addEventListener('click', () =>
+      navigate('/settings/change-password'));
 
     // Logout
     this.shadow.getElementById('logout-btn')?.addEventListener('click', async () => {

@@ -112,6 +112,13 @@
   "screen.asset.market_value": "Market value",
   "screen.asset.unrealized_pl": "Unrealized P&L",
   "screen.asset.price_na": "Unavailable",
+  "screen.asset.edit_asset": "Edit asset",
+  "screen.asset.edit.ticker": "Ticker",
+  "screen.asset.edit.market": "Market",
+  "screen.asset.edit.name": "Name",
+  "screen.asset.edit.warning": "Note: ticker, market and name are shared data. This change affects all users who hold this asset.",
+  "screen.asset.edit.ticker_hint_market": "Detected market: {market}. For non-US exchanges, the ticker and market code are combined automatically when fetching data (e.g. TEF + BME). Fix the Market field with the correct exchange code if the provider doesn't recognise the asset.",
+  "screen.asset.edit.ticker_hint_us": "US market. Use the standard ticker with no market code (AAPL, MSFT, INTC…).",
 
   "screen.lot.consumed": "consumed",
 
@@ -181,7 +188,17 @@
   "screen.config.language.es": "Español",
   "screen.config.language.en": "English",
 
+  "screen.change_password.title": "Change password",
+  "screen.change_password.current_password": "Current password",
+  "screen.change_password.new_password": "New password",
+  "screen.change_password.confirm_password": "Confirm new password",
+  "screen.change_password.forced_notice": "You must change your password to continue.",
+  "screen.change_password.provider_oauth": "Password change is managed by your identity provider.",
+  "screen.change_password.provider_guest": "Guest accounts don't have a password.",
+  "screen.change_password.success": "Password updated successfully.",
+
   "settings.section.account": "Account",
+  "settings.change_password.link": "Change password",
   "settings.section.appearance": "Appearance",
   "settings.section.market_data": "Market data",
   "settings.saving": "Saving…",
@@ -200,7 +217,7 @@
   "settings.market_data.assets_failed": "Assets failed",
   "settings.market_data.indicators": "Indicator snapshots written",
   "settings.market_data.alerts": "Alerts triggered",
-  "settings.market_data.failed_hint": "Check that MARKET_DATA_TWELVE_DATA_API_KEY is set in your .env file and restart the backend.",
+  "settings.market_data.failed_hint": "One or more assets could not be updated. The most common cause is a ticker or market code not recognised by the active data provider, or the provider not offering historical data for that exchange on its free plan. Check the ticker and market on the failing asset.",
 
   "add_asset.title": "Add asset",
   "add_asset.ticker": "Ticker / symbol",
@@ -216,6 +233,7 @@
   "validation.number.positive": "Value must be positive.",
   "validation.number.min": "Minimum value is {min}.",
   "validation.password.min_length": "Password must be at least {min} characters.",
+  "validation.password.mismatch": "Passwords do not match.",
 
   "zone.positive": "Positive",
   "zone.neutral": "Neutral",

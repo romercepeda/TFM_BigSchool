@@ -33,6 +33,17 @@ class GuestLoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
 
 
+class ChangePasswordRequest(BaseModel):
+    """D11 §6.4, §7.4. current_password is optional: the frontend omits the field
+
+    entirely while must_change_password is true (re-typing a password the user
+    just saw once in a startup log adds no security value, only friction).
+    The backend re-validates that omission is only accepted in that state.
+    """
+    current_password: str | None = None
+    new_password: str = Field(min_length=12, description="Minimum 12 characters.")
+
+
 # ── Response bodies ───────────────────────────────────────────────────────────
 
 
@@ -46,6 +57,7 @@ class LoginUserOut(BaseModel):
     email: str
     display_name: str | None
     preferred_language: str
+    auth_provider: str
     must_change_password: bool
     roles: list[str]
     permissions: list[str]

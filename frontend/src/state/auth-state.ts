@@ -12,3 +12,9 @@ export function setAuthState(user: LoginUserOut, pollInterval: number): void {
 export function clearAuthState(): void {
   currentUser.value = null;
 }
+
+// Updates the user portion only — e.g. after /auth/change-password or
+// /me/refresh-permissions, where the session (poll interval) is unchanged.
+export function updateCurrentUser(user: LoginUserOut): void {
+  currentUser.value = user;
+}

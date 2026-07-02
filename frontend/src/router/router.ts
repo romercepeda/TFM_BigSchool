@@ -31,6 +31,8 @@ export function currentPath(): string {
   return location.pathname;
 }
 
+const CHANGE_PASSWORD_PATH = '/settings/change-password';
+
 export function resolveRoute(): { screen: string; params: RouteParams } {
   const path = currentPath();
   const match = matchRoute(path);
@@ -40,6 +42,17 @@ export function resolveRoute(): { screen: string; params: RouteParams } {
     _redirectAfterLogin = path;
     replace('/login');
     return { screen: 'pi-login-screen', params: {} };
+  }
+
+  // D11 §7.4 / §6.4: a user who must change their password cannot navigate
+  // anywhere else until they do, even by typing a URL directly.
+  if (
+    match.authRequired &&
+    currentUser.value?.must_change_password &&
+    path !== CHANGE_PASSWORD_PATH
+  ) {
+    replace(CHANGE_PASSWORD_PATH);
+    return { screen: 'pi-change-password-screen', params: {} };
   }
 
   return { screen: match.screen, params: match.params };
