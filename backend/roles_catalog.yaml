@@ -1,0 +1,210 @@
+# Roles & permissions catalog — Spec D11 §3, §5
+#
+# Loaded at startup and upserted by code (stable key = `code`). This file is the
+# single source of truth for which permissions exist and which role holds which
+# permission. Adding a permission or role here (plus the matching i18n keys and,
+# if it gates a new endpoint, a require_permission("...") call) is all that is
+# required — no change to the permission-check logic itself (D11 §3).
+#
+# name_key / description_key resolve through the i18n system (Spec D08).
+# Permission descriptions are English-only in v1 (D11 §4.1).
+
+permissions:
+
+  # ── portfolio (Spec D02) ────────────────────────────────────────────────────
+  - code: portfolio.list
+    name_key: "permission.portfolio.list.name"
+    description_key: "permission.portfolio.list.description"
+  - code: portfolio.create
+    name_key: "permission.portfolio.create.name"
+    description_key: "permission.portfolio.create.description"
+  - code: portfolio.rename
+    name_key: "permission.portfolio.rename.name"
+    description_key: "permission.portfolio.rename.description"
+  - code: portfolio.archive
+    name_key: "permission.portfolio.archive.name"
+    description_key: "permission.portfolio.archive.description"
+  - code: portfolio.restore
+    name_key: "permission.portfolio.restore.name"
+    description_key: "permission.portfolio.restore.description"
+  - code: portfolio.delete_permanent
+    name_key: "permission.portfolio.delete_permanent.name"
+    description_key: "permission.portfolio.delete_permanent.description"
+
+  # ── holding (Spec D03) ──────────────────────────────────────────────────────
+  - code: holding.view
+    name_key: "permission.holding.view.name"
+    description_key: "permission.holding.view.description"
+  - code: holding.add_asset
+    name_key: "permission.holding.add_asset.name"
+    description_key: "permission.holding.add_asset.description"
+  - code: holding.delete
+    name_key: "permission.holding.delete.name"
+    description_key: "permission.holding.delete.description"
+
+  # ── lot (Spec D03) ──────────────────────────────────────────────────────────
+  - code: lot.create
+    name_key: "permission.lot.create.name"
+    description_key: "permission.lot.create.description"
+  - code: lot.edit
+    name_key: "permission.lot.edit.name"
+    description_key: "permission.lot.edit.description"
+  - code: lot.delete
+    name_key: "permission.lot.delete.name"
+    description_key: "permission.lot.delete.description"
+
+  # ── sale (Spec D03) ─────────────────────────────────────────────────────────
+  - code: sale.create
+    name_key: "permission.sale.create.name"
+    description_key: "permission.sale.create.description"
+  - code: sale.edit
+    name_key: "permission.sale.edit.name"
+    description_key: "permission.sale.edit.description"
+  - code: sale.delete
+    name_key: "permission.sale.delete.name"
+    description_key: "permission.sale.delete.description"
+
+  # ── price_level (Spec D06) ──────────────────────────────────────────────────
+  - code: price_level.view
+    name_key: "permission.price_level.view.name"
+    description_key: "permission.price_level.view.description"
+  - code: price_level.create
+    name_key: "permission.price_level.create.name"
+    description_key: "permission.price_level.create.description"
+  - code: price_level.edit
+    name_key: "permission.price_level.edit.name"
+    description_key: "permission.price_level.edit.description"
+  - code: price_level.delete
+    name_key: "permission.price_level.delete.name"
+    description_key: "permission.price_level.delete.description"
+
+  # ── analysis (Spec D07) ─────────────────────────────────────────────────────
+  - code: analysis.upload
+    name_key: "permission.analysis.upload.name"
+    description_key: "permission.analysis.upload.description"
+  - code: analysis.view
+    name_key: "permission.analysis.view.name"
+    description_key: "permission.analysis.view.description"
+  - code: analysis.delete
+    name_key: "permission.analysis.delete.name"
+    description_key: "permission.analysis.delete.description"
+
+  # ── settings (across specs) ─────────────────────────────────────────────────
+  - code: settings.view_own
+    name_key: "permission.settings.view_own.name"
+    description_key: "permission.settings.view_own.description"
+  - code: settings.edit_own
+    name_key: "permission.settings.edit_own.name"
+    description_key: "permission.settings.edit_own.description"
+
+  # ── user (Spec D01) ─────────────────────────────────────────────────────────
+  - code: user.list
+    name_key: "permission.user.list.name"
+    description_key: "permission.user.list.description"
+  - code: user.view_any
+    name_key: "permission.user.view_any.name"
+    description_key: "permission.user.view_any.description"
+  - code: user.change_own_password
+    name_key: "permission.user.change_own_password.name"
+    description_key: "permission.user.change_own_password.description"
+  - code: user.change_any_password
+    name_key: "permission.user.change_any_password.name"
+    description_key: "permission.user.change_any_password.description"
+
+  # ── role (Spec D11 — this spec) ─────────────────────────────────────────────
+  - code: role.list
+    name_key: "permission.role.list.name"
+    description_key: "permission.role.list.description"
+  - code: role.assign
+    name_key: "permission.role.assign.name"
+    description_key: "permission.role.assign.description"
+  - code: role.revoke
+    name_key: "permission.role.revoke.name"
+    description_key: "permission.role.revoke.description"
+
+  # ── system (Spec 00f) ───────────────────────────────────────────────────────
+  - code: system.view_config
+    name_key: "permission.system.view_config.name"
+    description_key: "permission.system.view_config.description"
+  - code: system.view_audit_log
+    name_key: "permission.system.view_audit_log.name"
+    description_key: "permission.system.view_audit_log.description"
+
+roles:
+
+  # Holds every permission in the catalog (D11 §5.2). The list below is kept
+  # explicit (not "all permissions" magic) so the file stays the single source
+  # of truth and a diff here is always meaningful.
+  - code: administrator
+    name_key: "role.administrator.name"
+    description_key: "role.administrator.description"
+    is_default: false
+    is_admin_role: true
+    permissions:
+      - portfolio.list
+      - portfolio.create
+      - portfolio.rename
+      - portfolio.archive
+      - portfolio.restore
+      - portfolio.delete_permanent
+      - holding.view
+      - holding.add_asset
+      - holding.delete
+      - lot.create
+      - lot.edit
+      - lot.delete
+      - sale.create
+      - sale.edit
+      - sale.delete
+      - price_level.view
+      - price_level.create
+      - price_level.edit
+      - price_level.delete
+      - analysis.upload
+      - analysis.view
+      - analysis.delete
+      - settings.view_own
+      - settings.edit_own
+      - user.list
+      - user.view_any
+      - user.change_own_password
+      - user.change_any_password
+      - role.list
+      - role.assign
+      - role.revoke
+      - system.view_config
+      - system.view_audit_log
+
+  # The typical personal-portfolio user (D11 §5.2). Auto-assigned to every new
+  # registration (D11 §6.2). Does not hold any user.*/role.*/system.* permission.
+  - code: investor
+    name_key: "role.investor.name"
+    description_key: "role.investor.description"
+    is_default: true
+    is_admin_role: false
+    permissions:
+      - portfolio.list
+      - portfolio.create
+      - portfolio.rename
+      - portfolio.archive
+      - portfolio.restore
+      - portfolio.delete_permanent
+      - holding.view
+      - holding.add_asset
+      - holding.delete
+      - lot.create
+      - lot.edit
+      - lot.delete
+      - sale.create
+      - sale.edit
+      - sale.delete
+      - price_level.view
+      - price_level.create
+      - price_level.edit
+      - price_level.delete
+      - analysis.upload
+      - analysis.view
+      - analysis.delete
+      - settings.view_own
+      - settings.edit_own
+      - user.change_own_password

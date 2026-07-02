@@ -1,7 +1,7 @@
 """BigSchool API — application entry point.
 
 Starts the FastAPI application, loads and validates config.yaml (fail-fast),
-seeds the indicator catalog, and registers all API routers.
+seeds the indicator and roles/permissions catalogs, and registers all API routers.
 
 Run via Docker Compose:
     docker compose up backend
@@ -48,11 +48,13 @@ logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup: seed the indicator catalog. Shutdown: nothing to clean up."""
+    """Startup: seed the indicator and roles/permissions catalogs. Shutdown: nothing to clean up."""
+    from app.roles.seed_loader import seed_roles_catalog
     from app.services.indicator_service import seed_indicators
 
     async with AsyncSessionLocal() as db:
         await seed_indicators(db)
+        await seed_roles_catalog(db)
 
     yield
 
