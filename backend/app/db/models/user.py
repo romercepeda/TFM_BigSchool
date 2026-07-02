@@ -8,7 +8,7 @@ the account; password_hash is only populated when auth_provider = 'password'.
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, String, func
+from sqlalchemy import Boolean, DateTime, Enum, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -34,6 +34,11 @@ class User(Base):
     # Defaults to the global i18n.default_language (Spec D08). Stored per-user.
     preferred_language: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="es"
+    )
+    # True for the bootstrap administrator and any admin-issued password reset
+    # (Spec D11 §6.4). While true, non-password-change endpoints return HTTP 428.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

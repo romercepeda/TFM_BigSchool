@@ -60,5 +60,6 @@ class UserResponse(BaseModel):
     auth_provider: str
     display_name: str | None
     preferred_language: str
+    must_change_password: bool
 
     model_config = {"from_attributes": True}

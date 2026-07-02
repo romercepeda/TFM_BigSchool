@@ -26,6 +26,7 @@ async def create_user(
     password: str | None = None,
     display_name: str | None = None,
     preferred_language: str = "es",
+    must_change_password: bool = False,
 ) -> User:
     """Persist a new User. Caller must commit the session afterwards.
 
@@ -37,6 +38,9 @@ async def create_user(
                   Will be hashed before storage. Must be None for other providers.
         display_name: Optional display name (populated from OAuth profile when available).
         preferred_language: ISO 639-1 code, defaults to the global i18n default.
+        must_change_password: False for every normal registration flow (Spec D11 §6.4).
+                  Only the bootstrap administrator (D11 §6.1) and admin-issued password
+                  resets (D11 §7.2) set this to True — both pass it explicitly.
 
     Returns:
         The newly created User (not yet committed to the database).
@@ -50,6 +54,7 @@ async def create_user(
         password_hash=hash_password(password) if password else None,
         display_name=display_name,
         preferred_language=preferred_language,
+        must_change_password=must_change_password,
     )
     db.add(user)
     await db.flush()  # writes to DB within the transaction, assigns user.id
