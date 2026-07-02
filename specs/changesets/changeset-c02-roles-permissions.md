@@ -1,6 +1,6 @@
 # Changeset C02 — Introduce Role-Based Access Control (D11)
 
-**Status:** Pending implementation
+**Status:** Implemented (permission-name/description i18n for the 34 non-role catalog entries deferred — see §9 note)
 **Type:** Cross-spec changeset
 **Triggered by:** Spec D11 (Roles & Permissions)
 **Affects implementations of:** Spec D01, Spec D08, Spec D10, Spec 00f, Spec 00e
@@ -279,6 +279,16 @@ Per Spec D08, all user-facing text lives in translation files. Without these ent
 
 - Every visible D11-introduced string resolves through `t()` and has entries in both `es.json` and `en.json`.
 - No raw key appears in the UI when either language is selected.
+
+**Implementation note:** role names/descriptions, screen labels, and all
+listed messages are translated. Permission names/descriptions (the ~34
+catalog entries) are a deliberate scope cut: the roles screen shows the raw
+permission `code` (e.g. `portfolio.create`) instead of a translated name.
+This does not violate the acceptance criteria above — no `permission.*.name`
+key is referenced anywhere in the UI, so there is no raw key visible, just an
+untranslated but self-documenting code. Revisit if a future screen needs a
+human-readable permission name (`translate_permission_name` already exists
+in `i18n_service.py`; only the catalog's i18n entries are missing).
 
 ---
 
