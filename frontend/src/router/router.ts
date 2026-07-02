@@ -1,6 +1,6 @@
 // Hand-written History API router — Spec D10 §6 (~50 lines).
 
-import { currentUser } from '../state/auth-state.js';
+import { currentUser, hasPermission } from '../state/auth-state.js';
 import { matchRoute } from './routes.js';
 
 export type RouteParams = Record<string, string>;
@@ -53,6 +53,12 @@ export function resolveRoute(): { screen: string; params: RouteParams } {
   ) {
     replace(CHANGE_PASSWORD_PATH);
     return { screen: 'pi-change-password-screen', params: {} };
+  }
+
+  // D11 §7.5: typing a URL you lack permission for shows a full-screen
+  // placeholder in place, without leaking anything via a redirect/history entry.
+  if (match.requiredPermission && !hasPermission(match.requiredPermission)) {
+    return { screen: 'pi-permission-denied-screen', params: {} };
   }
 
   return { screen: match.screen, params: match.params };

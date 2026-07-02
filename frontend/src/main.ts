@@ -31,6 +31,10 @@ import './screens/alerts-screen.js';
 import './screens/settings-screen.js';
 import './screens/change-password-screen.js';
 import './screens/indicators-legend-screen.js';
+import './screens/admin-users-screen.js';
+import './screens/admin-user-detail-screen.js';
+import './screens/admin-roles-screen.js';
+import './screens/permission-denied-screen.js';
 
 import { loadLocale } from './i18n/i18n.js';
 import { onRouteChange, resolveRoute, replace } from './router/router.js';

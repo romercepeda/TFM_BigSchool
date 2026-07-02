@@ -15,6 +15,11 @@
   "indicator.volatility.name": "Volatility",
   "indicator.sharpe.name": "Sharpe Ratio",
 
+  "role.administrator.name": "Administrator",
+  "role.administrator.description": "Full access to every operation, including user and role management.",
+  "role.investor.name": "Investor",
+  "role.investor.description": "Manages their own portfolios, assets, price levels, and AI analyses. Cannot manage users or global configuration.",
+
   "indicator.ma_50_200_cross.state.golden_cross": "Golden Cross",
   "indicator.ma_50_200_cross.state.near_cross": "Near Cross",
   "indicator.ma_50_200_cross.state.death_cross": "Death Cross",
@@ -43,6 +48,7 @@
 
   "error.permission_denied": "You do not have permission to perform this operation.",
   "error.must_change_password": "You must change your password to continue.",
+  "error.last_admin": "At least one user must keep the Administrator role.",
 
   "error.upload.invalid_pdf": "The file is not a valid PDF.",
   "error.upload.too_large": "The file exceeds the maximum size of {max_mb} MB.",

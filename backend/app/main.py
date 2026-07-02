@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.csrf import csrf_middleware
+from app.api.admin import router as admin_router
 from app.api.ai_reports import router as ai_reports_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
@@ -105,3 +106,4 @@ app.include_router(market_data_router)
 app.include_router(indicators_router)
 app.include_router(ai_reports_router)
 app.include_router(me_router)
+app.include_router(admin_router)

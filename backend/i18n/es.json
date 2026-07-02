@@ -15,6 +15,11 @@
   "indicator.volatility.name": "Volatilidad",
   "indicator.sharpe.name": "Ratio Sharpe",
 
+  "role.administrator.name": "Administrador",
+  "role.administrator.description": "Acceso completo a todas las operaciones, incluida la gestión de usuarios y roles.",
+  "role.investor.name": "Inversor",
+  "role.investor.description": "Gestiona sus propias carteras, activos, niveles de precio y análisis IA. No puede administrar usuarios ni configuración global.",
+
   "indicator.ma_50_200_cross.state.golden_cross": "Cruce Dorado",
   "indicator.ma_50_200_cross.state.near_cross": "Próximo al Cruce",
   "indicator.ma_50_200_cross.state.death_cross": "Cruce de la Muerte",
@@ -43,6 +48,7 @@
 
   "error.permission_denied": "No tienes permisos para esta operación.",
   "error.must_change_password": "Debes cambiar tu contraseña para continuar.",
+  "error.last_admin": "Al menos un usuario debe conservar el rol de Administrador.",
 
   "error.upload.invalid_pdf": "El archivo no es un PDF válido.",
   "error.upload.too_large": "El archivo supera el tamaño máximo de {max_mb} MB.",

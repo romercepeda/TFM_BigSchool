@@ -5,17 +5,25 @@ This layer sits between the API routers (app/api/) and the database models
 the ORM. This separation keeps the routers thin and the business rules testable.
 """
 
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.password import hash_password, verify_password
 from app.db.models.user import User
-from app.roles.service import grant_default_role
+from app.roles.service import generate_password, grant_default_role
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     """Return the User with this email, or None if not found."""
     result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
+    """Return the User with this id, or None if not found."""
+    result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
 
@@ -85,3 +93,17 @@ async def authenticate_with_password(
     if not verify_password(password, user.password_hash or ""):
         return None
     return user
+
+
+async def admin_reset_password(db: AsyncSession, user: User, *, password_length: int) -> str:
+    """Reset another user's password to a new random value (D11 §7.2).
+
+    Sets must_change_password=true so the target is forced to pick their own
+    password on next login — mirrors the bootstrap-admin flow (D11 §6.1).
+    Returns the plaintext password; the caller shows it once and never stores it.
+    """
+    plaintext = generate_password(password_length)
+    user.password_hash = hash_password(plaintext)
+    user.must_change_password = True
+    await db.commit()
+    return plaintext

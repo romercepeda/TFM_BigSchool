@@ -18,3 +18,10 @@ export function clearAuthState(): void {
 export function updateCurrentUser(user: LoginUserOut): void {
   currentUser.value = user;
 }
+
+// D11 §7.1 — the frontend hiding layer. The backend is the security boundary;
+// this only decides whether to render an affordance, never whether an action
+// is allowed (Layer 2, the 403 response, is what actually enforces it).
+export function hasPermission(code: string): boolean {
+  return currentUser.value?.permissions.includes(code) ?? false;
+}

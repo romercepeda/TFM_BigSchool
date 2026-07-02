@@ -1,5 +1,5 @@
 import { BaseComponent } from './common/base-component.js';
-import { currentUser } from '../state/auth-state.js';
+import { currentUser, hasPermission } from '../state/auth-state.js';
 import { pendingNotifications, startPolling, stopPolling } from '../state/notification-state.js';
 import { pollIntervalSeconds } from '../state/auth-state.js';
 import { getNotifications } from '../api/analyses.js';
@@ -111,6 +111,9 @@ export class HeaderBar extends BaseComponent {
               </div>
             ` : ''}
             <span>${user.display_name ?? user.email}</span>
+            ${hasPermission('user.list') || hasPermission('role.list')
+              ? `<button id="admin-btn">${t('nav.admin')}</button>`
+              : ''}
             <button id="settings-btn" title="${t('nav.configuration')}">⚙</button>
             <button id="logout-btn">${t('nav.logout')}</button>
           </div>
@@ -120,6 +123,7 @@ export class HeaderBar extends BaseComponent {
   }
 
   protected afterRender(): void {
+    this.shadow.getElementById('admin-btn')?.addEventListener('click', () => navigate('/admin/users'));
     this.shadow.getElementById('settings-btn')?.addEventListener('click', () => navigate('/settings'));
     this.shadow.getElementById('logout-btn')?.addEventListener('click', async () => {
       await logout();

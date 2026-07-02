@@ -42,6 +42,40 @@ export interface UserResponse {
   preferred_language: string;
 }
 
+// ── Admin (Spec D11 §7.2, §7.3) ─────────────────────────────────────────────
+
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  auth_provider: string;
+  display_name: string | null;
+  roles: string[];
+  must_change_password: boolean;
+  created_at: string;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserSummary[];
+  total: number;
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  portfolios_count: number;
+}
+
+export interface ResetPasswordResponse {
+  new_password: string;
+}
+
+export interface AdminRoleOut {
+  code: string;
+  name: string;
+  description: string;
+  is_default: boolean;
+  is_admin_role: boolean;
+  permissions: string[];
+}
+
 // ── Portfolios ────────────────────────────────────────────────────────────────
 
 export type Currency = 'EUR' | 'USD' | 'GBP' | 'JPY' | 'CHF' | 'CAD' | 'AUD';

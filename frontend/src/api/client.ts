@@ -57,6 +57,12 @@ export async function request<T>(
           message: e.msg,
         }));
         detail = details[0]?.message ?? detail;
+      } else if (json.detail && typeof json.detail === 'object') {
+        // { code, message } shape — used by require_permission (403/428) and
+        // the last-admin conflict (409) responses (Spec D11 §8.1, §7.3).
+        const obj = json.detail as { code?: string; message?: string };
+        if (typeof obj.message === 'string') detail = obj.message;
+        if (typeof obj.code === 'string') code = obj.code;
       }
     } catch {
       // non-JSON error body — keep defaults

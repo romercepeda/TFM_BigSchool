@@ -15,8 +15,6 @@ Two responsibilities, called in sequence from app.main's lifespan:
 """
 
 import logging
-import secrets
-import string
 from uuid import UUID
 
 from sqlalchemy import select
@@ -24,21 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_config
 from app.db.models.role import Role, UserRole
+from app.roles.service import generate_password
 from app.services.user_service import create_user, get_user_by_email
 
 logger = logging.getLogger(__name__)
 
-# No ambiguous characters: excludes 0/O and 1/l/I (D11 §6.1 step 2).
-_PASSWORD_ALPHABET = "".join(
-    c for c in (string.ascii_letters + string.digits) if c not in "0O1lI"
-)
-
 _BANNER_RULE = "=" * 69
 _BANNER_SUBRULE = "-" * 69
-
-
-def _generate_password(length: int) -> str:
-    return "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
 
 
 async def _get_admin_role(db: AsyncSession) -> Role:
@@ -85,7 +75,7 @@ async def ensure_admin_exists(db: AsyncSession) -> None:
             f"  VALUES ('{existing.id}', '{admin_role.id}', now(), NULL);"
         )
 
-    password = _generate_password(cfg.security.default_admin_password_length)
+    password = generate_password(cfg.security.default_admin_password_length)
     user = await create_user(
         db,
         email=email,

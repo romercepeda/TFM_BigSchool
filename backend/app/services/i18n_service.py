@@ -73,6 +73,21 @@ def translate_indicator_name(name_key: str, lang: str, default_lang: str = "es")
     return translate(name_key, lang, default_lang)
 
 
+def translate_role_name(name_key: str, lang: str, default_lang: str = "es") -> str:
+    """Resolve a role's name_key to its translated display name (D11 §4.2)."""
+    return translate(name_key, lang, default_lang)
+
+
+def translate_role_description(description_key: str, lang: str, default_lang: str = "es") -> str:
+    """Resolve a role's description_key to its translated description (D11 §4.2)."""
+    return translate(description_key, lang, default_lang)
+
+
+def translate_permission_name(name_key: str, lang: str, default_lang: str = "es") -> str:
+    """Resolve a permission's name_key to its translated display name (D11 §4.1)."""
+    return translate(name_key, lang, default_lang)
+
+
 def translate_state(
     indicator_code: str,
     state_value: str,

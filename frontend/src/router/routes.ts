@@ -4,6 +4,7 @@ export interface RouteMatch {
   screen: string;
   params: Record<string, string>;
   authRequired: boolean;
+  requiredPermission: string | null;
 }
 
 interface RouteDef {
@@ -11,12 +12,14 @@ interface RouteDef {
   paramNames: string[];
   screen: string;
   authRequired: boolean;
+  requiredPermission: string | null;
 }
 
 function route(
   template: string,
   screen: string,
   authRequired = true,
+  requiredPermission: string | null = null,
 ): RouteDef {
   const paramNames: string[] = [];
   const regexStr = template
@@ -25,7 +28,7 @@ function route(
       return '([^/]+)';
     })
     .replace(/\//g, '\\/');
-  return { pattern: new RegExp(`^${regexStr}$`), paramNames, screen, authRequired };
+  return { pattern: new RegExp(`^${regexStr}$`), paramNames, screen, authRequired, requiredPermission };
 }
 
 const ROUTES: RouteDef[] = [
@@ -42,6 +45,9 @@ const ROUTES: RouteDef[] = [
   route('/portfolios',                                                          'pi-portfolios-screen'),
   route('/settings',                                                            'pi-settings-screen'),
   route('/settings/change-password',                                            'pi-change-password-screen'),
+  route('/admin/users/:userId',                                                 'pi-admin-user-detail-screen', true, 'user.view_any'),
+  route('/admin/users',                                                         'pi-admin-users-screen',       true, 'user.list'),
+  route('/admin/roles',                                                         'pi-admin-roles-screen',       true, 'role.list'),
 ];
 
 export function matchRoute(path: string): RouteMatch | null {
@@ -50,7 +56,12 @@ export function matchRoute(path: string): RouteMatch | null {
     if (m) {
       const params: Record<string, string> = {};
       def.paramNames.forEach((name, i) => { params[name] = m[i + 1]; });
-      return { screen: def.screen, params, authRequired: def.authRequired };
+      return {
+        screen: def.screen,
+        params,
+        authRequired: def.authRequired,
+        requiredPermission: def.requiredPermission,
+      };
     }
   }
   return null;
