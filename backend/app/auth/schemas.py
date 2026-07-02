@@ -7,24 +7,30 @@ describe the database; these schemas describe the API contract.
 
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+# email fields are plain str, not EmailStr: pydantic's email-validator rejects
+# RFC 6762 special-use TLDs like .local as a syntax error, not just a
+# deliverability warning — which would make it impossible to log in as the
+# D11 §11 bootstrap administrator, whose default address is admin@portfolioia.local.
+# User.email itself is an unconstrained String(255) at the DB layer (Spec D01 §5).
 
 
 # ── Request bodies ────────────────────────────────────────────────────────────
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=8, description="Minimum 8 characters.")
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=255)
     password: str
 
 
 class GuestLoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=255)
 
 
 # ── Response bodies ───────────────────────────────────────────────────────────

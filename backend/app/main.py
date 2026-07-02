@@ -49,7 +49,11 @@ logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup: seed catalogs, backfill roles, validate permission coverage. Shutdown: nothing to clean up."""
+    """Startup: seed catalogs, backfill roles, validate coverage, bootstrap admin.
+
+    Shutdown: nothing to clean up.
+    """
+    from app.roles.bootstrap import ensure_admin_exists, verify_always_one_admin
     from app.roles.seed_loader import seed_roles_catalog
     from app.roles.service import backfill_default_roles
     from app.roles.validation import validate_permission_coverage
@@ -62,6 +66,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await backfill_default_roles(db)
         # Fail fast if any route is missing (or has a stale) require_permission (D11 §8.3).
         await validate_permission_coverage(app, db)
+        # Create the configured admin on a fresh DB (D11 §6.1), then independently
+        # verify the always-one-admin invariant still holds (D11 §6.3).
+        await ensure_admin_exists(db)
+        await verify_always_one_admin(db)
 
     yield
 
