@@ -48,9 +48,10 @@ logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup: seed the indicator and roles/permissions catalogs. Shutdown: nothing to clean up."""
+    """Startup: seed catalogs, backfill roles, validate permission coverage. Shutdown: nothing to clean up."""
     from app.roles.seed_loader import seed_roles_catalog
     from app.roles.service import backfill_default_roles
+    from app.roles.validation import validate_permission_coverage
     from app.services.indicator_service import seed_indicators
 
     async with AsyncSessionLocal() as db:
@@ -58,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_roles_catalog(db)
         # Existing users predate D11 — give them the default role once (C02 §3).
         await backfill_default_roles(db)
+        # Fail fast if any route is missing (or has a stale) require_permission (D11 §8.3).
+        await validate_permission_coverage(app, db)
 
     yield
 

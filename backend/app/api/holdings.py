@@ -38,6 +38,7 @@ from app.auth.dependencies import get_current_user
 from app.db.models.holding import Holding
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services import asset_service, lot_service, sale_service
 from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
@@ -109,7 +110,11 @@ def _build_aggregates(holding: Holding) -> HoldingAggregates:
 # ── Holding endpoints ─────────────────────────────────────────────────────────
 
 
-@router.get("", response_model=list[HoldingSummaryResponse])
+@router.get(
+    "",
+    response_model=list[HoldingSummaryResponse],
+    dependencies=[Depends(require_permission("holding.view"))],
+)
 async def list_holdings(
     portfolio_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -137,7 +142,12 @@ async def list_holdings(
     return results
 
 
-@router.post("", response_model=HoldingDetailResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=HoldingDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("holding.add_asset"))],
+)
 async def add_holding(
     portfolio_id: UUID,
     body: CreateHoldingRequest,
@@ -215,7 +225,11 @@ async def add_holding(
     )
 
 
-@router.get("/{holding_id}", response_model=HoldingDetailResponse)
+@router.get(
+    "/{holding_id}",
+    response_model=HoldingDetailResponse,
+    dependencies=[Depends(require_permission("holding.view"))],
+)
 async def get_holding(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -238,7 +252,11 @@ async def get_holding(
     )
 
 
-@router.delete("/{holding_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{holding_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("holding.delete"))],
+)
 async def delete_holding(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -257,7 +275,12 @@ async def delete_holding(
 # ── Lot endpoints ─────────────────────────────────────────────────────────────
 
 
-@router.post("/{holding_id}/lots", response_model=LotResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{holding_id}/lots",
+    response_model=LotResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("lot.create"))],
+)
 async def add_lot(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -301,7 +324,11 @@ async def add_lot(
     return LotResponse.model_validate(lot)
 
 
-@router.patch("/{holding_id}/lots/{lot_id}", response_model=LotResponse)
+@router.patch(
+    "/{holding_id}/lots/{lot_id}",
+    response_model=LotResponse,
+    dependencies=[Depends(require_permission("lot.edit"))],
+)
 async def edit_lot(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -338,7 +365,11 @@ async def edit_lot(
     return LotResponse.model_validate(lot)
 
 
-@router.delete("/{holding_id}/lots/{lot_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{holding_id}/lots/{lot_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("lot.delete"))],
+)
 async def delete_lot(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -367,7 +398,12 @@ async def delete_lot(
 # ── Sale endpoints ────────────────────────────────────────────────────────────
 
 
-@router.post("/{holding_id}/sales", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{holding_id}/sales",
+    response_model=SaleResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("sale.create"))],
+)
 async def create_sale(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -422,7 +458,11 @@ async def create_sale(
     return SaleResponse.model_validate(sale)
 
 
-@router.patch("/{holding_id}/sales/{sale_id}", response_model=SaleResponse)
+@router.patch(
+    "/{holding_id}/sales/{sale_id}",
+    response_model=SaleResponse,
+    dependencies=[Depends(require_permission("sale.edit"))],
+)
 async def edit_sale(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -468,7 +508,11 @@ async def edit_sale(
     return SaleResponse.model_validate(sale)
 
 
-@router.delete("/{holding_id}/sales/{sale_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{holding_id}/sales/{sale_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("sale.delete"))],
+)
 async def delete_sale(
     portfolio_id: UUID,
     holding_id: UUID,

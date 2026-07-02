@@ -22,6 +22,7 @@ from app.api.d09_schemas import (
 from app.auth.dependencies import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services.market_data.service import get_market_data_service
 from app.services.market_data.types import ProviderError
 
@@ -40,7 +41,11 @@ def _unavailable(exc: ProviderError) -> HTTPException:
     )
 
 
-@router.get("/assets/search", response_model=list[AssetSearchResultResponse])
+@router.get(
+    "/assets/search",
+    response_model=list[AssetSearchResultResponse],
+    dependencies=[Depends(require_permission("holding.add_asset"))],
+)
 async def search_assets(
     q: str = Query(min_length=1, description="Ticker or company name prefix."),
     current_user: User = Depends(get_current_user),
@@ -67,15 +72,20 @@ async def search_assets(
     ]
 
 
-@router.get("/assets/{ticker}/price", response_model=PricePointResponse)
+@router.get(
+    "/assets/{ticker}/price",
+    response_model=PricePointResponse,
+    dependencies=[Depends(require_permission("holding.view"))],
+)
 async def get_asset_price(
     ticker: str,
+    exchange: str | None = Query(default=None, description="Market/exchange code, e.g. BME, LSE."),
     current_user: User = Depends(get_current_user),
 ) -> PricePointResponse:
     """Return the most recent available price for a ticker from the active provider."""
     svc = get_market_data_service()
     try:
-        point = await svc.get_current_price(ticker.upper())
+        point = await svc.get_current_price(ticker.upper(), exchange.upper() if exchange else None)
     except ProviderError as exc:
         raise _unavailable(exc)
     return PricePointResponse(
@@ -85,7 +95,11 @@ async def get_asset_price(
     )
 
 
-@router.get("/fx/rate", response_model=FxRateResponse)
+@router.get(
+    "/fx/rate",
+    response_model=FxRateResponse,
+    dependencies=[Depends(require_permission("holding.view"))],
+)
 async def get_fx_rate(
     quote_currency: str = Query(description="Asset currency — e.g. USD."),
     base_currency: str = Query(description="Portfolio currency — e.g. EUR."),
@@ -112,7 +126,11 @@ async def get_fx_rate(
     )
 
 
-@router.get("/fx/supported", response_model=FxPairSupportedResponse)
+@router.get(
+    "/fx/supported",
+    response_model=FxPairSupportedResponse,
+    dependencies=[Depends(require_permission("holding.add_asset"))],
+)
 async def check_fx_pair(
     quote_currency: str = Query(description="Asset currency — e.g. USD."),
     base_currency: str = Query(description="Portfolio currency — e.g. EUR."),
@@ -128,7 +146,11 @@ async def check_fx_pair(
     )
 
 
-@router.post("/daily-update", response_model=DailyUpdateResponse)
+@router.post(
+    "/daily-update",
+    response_model=DailyUpdateResponse,
+    dependencies=[Depends(require_permission("system.run_jobs"))],
+)
 async def run_daily_update(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

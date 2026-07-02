@@ -44,6 +44,7 @@ from app.config import get_config
 from app.db.models.portfolio import Portfolio
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services.user_service import (
     authenticate_with_password,
     create_user,
@@ -195,13 +196,21 @@ async def logout(response: Response) -> None:
     response.delete_cookie(CSRF_COOKIE_NAME, path="/")
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    dependencies=[Depends(require_permission("settings.view_own"))],
+)
 async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """Return the currently authenticated user's profile."""
     return UserResponse.model_validate(current_user)
 
 
-@router.patch("/me/language", response_model=LanguageUpdateResponse)
+@router.patch(
+    "/me/language",
+    response_model=LanguageUpdateResponse,
+    dependencies=[Depends(require_permission("settings.edit_own"))],
+)
 async def update_language(
     body: LanguageUpdateRequest,
     current_user: User = Depends(get_current_user),

@@ -129,6 +129,14 @@ permissions:
   - code: system.view_audit_log
     name_key: "permission.system.view_audit_log.name"
     description_key: "permission.system.view_audit_log.description"
+  # Added during Changeset C02 §5 instrumentation: POST /market-data/daily-update
+  # (Spec D09 §6) triggers the price/indicator/alert job across every user's
+  # holdings — a global, shared-rate-limit operation with no per-user ownership
+  # scope, so it needs its own admin-only permission rather than reusing a
+  # holding.*/portfolio.* code that would wrongly grant it to Investor.
+  - code: system.run_jobs
+    name_key: "permission.system.run_jobs.name"
+    description_key: "permission.system.run_jobs.description"
 
 roles:
 
@@ -174,6 +182,7 @@ roles:
       - role.revoke
       - system.view_config
       - system.view_audit_log
+      - system.run_jobs
 
   # The typical personal-portfolio user (D11 §5.2). Auto-assigned to every new
   # registration (D11 §6.2). Does not hold any user.*/role.*/system.* permission.

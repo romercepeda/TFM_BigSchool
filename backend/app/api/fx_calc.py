@@ -24,6 +24,7 @@ from app.auth.dependencies import get_current_user
 from app.db.models.holding import Holding
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services import fx_engine
 from app.services.fx_engine import LotCalcInput
 from app.services.market_data.service import get_market_data_service
@@ -41,6 +42,7 @@ _NOT_FOUND = HTTPException(
     "/{portfolio_id}/holdings/{holding_id}/calculate",
     response_model=HoldingCalcResponse,
     summary="Calculate FX metrics for a holding (Spec D04)",
+    dependencies=[Depends(require_permission("holding.view"))],
 )
 async def calculate_holding_fx(
     portfolio_id: UUID,

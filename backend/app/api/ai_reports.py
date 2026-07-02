@@ -27,6 +27,7 @@ from app.auth.dependencies import get_current_user
 from app.config import get_config
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services import ai_report_service
 from app.services.portfolio_service import get_portfolio_by_id
 
@@ -81,6 +82,7 @@ async def _require_holding(
     "",
     response_model=UploadReportResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_permission("analysis.upload"))],
 )
 async def upload_report(
     portfolio_id: UUID,
@@ -126,7 +128,11 @@ async def upload_report(
     )
 
 
-@_nested_router.get("", response_model=list[AnalysisReportSummary])
+@_nested_router.get(
+    "",
+    response_model=list[AnalysisReportSummary],
+    dependencies=[Depends(require_permission("analysis.view"))],
+)
 async def list_reports(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -142,7 +148,11 @@ async def list_reports(
 # ── Flat endpoints (jobs list must come before /{report_id} for correct routing) ─
 
 
-@_flat_router.get("/jobs", response_model=list[AnalysisJobResponse])
+@_flat_router.get(
+    "/jobs",
+    response_model=list[AnalysisJobResponse],
+    dependencies=[Depends(require_permission("analysis.view"))],
+)
 async def list_jobs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -158,7 +168,11 @@ async def list_jobs(
     return [AnalysisJobResponse.model_validate(j) for j in jobs]
 
 
-@_flat_router.get("/{report_id}", response_model=AnalysisReportDetail)
+@_flat_router.get(
+    "/{report_id}",
+    response_model=AnalysisReportDetail,
+    dependencies=[Depends(require_permission("analysis.view"))],
+)
 async def get_report(
     report_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -171,7 +185,11 @@ async def get_report(
     return AnalysisReportDetail.model_validate(report)
 
 
-@_flat_router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_flat_router.delete(
+    "/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("analysis.delete"))],
+)
 async def delete_report(
     report_id: UUID,
     current_user: User = Depends(get_current_user),

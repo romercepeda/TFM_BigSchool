@@ -28,6 +28,7 @@ from app.api.d06_schemas import (
 from app.auth.dependencies import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services import price_level_service as svc
 from app.services.lot_service import get_holding_with_asset
 from app.services.portfolio_service import get_portfolio_by_id
@@ -74,7 +75,11 @@ async def _require_holding(
 # ── List active levels ────────────────────────────────────────────────────────
 
 
-@router.get("", response_model=list[PriceLevelResponse])
+@router.get(
+    "",
+    response_model=list[PriceLevelResponse],
+    dependencies=[Depends(require_permission("price_level.view"))],
+)
 async def list_price_levels(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -90,7 +95,12 @@ async def list_price_levels(
 # ── Batch create ──────────────────────────────────────────────────────────────
 
 
-@router.post("", response_model=list[PriceLevelResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=list[PriceLevelResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("price_level.create"))],
+)
 async def create_price_levels(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -129,7 +139,11 @@ async def create_price_levels(
 # ── Edit ──────────────────────────────────────────────────────────────────────
 
 
-@router.patch("/{level_id}", response_model=PriceLevelResponse)
+@router.patch(
+    "/{level_id}",
+    response_model=PriceLevelResponse,
+    dependencies=[Depends(require_permission("price_level.edit"))],
+)
 async def edit_price_level(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -165,7 +179,11 @@ async def edit_price_level(
 # ── Delete ────────────────────────────────────────────────────────────────────
 
 
-@router.delete("/{level_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{level_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("price_level.delete"))],
+)
 async def delete_price_level(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -190,7 +208,11 @@ async def delete_price_level(
 # ── History (immutable, append-only) ─────────────────────────────────────────
 
 
-@router.get("/history", response_model=list[PriceLevelHistoryEntryResponse])
+@router.get(
+    "/history",
+    response_model=list[PriceLevelHistoryEntryResponse],
+    dependencies=[Depends(require_permission("price_level.view"))],
+)
 async def list_price_level_history(
     portfolio_id: UUID,
     holding_id: UUID,
@@ -209,7 +231,11 @@ async def list_price_level_history(
 # ── Manual alert evaluation (pre-D09 testing hook) ───────────────────────────
 
 
-@router.post("/evaluate", response_model=EvaluateResponse)
+@router.post(
+    "/evaluate",
+    response_model=EvaluateResponse,
+    dependencies=[Depends(require_permission("price_level.edit"))],
+)
 async def evaluate_crossings(
     portfolio_id: UUID,
     holding_id: UUID,

@@ -23,6 +23,7 @@ from app.db.models.indicator import Indicator
 from app.db.models.portfolio import Portfolio
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services.i18n_service import translate_indicator_name, translate_state
 from app.services.indicator_service import (
     get_asset_indicator_history,
@@ -65,7 +66,11 @@ def _build_snapshot_out(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/indicators", response_model=list[IndicatorOut])
+@router.get(
+    "/indicators",
+    response_model=list[IndicatorOut],
+    dependencies=[Depends(require_permission("holding.view"))],
+)
 async def list_indicators(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -84,6 +89,7 @@ async def list_indicators(
 @router.get(
     "/assets/{asset_id}/indicators",
     response_model=list[IndicatorSnapshotHistoryOut],
+    dependencies=[Depends(require_permission("holding.view"))],
 )
 async def get_asset_indicators(
     asset_id: UUID,
@@ -133,6 +139,7 @@ async def get_asset_indicators(
 @router.get(
     "/portfolios/{portfolio_id}/indicators",
     response_model=list[IndicatorSnapshotHistoryOut],
+    dependencies=[Depends(require_permission("portfolio.list"))],
 )
 async def get_portfolio_indicators(
     portfolio_id: UUID,

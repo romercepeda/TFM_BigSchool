@@ -25,6 +25,7 @@ from app.api.portfolio_schemas import (
 from app.auth.dependencies import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.dependencies import require_permission
 from app.services.portfolio_service import (
     archive_portfolio,
     create_portfolio,
@@ -50,7 +51,12 @@ def _conflict(msg: str) -> HTTPException:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-@router.post("", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PortfolioResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("portfolio.create"))],
+)
 async def create(
     body: CreatePortfolioRequest,
     current_user: User = Depends(get_current_user),
@@ -71,7 +77,11 @@ async def create(
     return PortfolioResponse.model_validate(portfolio)
 
 
-@router.get("", response_model=list[PortfolioResponse])
+@router.get(
+    "",
+    response_model=list[PortfolioResponse],
+    dependencies=[Depends(require_permission("portfolio.list"))],
+)
 async def list_all(
     include_archived: bool = Query(default=False, description="Set to true to include archived portfolios."),
     current_user: User = Depends(get_current_user),
@@ -82,7 +92,11 @@ async def list_all(
     return [PortfolioResponse.model_validate(p) for p in portfolios]
 
 
-@router.get("/{portfolio_id}", response_model=PortfolioResponse)
+@router.get(
+    "/{portfolio_id}",
+    response_model=PortfolioResponse,
+    dependencies=[Depends(require_permission("portfolio.list"))],
+)
 async def get_one(
     portfolio_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -95,7 +109,11 @@ async def get_one(
     return PortfolioResponse.model_validate(portfolio)
 
 
-@router.patch("/{portfolio_id}", response_model=PortfolioResponse)
+@router.patch(
+    "/{portfolio_id}",
+    response_model=PortfolioResponse,
+    dependencies=[Depends(require_permission("portfolio.rename"))],
+)
 async def rename(
     portfolio_id: UUID,
     body: RenamePortfolioRequest,
@@ -115,7 +133,11 @@ async def rename(
     return PortfolioResponse.model_validate(portfolio)
 
 
-@router.post("/{portfolio_id}/archive", response_model=PortfolioResponse)
+@router.post(
+    "/{portfolio_id}/archive",
+    response_model=PortfolioResponse,
+    dependencies=[Depends(require_permission("portfolio.archive"))],
+)
 async def archive(
     portfolio_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -134,7 +156,11 @@ async def archive(
     return PortfolioResponse.model_validate(portfolio)
 
 
-@router.post("/{portfolio_id}/restore", response_model=PortfolioResponse)
+@router.post(
+    "/{portfolio_id}/restore",
+    response_model=PortfolioResponse,
+    dependencies=[Depends(require_permission("portfolio.restore"))],
+)
 async def restore(
     portfolio_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -153,7 +179,11 @@ async def restore(
     return PortfolioResponse.model_validate(portfolio)
 
 
-@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{portfolio_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("portfolio.delete_permanent"))],
+)
 async def delete(
     portfolio_id: UUID,
     current_user: User = Depends(get_current_user),
