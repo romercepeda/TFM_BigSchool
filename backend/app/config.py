@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,18 @@ class FxDataConfig(BaseModel):
     frankfurter: FrankfurterConfig = FrankfurterConfig()
 
 
+class SecurityConfig(BaseModel):
+    """Spec D11 §11 — bootstrap administrator settings.
+
+    default_admin_email is a plain str, not EmailStr: pydantic's EmailStr rejects
+    the spec's own default (admin@portfolioia.local) as a reserved/non-routable
+    TLD. This is intentional — it's a bootstrap login identifier, not a mailbox.
+    """
+
+    default_admin_email: str = "admin@portfolioia.local"
+    default_admin_password_length: int = Field(default=24, ge=16, le=64)
+
+
 # ── Root config model ─────────────────────────────────────────────────────────
 
 
@@ -130,6 +142,7 @@ class AppConfig(BaseModel):
     i18n: I18nConfig = I18nConfig()
     market_data: MarketDataConfig = MarketDataConfig()
     fx_data: FxDataConfig = FxDataConfig()
+    security: SecurityConfig = SecurityConfig()
 
 
 # ── Loader ────────────────────────────────────────────────────────────────────

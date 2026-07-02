@@ -1,8 +1,10 @@
-"""Role assignment business logic — Spec D11 §4.4, §6.2.
+"""Role assignment and permission-resolution business logic — Spec D11 §4.4, §6.2, §8.
 
-Change 3 of Changeset C02 uses only the default-role lookup, the single-user
-assignment helper, and the startup backfill below. Role grant/revoke for the
-admin UI (assign/revoke any role, last-admin protection) is added in Change 8.
+Change 3 of Changeset C02 uses the default-role lookup, the single-user
+assignment helper, and the startup backfill. Change 5 and Change 6 use
+get_effective_permissions and get_role_codes (the FastAPI-facing wiring for
+Change 5 lives in app.roles.dependencies, which calls into this module).
+Role grant/revoke for the admin UI (last-admin protection) is added in Change 8.
 """
 
 import logging
@@ -11,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.role import Role, UserRole
+from app.db.models.role import Permission, Role, RolePermission, UserRole
 from app.db.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -82,3 +84,34 @@ async def backfill_default_roles(db: AsyncSession) -> int:
         logger.info("Backfilled default role for %d existing user(s).", len(user_ids))
 
     return len(user_ids)
+
+
+async def get_effective_permissions(db: AsyncSession, user_id: UUID) -> set[str]:
+    """Return the flat union of permission codes across all of a user's active roles.
+
+    Only active permissions/roles count — a role or permission removed from the
+    catalog (D11 §3) stops granting access even if a stale UserRole row remains.
+    """
+    result = await db.execute(
+        select(Permission.code)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .join(UserRole, UserRole.role_id == RolePermission.role_id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(
+            UserRole.user_id == user_id,
+            Permission.active.is_(True),
+            Role.active.is_(True),
+        )
+        .distinct()
+    )
+    return {row[0] for row in result.all()}
+
+
+async def get_role_codes(db: AsyncSession, user_id: UUID) -> list[str]:
+    """Return the codes of every active role the user holds (D11 §8.4 login payload)."""
+    result = await db.execute(
+        select(Role.code)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .where(UserRole.user_id == user_id, Role.active.is_(True))
+    )
+    return [row[0] for row in result.all()]

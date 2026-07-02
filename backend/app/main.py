@@ -32,6 +32,7 @@ from app.api.health import router as health_router
 from app.api.holdings import router as holdings_router
 from app.api.indicators import router as indicators_router
 from app.api.market_data import router as market_data_router
+from app.api.me import router as me_router
 from app.api.portfolios import router as portfolios_router
 from app.api.price_levels import router as price_levels_router
 from app.config import get_config
@@ -95,3 +96,4 @@ app.include_router(price_levels_router)
 app.include_router(market_data_router)
 app.include_router(indicators_router)
 app.include_router(ai_reports_router)
+app.include_router(me_router)

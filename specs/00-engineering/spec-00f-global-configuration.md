@@ -155,6 +155,15 @@ Configuration for the external foreign exchange data integration. See Spec D09 f
 | `fx_data.provider` | enum (`frankfurter`) | `frankfurter` | The active FX provider. Only `frankfurter` is supported in v1; the key exists for forward compatibility. |
 | `fx_data.frankfurter.base_url` | string | `https://api.frankfurter.dev/v2` | Base URL for Frankfurter. |
 
+### 7.10 Security (`security`)
+
+Added by Spec D11 (Roles & Permissions) / Changeset C02 §6. See Spec D11 §11 for full context.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `security.default_admin_email` | string (email format) | `admin@portfolioia.local` | The email of the administrator user auto-created on first startup if no administrator exists. |
+| `security.default_admin_password_length` | integer, 16–64 | `24` | Length in characters of the auto-generated initial password. |
+
 ---
 
 ## 8. Example `config.yaml`

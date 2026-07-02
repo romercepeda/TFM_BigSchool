@@ -60,3 +60,7 @@ fx_data:
   provider: frankfurter
   frankfurter:
     base_url: https://api.frankfurter.dev/v2
+
+security:
+  default_admin_email: admin@portfolioia.local
+  default_admin_password_length: 24

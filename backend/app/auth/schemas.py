@@ -31,11 +31,18 @@ class GuestLoginRequest(BaseModel):
 
 
 class LoginUserOut(BaseModel):
-    """User fields returned in the login response body (C01 §4)."""
+    """User fields returned in the login response body (C01 §4, extended by D11 §8.4).
+
+    roles/permissions are not ORM attributes on User — the caller must build this
+    with model_construct() or pass them explicitly, not User-backed model_validate().
+    """
     id: UUID
     email: str
     display_name: str | None
     preferred_language: str
+    must_change_password: bool
+    roles: list[str]
+    permissions: list[str]
 
     model_config = {"from_attributes": True}
 

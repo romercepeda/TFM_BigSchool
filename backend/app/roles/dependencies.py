@@ -10,38 +10,14 @@ referencing a code that exists in the loaded catalog (D11 §8.3) — except the 
 explicit allowlist of pre-authentication / infrastructure routes in app.roles.validation.
 """
 
-from uuid import UUID
-
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
-from app.db.models.role import Permission, Role, RolePermission, UserRole
 from app.db.models.user import User
 from app.db.session import get_db
+from app.roles.service import get_effective_permissions
 from app.services.i18n_service import translate
-
-
-async def get_effective_permissions(db: AsyncSession, user_id: UUID) -> set[str]:
-    """Return the flat union of permission codes across all of a user's active roles.
-
-    Only active permissions/roles count — a role or permission removed from the
-    catalog (D11 §3) stops granting access even if a stale UserRole row remains.
-    """
-    result = await db.execute(
-        select(Permission.code)
-        .join(RolePermission, RolePermission.permission_id == Permission.id)
-        .join(UserRole, UserRole.role_id == RolePermission.role_id)
-        .join(Role, Role.id == UserRole.role_id)
-        .where(
-            UserRole.user_id == user_id,
-            Permission.active.is_(True),
-            Role.active.is_(True),
-        )
-        .distinct()
-    )
-    return {row[0] for row in result.all()}
 
 
 class RequirePermission:

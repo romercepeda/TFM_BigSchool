@@ -45,6 +45,7 @@ from app.db.models.portfolio import Portfolio
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
+from app.roles.service import get_effective_permissions, get_role_codes
 from app.services.user_service import (
     authenticate_with_password,
     create_user,
@@ -89,6 +90,25 @@ def _set_session_cookies(response: Response, token: str, csrf_token: str) -> Non
     )
 
 
+async def _build_user_out(db: AsyncSession, user: User) -> LoginUserOut:
+    """Build the user payload shared by login/register/guest and /me/refresh-permissions.
+
+    roles/permissions are the flat, current union across the user's active roles
+    (D11 §8.4) — not ORM attributes, so they are fetched and attached explicitly.
+    """
+    roles = await get_role_codes(db, user.id)
+    permissions = await get_effective_permissions(db, user.id)
+    return LoginUserOut(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        preferred_language=user.preferred_language,
+        must_change_password=user.must_change_password,
+        roles=roles,
+        permissions=sorted(permissions),
+    )
+
+
 async def _build_login_response(
     response: Response,
     user: User,
@@ -101,7 +121,7 @@ async def _build_login_response(
     cfg = get_config()
     portfolios_count = await _count_active_portfolios(db, user.id)
     return LoginResponse(
-        user=LoginUserOut.model_validate(user),
+        user=await _build_user_out(db, user),
         session=LoginSessionOut(
             portfolios_count=portfolios_count,
             notifications_poll_interval_seconds=cfg.ai.notifications.poll_interval_seconds,
