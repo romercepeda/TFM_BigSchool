@@ -12,7 +12,7 @@ from app.db.models.lot import Lot
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
 from app.db.models.portfolio import Portfolio
 from app.db.models.price_level import PriceLevel, PriceLevelHistoryEntry
-from app.db.models.role import Permission, Role, RolePermission
+from app.db.models.role import Permission, Role, RolePermission, UserRole
 from app.db.models.sale import Sale, SaleLotConsumption
 from app.db.models.user import User
 
@@ -23,5 +23,5 @@ __all__ = [
     "AssetPriceHistory", "FxRateHistory",
     "Indicator", "IndicatorSnapshot",
     "UploadedFile", "AnalysisJob", "AnalysisReport",
-    "Permission", "Role", "RolePermission",
+    "Permission", "Role", "RolePermission", "UserRole",
 ]

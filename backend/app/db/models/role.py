@@ -1,11 +1,11 @@
 """Roles & permissions ORM models — Spec D11 §4.
 
-Three tables:
+Four tables:
     Permission        — seed-file-driven catalog of fine-grained authorization atoms.
     Role               — named bundle of permissions (e.g. administrator, investor).
     RolePermission     — join table, refreshed to match the seed file on every startup.
-
-UserRole (the user-to-role link) is added in a later change (D11 §4.4 / Changeset C02 §3).
+    UserRole           — the user-to-role link. A user's effective permissions are the
+                          union of all RolePermission rows reachable via their UserRole rows.
 """
 
 from datetime import datetime
@@ -74,3 +74,27 @@ class RolePermission(Base):
 
     def __repr__(self) -> str:
         return f"<RolePermission role_id={self.role_id} permission_id={self.permission_id}>"
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    role_id: Mapped[UUID] = mapped_column(
+        ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    # Null when the assignment was automatic (e.g. the default role on registration).
+    # Set to the acting administrator's id for manual grants (D11 §7.3).
+    assigned_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    role: Mapped["Role"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<UserRole user_id={self.user_id} role_id={self.role_id}>"

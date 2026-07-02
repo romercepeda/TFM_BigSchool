@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.password import hash_password, verify_password
 from app.db.models.user import User
+from app.roles.service import grant_default_role
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -27,6 +28,7 @@ async def create_user(
     display_name: str | None = None,
     preferred_language: str = "es",
     must_change_password: bool = False,
+    assign_default_role: bool = True,
 ) -> User:
     """Persist a new User. Caller must commit the session afterwards.
 
@@ -41,6 +43,10 @@ async def create_user(
         must_change_password: False for every normal registration flow (Spec D11 §6.4).
                   Only the bootstrap administrator (D11 §6.1) and admin-issued password
                   resets (D11 §7.2) set this to True — both pass it explicitly.
+        assign_default_role: True for every normal registration flow — grants the
+                  is_default: true role from the catalog (Investor in v1, D11 §6.2).
+                  The bootstrap administrator (D11 §6.1) is the only exception: it is
+                  assigned the Administrator role directly and passes False here.
 
     Returns:
         The newly created User (not yet committed to the database).
@@ -58,6 +64,10 @@ async def create_user(
     )
     db.add(user)
     await db.flush()  # writes to DB within the transaction, assigns user.id
+
+    if assign_default_role:
+        await grant_default_role(db, user.id)
+
     return user
 
 

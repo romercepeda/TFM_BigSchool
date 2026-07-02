@@ -50,11 +50,14 @@ logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup: seed the indicator and roles/permissions catalogs. Shutdown: nothing to clean up."""
     from app.roles.seed_loader import seed_roles_catalog
+    from app.roles.service import backfill_default_roles
     from app.services.indicator_service import seed_indicators
 
     async with AsyncSessionLocal() as db:
         await seed_indicators(db)
         await seed_roles_catalog(db)
+        # Existing users predate D11 — give them the default role once (C02 §3).
+        await backfill_default_roles(db)
 
     yield
 
