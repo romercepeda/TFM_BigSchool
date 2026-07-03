@@ -48,6 +48,8 @@ This spec does **not** cover **secrets** (API keys, OAuth client secrets, JWT si
 - There is **no admin UI** in v1 to edit configuration values through the web application. This is out of scope per Section 9.
 - This implies an operational consequence: any configuration change has the same friction as a code change (commit + deploy). This is acceptable in v1 and helps reinforce that configuration changes are deliberate, reviewed acts.
 
+**Update (Spec D12 / Changeset C04).** A narrow, deliberate exception: `market_data.providers` and `fx_data.providers` are now editable at runtime by an administrator via the Settings screen's "Data providers" section (Spec D12 §7), without a restart. A `system_settings` key-value table overlays just these two keys — if a row exists, it wins over `config.yaml`'s value; every other key remains file-only, exactly as described above. This exists because reordering/removing providers is expected to be a routine operational action (e.g. reacting to a provider's free-tier limits), unlike the rest of this file's tunables.
+
 ---
 
 ## 6. Naming and reference convention
@@ -140,11 +142,16 @@ Configuration for the external market data integration. See Spec D09 for full co
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `market_data.provider` | enum (`twelve_data` \| `finnhub`) | `twelve_data` | The active market data provider. |
+| `market_data.provider` | enum (`twelve_data` \| `finnhub`) | `twelve_data` | **Deprecated by Spec D12 §9 / Changeset C04 §7** — replaced by `market_data.providers` below. Still readable for one release via a compatibility shim; removed in the next major release. |
+| `market_data.providers` | list of provider codes | `["twelve_data", "eodhd", "finnhub"]` | **Added by Spec D12 §9 / Changeset C04.** Ordered cascade of market data providers — first tried first, next tried only for assets the previous one couldn't resolve. Editable from Settings by administrators (`system.view_config`); a `system_settings` DB row overrides this file's value when one has been saved (Changeset C04 §5 — the one narrow exception to config.yaml being the sole config source, Spec 00f §5). |
+| `market_data.failure_report_retention_days` | integer ≥ 1 | `30` | **Added by Spec D12 §9.** How many days of `CascadeFailureReport` rows to retain before a cleanup pass hard-deletes them. |
 | `market_data.twelve_data.base_url` | string | `https://api.twelvedata.com` | Base URL for the Twelve Data API. Configurable for testing/mocking. |
 | `market_data.twelve_data.daily_call_budget` | integer | `800` | The known daily rate-limit ceiling on Twelve Data's free tier. Used by the prioritization logic to know when to stop gracefully. |
 | `market_data.finnhub.base_url` | string | `https://finnhub.io/api/v1` | Base URL for the Finnhub API. |
 | `market_data.finnhub.per_minute_call_budget` | integer | `60` | The known per-minute rate-limit ceiling for Finnhub's free tier. |
+| `market_data.eodhd.base_url` | string | `https://eodhd.com/api` | **Added by Spec D12 §9.** Base URL for the EODHD API. |
+| `market_data.eodhd.daily_call_budget` | integer | `20` | **Added by Spec D12 §9.** The known daily rate-limit ceiling on EODHD's free tier — tight enough that the adapter tracks it proactively (Spec D12 §4). |
+| `market_data.eodhd.max_lookback_days` | integer | `365` | **Added by Spec D12 §9.** EODHD free tier historical depth. The cascade layer skips this provider (without spending a call) for any request needing more history than this (Spec D12 §5.3). |
 
 ### 7.9 FX data (`fx_data`)
 
@@ -152,7 +159,8 @@ Configuration for the external foreign exchange data integration. See Spec D09 f
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `fx_data.provider` | enum (`frankfurter`) | `frankfurter` | The active FX provider. Only `frankfurter` is supported in v1; the key exists for forward compatibility. |
+| `fx_data.provider` | enum (`frankfurter`) | `frankfurter` | **Deprecated by Spec D12 §9 / Changeset C04 §7** — replaced by `fx_data.providers` below. Same one-release compatibility shim as `market_data.provider`. |
+| `fx_data.providers` | list of provider codes | `["frankfurter"]` | **Added by Spec D12 §9.** Ordered cascade of FX providers — architecturally identical mechanism to `market_data.providers`, though v1 ships only one adapter (Frankfurter). |
 | `fx_data.frankfurter.base_url` | string | `https://api.frankfurter.dev/v2` | Base URL for Frankfurter. |
 
 ### 7.10 Security (`security`)

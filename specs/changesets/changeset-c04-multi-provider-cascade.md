@@ -1,6 +1,6 @@
 # Changeset C04 — Implement Multi-Provider Cascade & Add EODHD (D12)
 
-**Status:** Pending implementation
+**Status:** Implemented
 **Type:** Cross-spec changeset
 **Triggered by:** Spec D12 (Multi-Provider Cascade for Market & FX Data)
 **Affects implementations of:** Spec D09, Spec D05, Spec D07, Spec D10, Spec D11, Spec 00e, Spec 00f
@@ -284,3 +284,21 @@ After all ten are applied and verified end-to-end, this changeset is marked `Imp
 
 - Any of the items listed in D12 §11 (persistent memory across runs, editable API keys, multi-provider search, per-asset override, price reconciliation, historical rewrite on reorder, N-day provider-failure escalation).
 - Encrypted-at-rest storage of secrets — remains firmly in scope of a hypothetical future spec if the project ever needs it.
+
+---
+
+## 13. Implementation notes (added when marked Implemented)
+
+This changeset was written against an idealized file layout that predates it; the actual codebase differs in several places. None of these are spec changes — they are where the *file paths and mechanism* diverged from what §1–§9 assumed, while the *behavior* described still holds.
+
+**Path differences.** The codebase uses `backend/app/services/market_data/` (not `backend/app/market_data/`), `backend/tests/unit/` (not `backend/tests/market_data/`), and there is no `backend/app/tasks/daily_job.py` — the daily job is `MarketDataService.run_daily_update()`, triggered on-demand via `POST /market-data/daily-update`, not a Celery beat schedule. No new scheduling infrastructure was added; the cascade and its persistence hang off this existing on-demand entry point.
+
+**Step 6 (notification delivery) was descoped.** The header notification system this step assumed to extend doesn't exist as a generic mechanism in this codebase — today's header notifications are a poll of AI-job status only (`GET /ai-reports/jobs`), not a persisted, extensible notification store. Building that generic infrastructure was judged out of proportion to this changeset. Instead: `CascadeFailureReport` persistence (§3) and the admin cross-user view (§6/§7.4, delivered as Step 9) shipped as specified; the per-user header notification/modal (§4) did not. Failures are currently only visible to administrators via Settings → Data providers → "View cascade failure report history," not surfaced to the affected asset's owner directly. This is the one piece of D12 §6.2 not delivered.
+
+**The daily job's lookback window needed splitting for EODHD to ever actually fire.** D12 §5.3 already anticipated that EODHD (365-day cap) can't serve a full bootstrap fetch, but the existing daily job requested a flat 400 days for *every* asset, bootstrap or not — meaning EODHD would be skipped on every single run and could never rescue a new asset, discovered via a live test with a real European ticker (see below). Fixed by splitting the cascade's requests into a ~350-day bootstrap batch (assets with no stored history yet) and an incremental batch windowed to the gap since the stalest already-tracked asset's last stored date, merged into one report via a new `merge_cascade_results()` helper. This was a necessary correctness fix, not scope creep — without it, "EODHD as a fallback" would have been true only in the config, never in practice.
+
+**Real-world discrepancy found during live testing: Twelve Data's free tier does not actually cover all of BME.** Testing against a real Telefónica (TEF) holding produced `"This symbol is available starting with the Pro or Venture plan"` directly from Twelve Data's API — contradicting D09 §3.1 and D12 §3's own stated assumption that Twelve Data's free tier includes European exchanges. This is exactly the kind of gap Changeset C03 documented for Finnhub; the same caveat now applies, in part, to Twelve Data. EODHD resolving TEF correctly (once the lookback-window fix above was in place) is the concrete proof that this changeset's premise — EODHD as a genuine European-coverage fallback, not just a paper one — holds.
+
+**`system_settings` (Step 8) is a new architectural pattern, not previously used in this codebase**: a DB table overlaying two specific `config.yaml` keys at runtime, cached in-process and invalidated on write, rather than queried per-request — see `services/settings_overlay.py`'s module docstring for the reasoning (the market data service builds its provider adapters in a synchronous, DB-independent singleton; threading a session through that call path would have been a bigger change than this narrow exception warranted).
+
+**Verification.** Every step from EODHD adapter through the admin failure-report view was verified against the real dev database and real provider APIs (not mocks) via Docker, `scripts/db.ps1`, and — for the two frontend pieces (Settings' Data providers section, the admin failure-report screen) — a real headless-browser session (disposable test accounts, created and deleted per session) exercising drag-and-drop reorder, save, reset, filtering, and the admin-only visibility gate in both directions. Final state: 166 backend tests passing, `tsc --noEmit` clean, `ruff check` clean on every new/modified file (pre-existing lint debt elsewhere in the codebase was left alone, not touched).
