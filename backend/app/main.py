@@ -36,7 +36,7 @@ from app.api.market_data import router as market_data_router
 from app.api.me import router as me_router
 from app.api.portfolios import router as portfolios_router
 from app.api.price_levels import router as price_levels_router
-from app.config import get_config
+from app.config import get_config, validate_provider_api_keys
 from app.db.session import AsyncSessionLocal
 
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 # The application refuses to start if the file is missing or invalid (Spec 00f §4).
 _config = get_config()
 logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
+
+# Fail fast if a cascade provider (market_data.providers) has no API key (Spec D12 §10).
+validate_provider_api_keys(_config)
 
 
 @asynccontextmanager

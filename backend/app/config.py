@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -252,3 +253,39 @@ def get_config() -> AppConfig:
     if _config is None:
         _config = load_config()
     return _config
+
+
+# ── Startup validation: cascade providers must have their API key set ────────
+# Spec D12 §10 / Changeset C04 §8. Frankfurter (the only fx_data provider)
+# needs no key (Spec D09 §3.2) and is not in this table.
+
+_MARKET_DATA_PROVIDER_ENV_VARS: dict[str, str] = {
+    "twelve_data": "MARKET_DATA_TWELVE_DATA_API_KEY",
+    "eodhd": "MARKET_DATA_EODHD_API_KEY",
+    "finnhub": "MARKET_DATA_FINNHUB_API_KEY",
+}
+
+
+def validate_provider_api_keys(cfg: AppConfig) -> None:
+    """Fail fast if a provider in `market_data.providers` has no API key set.
+
+    Raises SystemExit(1), matching load_config()'s fail-fast style, rather
+    than letting the gap surface later as a runtime ProviderError on the
+    first daily job run.
+    """
+    missing = [
+        (provider, env_var)
+        for provider in cfg.market_data.providers
+        if (env_var := _MARKET_DATA_PROVIDER_ENV_VARS.get(provider)) and not os.environ.get(env_var)
+    ]
+    if not missing:
+        return
+
+    for provider, env_var in missing:
+        logger.critical(
+            "Provider '%s' is configured in market_data.providers but its API "
+            "key is missing; either set %s in .env or remove '%s' from the "
+            "cascade in Settings.",
+            provider, env_var, provider,
+        )
+    raise SystemExit(1)

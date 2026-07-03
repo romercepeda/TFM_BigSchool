@@ -58,6 +58,8 @@ Two adapters are supported in v1: Twelve Data and Finnhub. The active provider i
 
 At minimum, the API key for the **currently active** provider must be set. The other may remain unset.
 
+**Update (Spec D12 / Changeset C04).** The single active-provider model above is superseded by an ordered cascade (`market_data.providers`), and a third adapter, **EODHD**, is added specifically for its confirmed European market coverage: `MARKET_DATA_EODHD_API_KEY` — obtained free from `https://eodhd.com`. Free tier: 20 calls/day, 1-year historical depth. Under the cascade, the rule generalizes: an API key must be set for **every** provider present in `market_data.providers`, not just one "active" provider. Startup fails fast if any listed provider is missing its key (Spec D12 §10).
+
 ### 3.2 FX data provider (foreign exchange rates)
 
 The FX provider in v1 is **Frankfurter** (`https://frankfurter.dev`), which sources its data from the European Central Bank. It requires no API key, no signup, and has no usage limits. No environment variable is required.
@@ -107,6 +109,7 @@ Before the system starts for the first time, a `.env` file (excluded from versio
 | `MICROSOFT_OAUTH_CLIENT_SECRET` | Microsoft login | Section 2.2 of this spec |
 | `MARKET_DATA_TWELVE_DATA_API_KEY` | Twelve Data market data provider | Section 3.1 of this spec |
 | `MARKET_DATA_FINNHUB_API_KEY` | Finnhub market data provider | Section 3.1 of this spec |
+| `MARKET_DATA_EODHD_API_KEY` | EODHD market data provider (Spec D12 §10) | `https://eodhd.com` — free tier: 20 calls/day |
 | `AI_ANTHROPIC_API_KEY` | Anthropic Claude provider | Section 4 of this spec |
 | `AI_OPENAI_API_KEY` | OpenAI GPT provider | Section 4 of this spec |
 | `AI_GEMINI_API_KEY` | Google Gemini provider | Section 4 of this spec |
