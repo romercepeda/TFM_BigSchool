@@ -15,6 +15,7 @@ from app.db.models.portfolio import Portfolio
 from app.db.models.price_level import PriceLevel, PriceLevelHistoryEntry
 from app.db.models.role import Permission, Role, RolePermission, UserRole
 from app.db.models.sale import Sale, SaleLotConsumption
+from app.db.models.system_setting import SystemSetting
 from app.db.models.user import User
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "UploadedFile", "AnalysisJob", "AnalysisReport",
     "Permission", "Role", "RolePermission", "UserRole",
     "CascadeFailureReport", "CascadeFailureEntry",
+    "SystemSetting",
 ]

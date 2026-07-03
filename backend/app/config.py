@@ -262,25 +262,38 @@ def get_config() -> AppConfig:
 # Spec D12 §10 / Changeset C04 §8. Frankfurter (the only fx_data provider)
 # needs no key (Spec D09 §3.2) and is not in this table.
 
-_MARKET_DATA_PROVIDER_ENV_VARS: dict[str, str] = {
+# Public: also consulted by the Settings API (Changeset C04 §5) to display
+# per-provider key status and to validate an admin's edit before saving it.
+MARKET_DATA_PROVIDER_ENV_VARS: dict[str, str] = {
     "twelve_data": "MARKET_DATA_TWELVE_DATA_API_KEY",
     "eodhd": "MARKET_DATA_EODHD_API_KEY",
     "finnhub": "MARKET_DATA_FINNHUB_API_KEY",
 }
 
 
-def validate_provider_api_keys(cfg: AppConfig) -> None:
-    """Fail fast if a provider in `market_data.providers` has no API key set.
+def find_missing_provider_api_keys(providers: list[str]) -> list[tuple[str, str]]:
+    """Return [(provider, missing_env_var), ...] for providers with no key set."""
+    return [
+        (provider, env_var)
+        for provider in providers
+        if (env_var := MARKET_DATA_PROVIDER_ENV_VARS.get(provider)) and not os.environ.get(env_var)
+    ]
+
+
+def validate_provider_api_keys(cfg: AppConfig, providers: list[str] | None = None) -> None:
+    """Fail fast if a provider has no API key set.
+
+    `providers` defaults to `cfg.market_data.providers`; callers that have
+    an effective list overlaid with a DB override (Changeset C04 §5) should
+    pass it explicitly so the check reflects what will actually run.
 
     Raises SystemExit(1), matching load_config()'s fail-fast style, rather
     than letting the gap surface later as a runtime ProviderError on the
     first daily job run.
     """
-    missing = [
-        (provider, env_var)
-        for provider in cfg.market_data.providers
-        if (env_var := _MARKET_DATA_PROVIDER_ENV_VARS.get(provider)) and not os.environ.get(env_var)
-    ]
+    missing = find_missing_provider_api_keys(
+        providers if providers is not None else cfg.market_data.providers
+    )
     if not missing:
         return
 

@@ -36,6 +36,7 @@ from app.api.market_data import router as market_data_router
 from app.api.me import router as me_router
 from app.api.portfolios import router as portfolios_router
 from app.api.price_levels import router as price_levels_router
+from app.api.settings import router as settings_router
 from app.config import get_config, validate_provider_api_keys
 from app.db.session import AsyncSessionLocal
 
@@ -47,13 +48,11 @@ logger = logging.getLogger(__name__)
 _config = get_config()
 logger.info("Configuration loaded — AI provider: %s", _config.ai.provider)
 
-# Fail fast if a cascade provider (market_data.providers) has no API key (Spec D12 §10).
-validate_provider_api_keys(_config)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup: seed catalogs, backfill roles, validate coverage, bootstrap admin.
+    """Startup: load settings overlay, validate provider keys, seed catalogs,
+    backfill roles, validate coverage, bootstrap admin.
 
     Shutdown: nothing to clean up.
     """
@@ -61,9 +60,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.roles.seed_loader import seed_roles_catalog
     from app.roles.service import backfill_default_roles
     from app.roles.validation import validate_permission_coverage
+    from app.services import settings_overlay
     from app.services.indicator_service import seed_indicators
 
     async with AsyncSessionLocal() as db:
+        # Load the system_settings DB overlay (Changeset C04 §5) before the
+        # API key check below, so it validates the *effective* provider list
+        # (config.yaml overridden by any saved admin edit), not just the file.
+        await settings_overlay.load_overrides(db)
+        effective_market_data_providers = settings_overlay.get_market_data_providers(
+            _config.market_data.providers
+        )
+        # Fail fast if a cascade provider has no API key (Spec D12 §10).
+        validate_provider_api_keys(_config, effective_market_data_providers)
+
         await seed_indicators(db)
         await seed_roles_catalog(db)
         # Existing users predate D11 — give them the default role once (C02 §3).
@@ -110,3 +120,4 @@ app.include_router(indicators_router)
 app.include_router(ai_reports_router)
 app.include_router(me_router)
 app.include_router(admin_router)
+app.include_router(settings_router)

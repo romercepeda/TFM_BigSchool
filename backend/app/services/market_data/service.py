@@ -72,6 +72,34 @@ def _provider_symbol(ticker: str, market: str | None, provider: str = "finnhub")
     return ticker
 
 
+_NO_PROVIDER_MESSAGE = "No market data provider is configured (market_data.providers is empty)."
+
+
+class _NoProviderConfigured(MarketDataProvider):
+    """Placeholder used when an admin has emptied market_data.providers (D12 §7.2).
+
+    Fails clearly on every call rather than crashing the service with an
+    IndexError when there is no "primary" provider to build.
+    """
+
+    async def search_assets(self, query: str) -> list[AssetSearchResult]:
+        raise ProviderError(
+            error_kind="api_error", retryable=False, upstream_message=_NO_PROVIDER_MESSAGE
+        )
+
+    async def get_current_price(self, ticker: str) -> PricePoint:
+        raise ProviderError(
+            error_kind="api_error", retryable=False, upstream_message=_NO_PROVIDER_MESSAGE
+        )
+
+    async def get_historical_series(
+        self, ticker: str, start_date: date, end_date: date
+    ) -> list[PricePoint]:
+        raise ProviderError(
+            error_kind="api_error", retryable=False, upstream_message=_NO_PROVIDER_MESSAGE
+        )
+
+
 class MarketDataService:
     def __init__(
         self,
@@ -487,6 +515,17 @@ def get_market_data_service() -> MarketDataService:
     return _service
 
 
+def reset_market_data_service() -> None:
+    """Drop the cached instance so the next call rebuilds it.
+
+    Called after a Settings-driven change to the provider lists (Changeset
+    C04 §5) so the new order is used immediately (D12 §7.2), not just after
+    a restart.
+    """
+    global _service
+    _service = None
+
+
 def _build_market_provider_adapter(name: str, cfg: AppConfig) -> MarketDataProvider:
     """Instantiate one market data adapter by its config-key name.
 
@@ -522,17 +561,27 @@ def _build_market_provider_adapter(name: str, cfg: AppConfig) -> MarketDataProvi
 
 
 def _build_service() -> MarketDataService:
+    from app.services import settings_overlay
     from app.services.market_data.providers.frankfurter import FrankfurterProvider
 
     cfg = get_config()
 
     fx_provider = FrankfurterProvider(base_url=cfg.fx_data.frankfurter.base_url)
 
+    # Settings-editable lists (Changeset C04 §5) — a DB override, if an
+    # admin has saved one, wins over config.yaml's value.
+    market_data_providers = settings_overlay.get_market_data_providers(cfg.market_data.providers)
+    fx_data_providers = settings_overlay.get_fx_data_providers(cfg.fx_data.providers)
+
     # The single "primary" provider — used by get_current_price/search_assets
     # regardless of USE_CASCADE (D12 §5.5: search never cascades; on-demand
     # current-price lookups aren't in D12's cascade scope either).
-    primary_name = cfg.market_data.providers[0]
-    market_provider = _build_market_provider_adapter(primary_name, cfg)
+    if market_data_providers:
+        primary_name = market_data_providers[0]
+        market_provider: MarketDataProvider = _build_market_provider_adapter(primary_name, cfg)
+    else:
+        primary_name = ""
+        market_provider = _NoProviderConfigured()
 
     market_cascade: MarketDataCascade | None = None
     fx_cascade: FxDataCascade | None = None
@@ -540,12 +589,12 @@ def _build_service() -> MarketDataService:
         market_cascade = MarketDataCascade(
             [
                 (name, _build_market_provider_adapter(name, cfg))
-                for name in cfg.market_data.providers
+                for name in market_data_providers
             ]
         )
         # v1 has a single FX provider (D12 §5.2); wrapped in the cascade
         # anyway so a second one is a config change, not a code change.
-        fx_cascade = FxDataCascade([(name, fx_provider) for name in cfg.fx_data.providers])
+        fx_cascade = FxDataCascade([(name, fx_provider) for name in fx_data_providers])
 
     return MarketDataService(
         market_provider=market_provider,
