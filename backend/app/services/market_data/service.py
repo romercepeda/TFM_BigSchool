@@ -28,6 +28,31 @@ logger = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 400  # MA200 needs 200 trading days ≈ 285 calendar days; 400 gives safe margin
 
+# US exchanges where no market prefix/suffix is needed.
+_US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC", "CBOE", "NMFQS"}
+
+
+def _provider_symbol(ticker: str, market: str | None, provider: str = "finnhub") -> str:
+    """Build the exchange-qualified symbol for the active market data provider.
+
+    Twelve Data — non-US format: TICKER:MARKET (e.g. TEF:BME).
+
+    Finnhub has no documented MARKET:TICKER or TICKER:MARKET convention for
+    equities — its own /search endpoint returns non-US symbols already fully
+    qualified with a dot suffix (e.g. TEF.MC), which the ':'/'.' passthrough
+    below already handles. A bare ticker + separate market code (e.g. from a
+    legacy asset row) cannot be reliably turned into that suffix, so it is
+    passed through unqualified rather than guessing a wrong symbol.
+
+    If the ticker already contains ':' or '.' it is assumed to be fully-qualified
+    and is returned as-is regardless of provider.
+    """
+    if ':' in ticker or '.' in ticker:
+        return ticker
+    if market and market.upper() not in _US_EXCHANGES and provider == "twelve_data":
+        return f"{ticker}:{market}"
+    return ticker
+
 
 class MarketDataService:
     def __init__(
@@ -47,8 +72,8 @@ class MarketDataService:
 
     # ── Current price — on-demand fetch ───────────────────────────────────────
 
-    async def get_current_price(self, ticker: str) -> PricePoint:
-        return await self._market.get_current_price(ticker)
+    async def get_current_price(self, ticker: str, market: str | None = None) -> PricePoint:
+        return await self._market.get_current_price(_provider_symbol(ticker, market, self._provider_name))
 
     # ── FX pair support check ──────────────────────────────────────────────────
 
@@ -157,7 +182,7 @@ class MarketDataService:
         for asset in assets:
             try:
                 points = await self._market.get_historical_series(
-                    asset.ticker, start_date, today
+                    _provider_symbol(asset.ticker, asset.market, self._provider_name), start_date, today
                 )
             except ProviderError as exc:
                 if exc.error_kind == "rate_limited":

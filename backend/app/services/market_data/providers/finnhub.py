@@ -56,16 +56,23 @@ class FinnhubProvider(MarketDataProvider):
         if "error" in body:
             raise ProviderError(error_kind="api_error", retryable=False, upstream_message=body["error"])
 
-        return [
-            AssetSearchResult(
-                ticker=item.get("displaySymbol", item.get("symbol", "")).upper(),
-                name=item.get("description", item.get("symbol", "")),
+        results = []
+        for item in body.get("result", []):
+            symbol: str = item.get("displaySymbol", item.get("symbol", "")).upper()
+            # Finnhub returns "EXCHANGE:TICKER" for non-US symbols.
+            # Split so that ticker and market are stored separately.
+            if ":" in symbol:
+                market_code, ticker = symbol.split(":", 1)
+            else:
+                market_code, ticker = None, symbol
+            results.append(AssetSearchResult(
+                ticker=ticker,
+                name=item.get("description", symbol),
                 asset_type=_map_type(item.get("type", "stock")),
                 quote_currency="USD",
-                market=None,
-            )
-            for item in body.get("result", [])
-        ]
+                market=market_code,
+            ))
+        return results
 
     async def get_current_price(self, ticker: str) -> PricePoint:
         async with httpx.AsyncClient() as client:

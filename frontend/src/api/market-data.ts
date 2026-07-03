@@ -18,8 +18,10 @@ export interface PricePoint {
 export const searchAssets   = (q: string) =>
   get<AssetSearchResult[]>(`/market-data/assets/search?q=${encodeURIComponent(q)}`);
 
-export const getAssetPrice  = (ticker: string) =>
-  get<PricePoint>(`/market-data/assets/${encodeURIComponent(ticker)}/price`);
+export const getAssetPrice  = (ticker: string, exchange?: string | null) => {
+  const qs = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
+  return get<PricePoint>(`/market-data/assets/${encodeURIComponent(ticker)}/price${qs}`);
+};
 
 export const runDailyUpdate = () =>
   post<DailyUpdateResult>('/market-data/daily-update');

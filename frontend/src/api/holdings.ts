@@ -1,5 +1,10 @@
 import { get, post, patch, del } from './client.js';
-import type { Holding, Lot, Sale } from './types.js';
+import type { Holding, HoldingAsset, Lot, Sale } from './types.js';
+
+export interface AssetPatchBody { ticker?: string; name?: string; market?: string; }
+
+export const updateAsset = (assetId: string, body: AssetPatchBody) =>
+  patch<HoldingAsset>(`/assets/${assetId}`, body);
 
 export interface AssetIn {
   ticker: string;

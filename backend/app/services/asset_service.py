@@ -4,6 +4,8 @@ Assets are shared reference data: one row per ticker across all users.
 Created on-demand when a user first adds that asset to any portfolio (Spec D03 §3.1).
 """
 
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +46,33 @@ async def get_or_create_asset(
     db.add(asset)
     await db.flush()
     return asset, True
+
+
+async def get_asset_by_id(db: AsyncSession, asset_id: UUID) -> Asset | None:
+    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    return result.scalar_one_or_none()
+
+
+async def update_asset(
+    db: AsyncSession,
+    asset_id: UUID,
+    *,
+    ticker: str | None = None,
+    name: str | None = None,
+    market: str | None = None,
+) -> Asset | None:
+    """Update ticker, name and/or market of an existing asset. Returns None if not found."""
+    asset = await get_asset_by_id(db, asset_id)
+    if asset is None:
+        return None
+    if ticker is not None:
+        asset.ticker = ticker.upper()
+    if name is not None:
+        asset.name = name
+    if market is not None:
+        asset.market = market.strip().upper() or None
+    await db.flush()
+    return asset
 
 
 async def search_assets(db: AsyncSession, query: str, limit: int = 20) -> list[Asset]:

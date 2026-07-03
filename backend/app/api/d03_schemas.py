@@ -26,6 +26,12 @@ class AssetIn(BaseModel):
     market: str | None = Field(default=None, max_length=64)
 
 
+class AssetPatch(BaseModel):
+    ticker: str | None = Field(default=None, min_length=1, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    market: str | None = Field(default=None, max_length=64)
+
+
 class AssetResponse(BaseModel):
     id: UUID
     ticker: str

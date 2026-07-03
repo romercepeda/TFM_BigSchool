@@ -51,13 +51,12 @@ class TwelveDataProvider(MarketDataProvider):
                     params=self._params(symbol=query, outputsize=20),
                     timeout=10,
                 )
+                body = resp.json()
+                if body.get("status") == "error":
+                    self._raise_on_error(body, "search_assets")
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise ProviderError(error_kind="network", retryable=True, upstream_message=str(exc))
-
-        body = resp.json()
-        if body.get("status") == "error":
-            self._raise_on_error(body, "search_assets")
 
         return [
             AssetSearchResult(
@@ -78,13 +77,12 @@ class TwelveDataProvider(MarketDataProvider):
                     params=self._params(symbol=ticker),
                     timeout=10,
                 )
+                body = resp.json()
+                if body.get("status") == "error" or "price" not in body:
+                    self._raise_on_error(body, f"get_current_price({ticker})")
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise ProviderError(error_kind="network", retryable=True, upstream_message=str(exc))
-
-        body = resp.json()
-        if body.get("status") == "error" or "price" not in body:
-            self._raise_on_error(body, f"get_current_price({ticker})")
 
         return PricePoint(
             as_of_date=date.today(),
@@ -114,13 +112,12 @@ class TwelveDataProvider(MarketDataProvider):
                     ),
                     timeout=30,
                 )
+                body = resp.json()
+                if body.get("status") == "error":
+                    self._raise_on_error(body, f"get_historical_series({ticker})")
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 raise ProviderError(error_kind="network", retryable=True, upstream_message=str(exc))
-
-        body = resp.json()
-        if body.get("status") == "error":
-            self._raise_on_error(body, f"get_historical_series({ticker})")
 
         points = [
             PricePoint(

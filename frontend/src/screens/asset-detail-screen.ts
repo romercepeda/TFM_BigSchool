@@ -2,7 +2,7 @@ import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
 import '../components/indicator-card.js';
 import { t } from '../i18n/i18n.js';
-import { getHolding, deleteHolding, addLot, updateLot, deleteLot } from '../api/holdings.js';
+import { getHolding, deleteHolding, addLot, updateLot, deleteLot, updateAsset } from '../api/holdings.js';
 import type { AddLotBody } from '../api/holdings.js';
 import { listIndicators, getAssetIndicators } from '../api/indicators.js';
 import { getAssetPrice } from '../api/market-data.js';
@@ -44,6 +44,11 @@ export class AssetDetailScreen extends BaseComponent {
   private _confirmDeleteLotId: string | null = null;
   private _deleteLotError = '';
 
+  // Edit asset
+  private _editingAsset = false;
+  private _editAssetForm = { ticker: '', name: '', market: '' };
+  private _editAssetError = '';
+
   set params(p: RouteParams) {
     this._portfolioId = p['portfolioId'] ?? '';
     this._holdingId   = p['holdingId'] ?? '';
@@ -77,7 +82,7 @@ export class AssetDetailScreen extends BaseComponent {
 
     const [indResult, priceResult] = await Promise.allSettled([
       Promise.all([listIndicators(), getAssetIndicators(assetId)]),
-      getAssetPrice(ticker),
+      getAssetPrice(ticker, this._holding.asset.market),
     ]);
 
     if (indResult.status === 'fulfilled') {
@@ -221,6 +226,41 @@ export class AssetDetailScreen extends BaseComponent {
     return formatDate(date + 'T12:00:00');
   }
 
+  private _renderEditAssetForm(a: { ticker: string; name: string; market: string | null }): string {
+    const f = this._editAssetForm;
+    const marketHint = a.market
+      ? t('screen.asset.edit.ticker_hint_market', { market: a.market, example: `${f.ticker || a.ticker}` })
+      : t('screen.asset.edit.ticker_hint_us');
+    return `
+      <div class="form-row" style="margin-bottom:var(--space-4);flex-direction:column;gap:var(--space-3);">
+        <div style="font-size:var(--font-size-xs);color:var(--color-text-muted);background:var(--color-bg-secondary);
+          border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3);line-height:1.6;">
+          ⚠ ${t('screen.asset.edit.warning')}
+          <br/><span style="color:var(--color-accent)">${marketHint}</span>
+        </div>
+        <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-field">
+            <label class="form-label">${t('screen.asset.edit.ticker')}</label>
+            <input class="form-input" id="edit-asset-ticker" value="${f.ticker || a.ticker}" style="width:100px;text-transform:uppercase;" />
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.asset.edit.market')}</label>
+            <input class="form-input" id="edit-asset-market" value="${f.market || a.market || ''}" style="width:90px;text-transform:uppercase;" />
+          </div>
+          <div class="form-field" style="flex:1;min-width:180px;">
+            <label class="form-label">${t('screen.asset.edit.name')}</label>
+            <input class="form-input" id="edit-asset-name" value="${f.name || a.name}" style="width:100%;" />
+          </div>
+          <div class="form-actions">
+            <button class="btn-xs-primary" id="save-asset-btn">${t('common.button.save')}</button>
+            <button class="btn-xs" id="cancel-edit-asset-btn">${t('common.button.cancel')}</button>
+          </div>
+        </div>
+        ${this._editAssetError ? `<div class="form-error">${this._editAssetError}</div>` : ''}
+      </div>
+    `;
+  }
+
   private _renderDetail(h: Holding): string {
     const a = h.asset;
     const agg = h.aggregates;
@@ -289,9 +329,12 @@ export class AssetDetailScreen extends BaseComponent {
         </div>
       </div>
 
+      ${this._editingAsset ? this._renderEditAssetForm(a) : ''}
+
       <div class="actions">
         <button class="btn-outline" id="levels-btn">${t('screen.holding.price_levels')}</button>
         <button class="btn-outline" id="analysis-btn">${t('screen.holding.analysis')}</button>
+        <button class="btn-outline" id="edit-asset-btn">${t('screen.asset.edit_asset')}</button>
         <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
         ${this._confirmDeleteHolding
           ? `<div class="confirm-row">
@@ -544,6 +587,30 @@ export class AssetDetailScreen extends BaseComponent {
         this._rerender();
       });
     });
+
+    // Edit asset
+    this.shadow.getElementById('edit-asset-btn')?.addEventListener('click', () => {
+      this._editingAsset = !this._editingAsset;
+      this._editAssetError = '';
+      this._editAssetForm = { ticker: '', name: '', market: '' };
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#edit-asset-ticker')?.focus();
+    });
+    this.shadow.getElementById('save-asset-btn')?.addEventListener('click', () => void this._doSaveAsset());
+    this.shadow.getElementById('cancel-edit-asset-btn')?.addEventListener('click', () => {
+      this._editingAsset = false;
+      this._editAssetError = '';
+      this._rerender();
+    });
+    ['edit-asset-ticker', 'edit-asset-market', 'edit-asset-name'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => {
+        this._editAssetForm = {
+          ticker: (this.shadow.getElementById('edit-asset-ticker') as HTMLInputElement)?.value ?? '',
+          market: (this.shadow.getElementById('edit-asset-market') as HTMLInputElement)?.value ?? '',
+          name:   (this.shadow.getElementById('edit-asset-name')   as HTMLInputElement)?.value ?? '',
+        };
+      });
+    });
   }
 
   private _bindFormInputs(
@@ -559,6 +626,28 @@ export class AssetDetailScreen extends BaseComponent {
     [dateId, qtyId, priceId, notesId].forEach((id) => {
       this.shadow.getElementById(id)?.addEventListener('input', () => setter(read()));
     });
+  }
+
+  private async _doSaveAsset(): Promise<void> {
+    if (!this._holding) return;
+    const ticker = (this.shadow.getElementById('edit-asset-ticker') as HTMLInputElement)?.value.trim().toUpperCase();
+    const market = (this.shadow.getElementById('edit-asset-market') as HTMLInputElement)?.value.trim().toUpperCase();
+    const name   = (this.shadow.getElementById('edit-asset-name')   as HTMLInputElement)?.value.trim();
+    if (!ticker || !name) {
+      this._editAssetError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    try {
+      const updated = await updateAsset(this._holding.asset.id, { ticker, name, market });
+      this._holding = { ...this._holding, asset: { ...this._holding.asset, ...updated } };
+      this._editingAsset = false;
+      this._editAssetError = '';
+      this._rerender();
+    } catch (ex) {
+      this._editAssetError = (ex as Error).message;
+      this._rerender();
+    }
   }
 
   private async _doDeleteHolding(): Promise<void> {
