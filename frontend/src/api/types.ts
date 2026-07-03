@@ -292,6 +292,24 @@ export interface DataProvidersResponse {
   api_keys: ProviderKeyStatus[];
 }
 
+// ── Cascade failure reports (Spec D12 §6/§7.4, Changeset C04 §6) ─────────────
+
+export interface CascadeFailureEntryOut {
+  id: string;
+  report_id: string;
+  run_completed_at: string;
+  asset_id: string;
+  ticker: string;
+  reason: string;
+  providers_tried: string[];
+  last_error_by_provider: Record<string, string>;
+}
+
+export interface CascadeFailureListResponse {
+  items: CascadeFailureEntryOut[];
+  total: number;
+}
+
 // ── API Error ─────────────────────────────────────────────────────────────────
 
 export interface ApiErrorDetail {

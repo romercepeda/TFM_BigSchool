@@ -253,6 +253,18 @@
   "settings.data_providers.empty_list": "No hay proveedores configurados — las actualizaciones de datos están deshabilitadas para esta lista.",
   "settings.data_providers.confirm_empty": "Esto deshabilitará todas las actualizaciones de datos de mercado hasta que añadas un proveedor de nuevo — ¿continuar?",
   "settings.data_providers.reset": "Restaurar valores por defecto",
+  "settings.data_providers.view_failure_reports": "Ver historial de fallos del cascade →",
+
+  "admin.cascade_failures.title": "Informe de fallos del cascade",
+  "admin.cascade_failures.from_date": "Desde",
+  "admin.cascade_failures.to_date": "Hasta",
+  "admin.cascade_failures.provider": "Proveedor",
+  "admin.cascade_failures.reason": "Motivo",
+  "admin.cascade_failures.all": "Todos",
+  "admin.cascade_failures.apply": "Aplicar filtros",
+  "admin.cascade_failures.run_at": "Ejecución completada",
+  "admin.cascade_failures.ticker": "Ticker",
+  "admin.cascade_failures.providers_tried": "Proveedores probados",
 
   "add_asset.title": "Añadir activo",
   "add_asset.ticker": "Ticker / símbolo",

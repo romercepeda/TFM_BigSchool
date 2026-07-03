@@ -6,6 +6,8 @@ import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { getDataProviders, updateDataProviders, resetDataProviders } from '../api/settings.js';
 import type { DataProvidersResponse } from '../api/types.js';
+import { hasPermission } from '../state/auth-state.js';
+import { navigate } from '../router/router.js';
 
 type ListKind = 'market' | 'fx';
 
@@ -160,6 +162,8 @@ export class DataProvidersEditor extends BaseComponent {
         .feedback { font-size: var(--font-size-sm); margin-top: var(--space-3); }
         .feedback.success { color: var(--color-success); }
         .feedback.error { color: var(--color-danger); }
+        .failure-report-link { margin-top: var(--space-4); font-size: var(--font-size-sm); }
+        .failure-report-link a { color: var(--color-accent); }
       </style>
 
       <div class="hint">${t('settings.data_providers.key_help')}</div>
@@ -177,10 +181,21 @@ export class DataProvidersEditor extends BaseComponent {
       </div>
       ${this._saved ? `<div class="feedback success">✓ ${t('settings.saved')}</div>` : ''}
       ${this._error ? `<div class="feedback error">✗ ${this._error}</div>` : ''}
+
+      ${hasPermission('system.view_audit_log') ? `
+        <div class="failure-report-link">
+          <a href="#" id="failure-report-link">${t('settings.data_providers.view_failure_reports')}</a>
+        </div>
+      ` : ''}
     `;
   }
 
   protected afterRender(): void {
+    this.shadow.getElementById('failure-report-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigate('/admin/cascade-failures');
+    });
+
     // Remove
     this.shadow.querySelectorAll<HTMLButtonElement>('.remove-btn').forEach((btn) => {
       btn.addEventListener('click', () => {

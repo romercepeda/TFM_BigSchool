@@ -253,6 +253,18 @@
   "settings.data_providers.empty_list": "No providers configured — data updates are disabled for this list.",
   "settings.data_providers.confirm_empty": "This will disable all market data updates until you add a provider back — continue?",
   "settings.data_providers.reset": "Reset to defaults",
+  "settings.data_providers.view_failure_reports": "View cascade failure report history →",
+
+  "admin.cascade_failures.title": "Cascade failure reports",
+  "admin.cascade_failures.from_date": "From",
+  "admin.cascade_failures.to_date": "To",
+  "admin.cascade_failures.provider": "Provider",
+  "admin.cascade_failures.reason": "Reason",
+  "admin.cascade_failures.all": "All",
+  "admin.cascade_failures.apply": "Apply filters",
+  "admin.cascade_failures.run_at": "Run completed",
+  "admin.cascade_failures.ticker": "Ticker",
+  "admin.cascade_failures.providers_tried": "Providers tried",
 
   "add_asset.title": "Add asset",
   "add_asset.ticker": "Ticker / symbol",

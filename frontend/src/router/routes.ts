@@ -48,6 +48,7 @@ const ROUTES: RouteDef[] = [
   route('/admin/users/:userId',                                                 'pi-admin-user-detail-screen', true, 'user.view_any'),
   route('/admin/users',                                                         'pi-admin-users-screen',       true, 'user.list'),
   route('/admin/roles',                                                         'pi-admin-roles-screen',       true, 'role.list'),
+  route('/admin/cascade-failures',                                              'pi-admin-cascade-failures-screen', true, 'system.view_audit_log'),
 ];
 
 export function matchRoute(path: string): RouteMatch | null {

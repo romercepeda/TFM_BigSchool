@@ -34,6 +34,7 @@ import './screens/indicators-legend-screen.js';
 import './screens/admin-users-screen.js';
 import './screens/admin-user-detail-screen.js';
 import './screens/admin-roles-screen.js';
+import './screens/admin-cascade-failures-screen.js';
 import './screens/permission-denied-screen.js';
 
 import { loadLocale } from './i18n/i18n.js';

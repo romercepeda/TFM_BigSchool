@@ -54,3 +54,21 @@ class AdminRoleOut(BaseModel):
     is_default: bool
     is_admin_role: bool
     permissions: list[str]
+
+
+class CascadeFailureEntryOut(BaseModel):
+    """One failed asset within a daily cascade run (Spec D12 §6, Changeset C04 §6)."""
+
+    id: UUID
+    report_id: UUID
+    run_completed_at: datetime
+    asset_id: UUID
+    ticker: str
+    reason: str
+    providers_tried: list[str]
+    last_error_by_provider: dict[str, str]
+
+
+class CascadeFailureListResponse(BaseModel):
+    items: list[CascadeFailureEntryOut]
+    total: int

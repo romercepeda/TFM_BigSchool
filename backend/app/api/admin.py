@@ -1,4 +1,4 @@
-"""Administration API endpoints — Spec D11 §7.2, §7.3.
+"""Administration API endpoints — Spec D11 §7.2, §7.3, Spec D12 §7.4.
 
 Endpoints:
     GET    /admin/users                        — paginated user list
@@ -7,11 +7,13 @@ Endpoints:
     DELETE /admin/users/{user_id}/roles/{code}  — revoke a role
     POST   /admin/users/{user_id}/reset-password — reset another user's password
     GET    /admin/roles                         — read-only role + permission listing
+    GET    /admin/cascade-failure-reports        — read-only cascade failure history
 
 Every endpoint requires exactly one permission per D11 §8.2, matching the
-catalog's user.*/role.* domain (D11 §5.1).
+catalog's user.*/role.*/system.* domain (D11 §5.1).
 """
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,10 +26,13 @@ from app.api.admin_schemas import (
     AdminUserListResponse,
     AdminUserSummary,
     AssignRoleRequest,
+    CascadeFailureEntryOut,
+    CascadeFailureListResponse,
     ResetPasswordResponse,
 )
 from app.auth.dependencies import get_current_user
 from app.config import get_config
+from app.db.models.cascade_failure import CascadeFailureEntry, CascadeFailureReport
 from app.db.models.portfolio import Portfolio
 from app.db.models.role import Permission, Role, RolePermission
 from app.db.models.user import User
@@ -240,3 +245,74 @@ async def list_roles(
             permissions=permissions,
         ))
     return out
+
+
+@router.get(
+    "/cascade-failure-reports",
+    response_model=CascadeFailureListResponse,
+    dependencies=[Depends(require_permission("system.view_audit_log"))],
+)
+async def list_cascade_failure_reports(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    reason: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CascadeFailureListResponse:
+    """Cross-user cascade failure history (D12 §7.4).
+
+    Read-only; retention (default 30 days) is enforced by the cleanup that
+    runs alongside the daily update (D12 §6.3), not by this endpoint —
+    rows simply stop existing once past it. `provider` filters to entries
+    where that provider participated in the cascade (was tried or skipped
+    is not distinguished here — only entries where it was actually tried,
+    i.e. present in providers_tried).
+    """
+    query = select(CascadeFailureEntry, CascadeFailureReport.run_completed_at).join(
+        CascadeFailureReport, CascadeFailureReport.id == CascadeFailureEntry.report_id
+    )
+    count_query = select(func.count()).select_from(CascadeFailureEntry).join(
+        CascadeFailureReport, CascadeFailureReport.id == CascadeFailureEntry.report_id
+    )
+
+    if from_date is not None:
+        query = query.where(CascadeFailureReport.run_completed_at >= from_date)
+        count_query = count_query.where(CascadeFailureReport.run_completed_at >= from_date)
+    if to_date is not None:
+        query = query.where(CascadeFailureReport.run_completed_at <= to_date)
+        count_query = count_query.where(CascadeFailureReport.run_completed_at <= to_date)
+    if reason is not None:
+        query = query.where(CascadeFailureEntry.reason == reason)
+        count_query = count_query.where(CascadeFailureEntry.reason == reason)
+    if provider is not None:
+        # providers_tried is a JSONB array of strings — `?` tests top-level
+        # string membership (Postgres JSONB existence operator).
+        query = query.where(CascadeFailureEntry.providers_tried.op("?")(provider))
+        count_query = count_query.where(
+            CascadeFailureEntry.providers_tried.op("?")(provider)
+        )
+
+    total = await db.scalar(count_query) or 0
+
+    query = (
+        query.order_by(CascadeFailureReport.run_completed_at.desc())
+        .limit(page_size)
+        .offset((page - 1) * page_size)
+    )
+    result = await db.execute(query)
+    items = [
+        CascadeFailureEntryOut(
+            id=entry.id,
+            report_id=entry.report_id,
+            run_completed_at=run_completed_at,
+            asset_id=entry.asset_id,
+            ticker=entry.ticker,
+            reason=entry.reason,
+            providers_tried=entry.providers_tried,
+            last_error_by_provider=entry.last_error_by_provider,
+        )
+        for entry, run_completed_at in result.all()
+    ]
+    return CascadeFailureListResponse(items=items, total=total)
