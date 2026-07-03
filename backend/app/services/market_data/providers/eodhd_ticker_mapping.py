@@ -2,14 +2,16 @@
 
 EODHD identifies instruments as ``<SYMBOL>.<EXCHANGE_CODE>`` (e.g. ``SAN.MC``).
 "Internal" here means whatever this codebase already stores on ``Asset.market``
-— which is Twelve Data's own `exchange` field value (Spec D09 §3.1), since that
-is the provider `_provider_symbol()` (market_data/service.py) was written
-against. EODHD's suffix convention does not always match Twelve Data's, so
-this is the one place that knows the translation (D12 §4).
+— which is Twelve Data's own `exchange` field value (Spec D09 §3.1). EODHD's
+suffix convention does not always match Twelve Data's, so this is the one
+place that knows the translation (D12 §4).
 
-Not wired into the cascade yet — Changeset C04 §2 (the cascade layer) is
-what will call `to_eodhd_exchange_code()` from `_provider_symbol()` once
-"eodhd" becomes a selectable provider.
+Consumed by `market_data/symbols.py`'s `provider_symbol()`, which the cascade
+layer (Changeset C04 §2) uses to build the per-provider qualified ticker.
+The pre-cascade single-provider path in `market_data/service.py` has its own
+separate `_US_EXCHANGES`/`_provider_symbol()` — intentionally not unified
+with this module until Changeset C04 Step 7 removes that legacy path
+entirely, so the live path is never touched mid-migration.
 
 NOTE: the European entries below (XETRA, EURONEXT) are the author's best
 knowledge of Twelve Data's exchange field values and have not been verified
@@ -21,10 +23,9 @@ and are confirmed.
 
 from app.services.market_data.types import ProviderError
 
-# US exchanges — mirrors market_data/service.py's _US_EXCHANGES. Duplicated
-# rather than imported to avoid a providers/ → service.py dependency; both
-# are static reference tables unlikely to drift independently.
-_US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC", "CBOE", "NMFQS"}
+# US exchanges needing no market suffix internally — the single source of
+# truth for both this module and market_data/symbols.py.
+US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC", "CBOE", "NMFQS"}
 
 _US_EODHD_SUFFIX = "US"
 
@@ -51,7 +52,7 @@ def to_eodhd_exchange_code(internal_market: str | None) -> str:
         return _US_EODHD_SUFFIX
 
     code = internal_market.strip().upper()
-    if code in _US_EXCHANGES:
+    if code in US_EXCHANGES:
         return _US_EODHD_SUFFIX
     if code in EXCHANGE_TO_EODHD:
         return EXCHANGE_TO_EODHD[code]

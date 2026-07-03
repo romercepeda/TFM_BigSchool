@@ -13,6 +13,11 @@ from app.services.market_data.types import AssetSearchResult, FxPoint, PricePoin
 class MarketDataProvider(ABC):
     """Interface for market price data (Spec D09 §4.1)."""
 
+    # Historical depth this provider can serve, in days. None means no known
+    # ceiling. The cascade layer (Spec D12 §5.3) skips a provider — without
+    # consuming a call — for any request needing more than this many days.
+    provider_max_lookback_days: int | None = None
+
     @abstractmethod
     async def search_assets(self, query: str) -> list[AssetSearchResult]: ...
 
