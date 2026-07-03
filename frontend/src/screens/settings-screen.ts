@@ -1,9 +1,10 @@
 import { BaseComponent } from '../components/common/base-component.js';
+import '../components/data-providers-editor.js';
 import { t, loadLocale } from '../i18n/i18n.js';
 import { updateLanguage, logout } from '../api/auth.js';
 import { runDailyUpdate } from '../api/market-data.js';
 import type { DailyUpdateResult } from '../api/market-data.js';
-import { currentUser, clearAuthState } from '../state/auth-state.js';
+import { currentUser, clearAuthState, hasPermission } from '../state/auth-state.js';
 import { currentLanguage } from '../state/language-state.js';
 import { currentTheme, setTheme } from '../state/theme-state.js';
 import { stopPolling } from '../state/notification-state.js';
@@ -199,6 +200,14 @@ export class SettingsScreen extends BaseComponent {
                 </div>`
               : ''}
         </div>
+
+        <!-- ── Proveedores de datos (solo administradores) ─────────────── -->
+        ${hasPermission('system.view_config') ? `
+          <div class="section">
+            <div class="section-title">${t('settings.section.data_providers')}</div>
+            <pi-data-providers-editor></pi-data-providers-editor>
+          </div>
+        ` : ''}
 
         <!-- ── Navegación ───────────────────────────── -->
         <div class="back-section">

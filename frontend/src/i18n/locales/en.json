@@ -245,6 +245,15 @@
   "settings.market_data.alerts": "Alerts triggered",
   "settings.market_data.failed_hint": "One or more assets could not be updated. The most common cause is a ticker or market code not recognised by the active data provider, or the provider not offering historical data for that exchange on its free plan. Check the ticker and market on the failing asset.",
 
+  "settings.section.data_providers": "Data providers",
+  "settings.data_providers.market_title": "Market data providers",
+  "settings.data_providers.fx_title": "FX data providers",
+  "settings.data_providers.key_help": "API keys are managed via environment variables per Spec 00b for security and portability. To change a key, edit .env and restart the backend.",
+  "settings.data_providers.key_not_configured": "Not configured — set the corresponding API key in .env and restart the backend.",
+  "settings.data_providers.empty_list": "No providers configured — data updates are disabled for this list.",
+  "settings.data_providers.confirm_empty": "This will disable all market data updates until you add a provider back — continue?",
+  "settings.data_providers.reset": "Reset to defaults",
+
   "add_asset.title": "Add asset",
   "add_asset.ticker": "Ticker / symbol",
   "add_asset.ticker_placeholder": "Search by name or ticker…",

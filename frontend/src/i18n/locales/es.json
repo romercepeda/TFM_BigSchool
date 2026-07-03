@@ -245,6 +245,15 @@
   "settings.market_data.alerts": "Alertas disparadas",
   "settings.market_data.failed_hint": "Uno o más activos no pudieron actualizarse. La causa más común es un ticker o código de mercado no reconocido por el proveedor de datos activo, o que el proveedor no ofrezca histórico para esa bolsa en su plan gratuito. Revisa el ticker y el mercado del activo fallido en su ficha.",
 
+  "settings.section.data_providers": "Proveedores de datos",
+  "settings.data_providers.market_title": "Proveedores de datos de mercado",
+  "settings.data_providers.fx_title": "Proveedores de datos de divisas",
+  "settings.data_providers.key_help": "Las claves de API se gestionan mediante variables de entorno según la Spec 00b, por seguridad y portabilidad. Para cambiar una clave, edita .env y reinicia el backend.",
+  "settings.data_providers.key_not_configured": "No configurada — define la variable de entorno correspondiente en .env y reinicia el backend.",
+  "settings.data_providers.empty_list": "No hay proveedores configurados — las actualizaciones de datos están deshabilitadas para esta lista.",
+  "settings.data_providers.confirm_empty": "Esto deshabilitará todas las actualizaciones de datos de mercado hasta que añadas un proveedor de nuevo — ¿continuar?",
+  "settings.data_providers.reset": "Restaurar valores por defecto",
+
   "add_asset.title": "Añadir activo",
   "add_asset.ticker": "Ticker / símbolo",
   "add_asset.ticker_placeholder": "Buscar por nombre o ticker…",

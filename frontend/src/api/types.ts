@@ -274,6 +274,24 @@ export interface Notification {
   completed_at: string | null;
 }
 
+// ── Data providers (Spec D12 §7, Changeset C04 §5) ────────────────────────────
+
+export interface ProviderKeyStatus {
+  provider: string;
+  display_name: string;
+  requires_api_key: boolean;
+  configured: boolean;
+  masked_key: string | null;
+}
+
+export interface DataProvidersResponse {
+  market_data_providers: string[];
+  market_data_available: string[];
+  fx_data_providers: string[];
+  fx_data_available: string[];
+  api_keys: ProviderKeyStatus[];
+}
+
 // ── API Error ─────────────────────────────────────────────────────────────────
 
 export interface ApiErrorDetail {
