@@ -18,6 +18,7 @@ from app.services.market_data.cascade import (
     CascadeAssetRequest,
     FxCascadeExhaustedError,
     FxDataCascade,
+    MarketCascadeExhaustedError,
     MarketDataCascade,
     merge_cascade_results,
 )
@@ -46,7 +47,12 @@ class _FakeMarketProvider(MarketDataProvider):
         raise NotImplementedError
 
     async def get_current_price(self, ticker: str) -> PricePoint:
-        raise NotImplementedError
+        self.calls.append(ticker)
+        if ticker not in self._resolves:
+            raise ProviderError(
+                error_kind=self._error_kind, retryable=False, upstream_message="nope"
+            )
+        return PricePoint(as_of_date=_START, price=Decimal("1.00"), currency="")
 
     async def get_historical_series(
         self, ticker: str, start_date: date, end_date: date
@@ -170,6 +176,33 @@ async def test_no_cross_run_memory_every_call_restarts_at_providers_zero() -> No
     await cascade.execute(assets, _START, _END)
 
     assert p0.calls == ["T0", "T0"]  # called again on the second run, no memoization
+
+
+# ── get_current_price single-ticker fallback (post-Step-7 fix) ───────────────
+
+
+@pytest.mark.asyncio
+async def test_get_current_price_falls_back_to_second_provider() -> None:
+    p0 = _FakeMarketProvider(resolves=set())  # rejects everything
+    p1 = _FakeMarketProvider(resolves={"TEF"})
+    cascade = MarketDataCascade([("p0", p0), ("p1", p1)])
+
+    point, provider_name = await cascade.get_current_price("TEF", "BME")
+
+    assert provider_name == "p1"
+    assert point.price == Decimal("1.00")
+
+
+@pytest.mark.asyncio
+async def test_get_current_price_raises_when_all_providers_fail() -> None:
+    p0 = _FakeMarketProvider(resolves=set())
+    p1 = _FakeMarketProvider(resolves=set())
+    cascade = MarketDataCascade([("p0", p0), ("p1", p1)])
+
+    with pytest.raises(MarketCascadeExhaustedError) as exc_info:
+        await cascade.get_current_price("TEF", "BME")
+
+    assert exc_info.value.providers_tried == ["p0", "p1"]
 
 
 @pytest.mark.asyncio

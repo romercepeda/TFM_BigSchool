@@ -77,11 +77,64 @@ class CascadeResult:
     failures: list[CascadeFailureEntry]
 
 
+class MarketCascadeExhaustedError(ProviderError):
+    """Every market data provider in the cascade failed for one ticker.
+
+    Raised by get_current_price() below — a single-item lookup, distinct
+    from execute()'s batch semantics. Subclasses ProviderError so existing
+    callers that already catch it (e.g. the market-data API's 503 handler)
+    need no changes.
+    """
+
+    def __init__(
+        self,
+        providers_tried: list[str],
+        last_error_by_provider: dict[str, str],
+    ) -> None:
+        self.providers_tried = providers_tried
+        self.last_error_by_provider = last_error_by_provider
+        super().__init__(
+            error_kind="provider_error",
+            retryable=True,
+            upstream_message=(
+                f"All market data providers failed: {providers_tried}. "
+                f"Errors: {last_error_by_provider}."
+            ),
+        )
+
+
 class MarketDataCascade:
     """Iterates an ordered list of MarketDataProvider adapters (D12 §5.1)."""
 
     def __init__(self, providers: list[tuple[str, MarketDataProvider]]) -> None:
         self._providers = providers
+
+    async def get_current_price(
+        self, ticker: str, market: str | None
+    ) -> tuple[PricePoint, str]:
+        """Single-ticker current-price fallback.
+
+        Not part of D12 §5.1's batch cascade (which only covers the daily
+        job's historical series and FX rates) — added because scoping
+        get_current_price out of the cascade left a visible gap: the daily
+        job could maintain an asset's price *history* via a fallback
+        provider while the on-demand "current price" lookup kept failing,
+        hard-wired to the primary provider only.
+        """
+        providers_tried: list[str] = []
+        last_error_by_provider: dict[str, str] = {}
+        for provider_name, provider in self._providers:
+            providers_tried.append(provider_name)
+            symbol = provider_symbol(ticker, market, provider_name)
+            try:
+                point = await provider.get_current_price(symbol)
+            except ProviderError as exc:
+                last_error_by_provider[provider_name] = exc.upstream_message
+                continue
+            return point, provider_name
+
+        logger.warning("Market data cascade exhausted for %s: tried %s.", ticker, providers_tried)
+        raise MarketCascadeExhaustedError(providers_tried, last_error_by_provider)
 
     async def execute(
         self,

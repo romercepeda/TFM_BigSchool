@@ -113,11 +113,12 @@ class MarketDataService:
         self._market = market_provider
         self._fx = fx_provider
         self._provider_name = market_provider_name
-        # Both None until Changeset C04 Step 7 flips USE_CASCADE=true. Only
-        # the daily update (market) and FX rate lookups (fx) consult the
-        # cascade (D12 §5.1/§5.2) — get_current_price and search_assets stay
-        # on the single first-in-list provider, per D12's scope (§5.5 for
-        # search; get_current_price is an on-demand lookup D12 doesn't cover).
+        # Both None until Changeset C04 Step 7 flips USE_CASCADE=true. The
+        # daily update, FX rate lookups, and get_current_price all consult
+        # the cascade when set (D12 §5.1/§5.2, plus get_current_price as a
+        # post-Step-7 fix — see MarketDataCascade.get_current_price's
+        # docstring). search_assets stays on the single first-in-list
+        # provider always, per D12 §5.5.
         self._market_cascade = market_cascade
         self._fx_cascade = fx_cascade
 
@@ -129,6 +130,9 @@ class MarketDataService:
     # ── Current price — on-demand fetch ───────────────────────────────────────
 
     async def get_current_price(self, ticker: str, market: str | None = None) -> PricePoint:
+        if self._market_cascade is not None:
+            point, _provider = await self._market_cascade.get_current_price(ticker, market)
+            return point
         return await self._market.get_current_price(_provider_symbol(ticker, market, self._provider_name))
 
     # ── FX pair support check ──────────────────────────────────────────────────
