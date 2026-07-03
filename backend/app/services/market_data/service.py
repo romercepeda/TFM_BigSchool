@@ -289,7 +289,12 @@ def _build_service() -> MarketDataService:
 
     fx_provider = FrankfurterProvider(base_url=cfg.fx_data.frankfurter.base_url)
 
-    if cfg.market_data.provider == "twelve_data":
+    # Pre-cascade legacy path (USE_CASCADE=false) — only ever looks at the
+    # first entry of the cascade list and only knows twelve_data/finnhub.
+    # Retired once Changeset C04 Step 7 flips USE_CASCADE=true; a "eodhd"
+    # or unrecognized first entry here falls through to finnhub, same as
+    # before this changeset (single active provider, no cascade wiring yet).
+    if cfg.market_data.providers[0] == "twelve_data":
         api_key = os.environ.get("MARKET_DATA_TWELVE_DATA_API_KEY", "")
         if not api_key:
             logger.warning("MARKET_DATA_TWELVE_DATA_API_KEY not set — provider calls will fail.")

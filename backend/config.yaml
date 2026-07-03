@@ -47,8 +47,19 @@ i18n:
     - es
     - en
 
+# Spec D12 §9 — `providers` (ordered cascade, first tried first) replaces the
+# deprecated singular `provider` key. Old form, still readable for one release
+# (Changeset C04 §7): `provider: twelve_data`
+#
+# NOTE: kept to [twelve_data] here rather than D12 §3's fresh-install default
+# of [twelve_data, eodhd, finnhub] — the cascade isn't wired into the service
+# yet (USE_CASCADE=false, Changeset C04 Step 2/7), and once the Step 4
+# startup check lands, listing a provider here without its API key set in
+# .env will refuse to start. Extend this list once EODHD/Finnhub keys are
+# confirmed available and the cascade is enabled.
 market_data:
-  provider: twelve_data
+  providers:
+    - twelve_data
   twelve_data:
     base_url: https://api.twelvedata.com
     daily_call_budget: 800
@@ -60,8 +71,10 @@ market_data:
     daily_call_budget: 20
     max_lookback_days: 365
 
+# Old form, still readable for one release (Changeset C04 §7): `provider: frankfurter`
 fx_data:
-  provider: frankfurter
+  providers:
+    - frankfurter
   frankfurter:
     base_url: https://api.frankfurter.dev/v2
 

@@ -17,9 +17,36 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 logger = logging.getLogger(__name__)
+
+
+def _migrate_singular_provider_key(data: object, *, section: str) -> object:
+    """Back-compat shim for the deprecated singular `provider` key (Spec D12 §9,
+
+    Changeset C04 §7). If `provider` is present and `providers` is not, build a
+    single-element list from it. If both are present, the new key wins.
+    Removed entirely in the next major release.
+    """
+    if not isinstance(data, dict):
+        return data
+    has_old = "provider" in data
+    has_new = "providers" in data
+    if has_old and has_new:
+        logger.warning(
+            "config.yaml: both '%s.provider' (deprecated) and '%s.providers' are "
+            "set — using 'providers' and ignoring the deprecated 'provider' key.",
+            section, section,
+        )
+    elif has_old and not has_new:
+        logger.warning(
+            "config.yaml: '%s.provider' is deprecated — use '%s.providers' (a "
+            "list) instead. Treating it as providers=[%r] for this run.",
+            section, section, data["provider"],
+        )
+        data = {**data, "providers": [data["provider"]]}
+    return data
 
 # ── Sub-models (one per top-level config section) ────────────────────────────
 
@@ -101,10 +128,10 @@ class FinnhubConfig(BaseModel):
 
 
 class EODHDConfig(BaseModel):
-    """Spec D12 §9 — EODHD is not yet a selectable `market_data.provider`
+    """Spec D12 §4/§9 — configures the EODHD adapter for when it is wired
 
-    (that requires the cascade list added in Changeset C04 §7); these keys
-    only configure the adapter for when it is wired in.
+    into the cascade (Changeset C04 §2); this is not yet the case behind
+    `USE_CASCADE=false`.
     """
 
     base_url: str = "https://eodhd.com/api"
@@ -113,10 +140,23 @@ class EODHDConfig(BaseModel):
 
 
 class MarketDataConfig(BaseModel):
-    provider: Literal["twelve_data", "finnhub"] = "twelve_data"
+    """Spec D12 §9 — `providers` (ordered cascade) replaces D09's singular
+
+    `provider`. The deprecated singular key still loads for one release via
+    `_migrate_singular_provider_key` (Changeset C04 §7).
+    """
+
+    providers: list[Literal["twelve_data", "eodhd", "finnhub"]] = [
+        "twelve_data", "eodhd", "finnhub",
+    ]
     twelve_data: TwelveDataConfig = TwelveDataConfig()
     finnhub: FinnhubConfig = FinnhubConfig()
     eodhd: EODHDConfig = EODHDConfig()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_provider_key(cls, data: object) -> object:
+        return _migrate_singular_provider_key(data, section="market_data")
 
 
 class FrankfurterConfig(BaseModel):
@@ -124,8 +164,20 @@ class FrankfurterConfig(BaseModel):
 
 
 class FxDataConfig(BaseModel):
-    provider: Literal["frankfurter"] = "frankfurter"
+    """Spec D12 §9 — `providers` (ordered cascade) replaces D09's singular
+
+    `provider`. In v1 this list has a single element (`frankfurter`) — the
+    architectural mechanism is the same as market_data's cascade so that
+    adding a second FX provider later is a configuration change (D12 §5.2).
+    """
+
+    providers: list[Literal["frankfurter"]] = ["frankfurter"]
     frankfurter: FrankfurterConfig = FrankfurterConfig()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_provider_key(cls, data: object) -> object:
+        return _migrate_singular_provider_key(data, section="fx_data")
 
 
 class SecurityConfig(BaseModel):
