@@ -55,6 +55,10 @@ market_data:
   finnhub:
     base_url: https://finnhub.io/api/v1
     per_minute_call_budget: 60
+  eodhd:
+    base_url: https://eodhd.com/api
+    daily_call_budget: 20
+    max_lookback_days: 365
 
 fx_data:
   provider: frankfurter

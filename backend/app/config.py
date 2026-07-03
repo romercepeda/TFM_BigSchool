@@ -100,10 +100,23 @@ class FinnhubConfig(BaseModel):
     per_minute_call_budget: int = 60
 
 
+class EODHDConfig(BaseModel):
+    """Spec D12 §9 — EODHD is not yet a selectable `market_data.provider`
+
+    (that requires the cascade list added in Changeset C04 §7); these keys
+    only configure the adapter for when it is wired in.
+    """
+
+    base_url: str = "https://eodhd.com/api"
+    daily_call_budget: int = 20
+    max_lookback_days: int = 365
+
+
 class MarketDataConfig(BaseModel):
     provider: Literal["twelve_data", "finnhub"] = "twelve_data"
     twelve_data: TwelveDataConfig = TwelveDataConfig()
     finnhub: FinnhubConfig = FinnhubConfig()
+    eodhd: EODHDConfig = EODHDConfig()
 
 
 class FrankfurterConfig(BaseModel):
