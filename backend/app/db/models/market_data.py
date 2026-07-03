@@ -13,7 +13,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-_MARKET_PROVIDER_ENUM = Enum("twelve_data", "finnhub", name="market_provider_enum")
+# "eodhd" added by Spec D12 / Changeset C04 Step 7 — the cascade can now
+# persist price rows sourced from EODHD.
+_MARKET_PROVIDER_ENUM = Enum("twelve_data", "finnhub", "eodhd", name="market_provider_enum")
 
 
 class AssetPriceHistory(Base):

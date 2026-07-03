@@ -12,7 +12,7 @@ import os
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,10 +28,23 @@ logger = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 400  # MA200 needs 200 trading days ≈ 285 calendar days; 400 gives safe margin
 
+# Cascade-path-only bootstrap window (Spec D12 §5.3). Deliberately under
+# EODHD's 365-day provider_max_lookback_days cap — at 400 (_LOOKBACK_DAYS
+# above) EODHD would be skipped on *every* bootstrap request, never actually
+# getting a chance to rescue a brand-new asset that Twelve Data/Finnhub
+# can't serve (e.g. a European ticker outside their free tiers). 350 still
+# comfortably covers MA200's ~285-day need.
+_CASCADE_BOOTSTRAP_LOOKBACK_DAYS = 350
+
 
 def _cascade_enabled() -> bool:
-    """Spec D12 / Changeset C04 §10 feature flag — off by default until Step 7."""
-    return os.environ.get("USE_CASCADE", "false").strip().lower() == "true"
+    """Spec D12 / Changeset C04 §10 feature flag.
+
+    Defaults to enabled as of Step 7 ("this is the moment behavior changes
+    for end users"). Set USE_CASCADE=false to fall back to the pre-cascade
+    single-provider path if needed.
+    """
+    return os.environ.get("USE_CASCADE", "true").strip().lower() == "true"
 
 # US exchanges where no market prefix/suffix is needed.
 _US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC", "CBOE", "NMFQS"}
@@ -308,10 +321,19 @@ class MarketDataService:
         behavior as run_daily_update(), but resolves prices via
         MarketDataCascade and persists a CascadeFailureReport (D12 §6)
         instead of just counting failures.
+
+        Splits assets into a bootstrap window (full _LOOKBACK_DAYS, for
+        assets with no stored history yet) and an incremental window (just
+        enough to cover the gap since the stalest asset's last stored date,
+        for assets that already have history). Without this split every
+        request would need the full ~400-day window, and EODHD's 365-day
+        cap (provider_max_lookback_days) would make the cascade skip it on
+        every single run — defeating its purpose as an incremental fallback
+        (D12 §5.3).
         """
         from app.db.models.portfolio import Portfolio
         from app.services.indicator_service import run_daily_indicators
-        from app.services.market_data.cascade import CascadeAssetRequest
+        from app.services.market_data.cascade import CascadeAssetRequest, merge_cascade_results
         from app.services.market_data.cascade_reports import (
             cleanup_old_cascade_reports,
             persist_cascade_result,
@@ -322,7 +344,6 @@ class MarketDataService:
 
         cfg = get_config()
         today = date.today()
-        start_date = today - timedelta(days=_LOOKBACK_DAYS)
 
         assets_result = await db.execute(
             select(Asset)
@@ -335,10 +356,41 @@ class MarketDataService:
         assets_by_id = {a.id: a for a in assets}
         logger.info("Cascade daily update: %d assets to process.", len(assets))
 
-        requests = [
-            CascadeAssetRequest(asset_id=a.id, ticker=a.ticker, market=a.market) for a in assets
-        ]
-        cascade_result = await self._market_cascade.execute(requests, start_date, today)
+        last_stored_result = await db.execute(
+            select(AssetPriceHistory.asset_id, func.max(AssetPriceHistory.as_of_date))
+            .where(AssetPriceHistory.asset_id.in_([a.id for a in assets]))
+            .group_by(AssetPriceHistory.asset_id)
+        )
+        last_stored_date_by_asset = dict(last_stored_result.all())
+
+        bootstrap_assets = [a for a in assets if a.id not in last_stored_date_by_asset]
+        incremental_assets = [a for a in assets if a.id in last_stored_date_by_asset]
+
+        cascade_results = []
+        if bootstrap_assets:
+            requests = [
+                CascadeAssetRequest(asset_id=a.id, ticker=a.ticker, market=a.market)
+                for a in bootstrap_assets
+            ]
+            start_date = today - timedelta(days=_CASCADE_BOOTSTRAP_LOOKBACK_DAYS)
+            cascade_results.append(
+                await self._market_cascade.execute(requests, start_date, today)
+            )
+        if incremental_assets:
+            requests = [
+                CascadeAssetRequest(asset_id=a.id, ticker=a.ticker, market=a.market)
+                for a in incremental_assets
+            ]
+            # Sized by the stalest asset in this batch, so nobody's gap is
+            # missed even if the job hasn't run in a while.
+            oldest_last_date = min(
+                last_stored_date_by_asset[a.id] for a in incremental_assets
+            )
+            cascade_results.append(
+                await self._market_cascade.execute(requests, oldest_last_date, today)
+            )
+
+        cascade_result = merge_cascade_results(cascade_results)
 
         alerts = 0
         indicator_snapshots = 0

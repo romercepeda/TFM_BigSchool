@@ -154,6 +154,32 @@ class MarketDataCascade:
         )
 
 
+def merge_cascade_results(results: list[CascadeResult]) -> CascadeResult:
+    """Combine multiple CascadeResults into one (e.g. a bootstrap-window run
+
+    and an incremental-window run over disjoint asset subsets — D12 §5.3).
+    Assumes no asset_id appears in more than one input result.
+    """
+    resolved: dict[UUID, CascadeAssetSuccess] = {}
+    resolved_by_provider: dict[str, int] = {}
+    failures: list[CascadeFailureEntry] = []
+    total = 0
+
+    for result in results:
+        total += result.total_assets_processed
+        resolved.update(result.resolved)
+        for provider_name, count in result.resolved_by_provider.items():
+            resolved_by_provider[provider_name] = resolved_by_provider.get(provider_name, 0) + count
+        failures.extend(result.failures)
+
+    return CascadeResult(
+        total_assets_processed=total,
+        resolved=resolved,
+        resolved_by_provider=resolved_by_provider,
+        failures=failures,
+    )
+
+
 # ── FX data cascade ─────────────────────────────────────────────────────────────
 
 

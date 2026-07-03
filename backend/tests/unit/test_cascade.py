@@ -19,6 +19,7 @@ from app.services.market_data.cascade import (
     FxCascadeExhaustedError,
     FxDataCascade,
     MarketDataCascade,
+    merge_cascade_results,
 )
 from app.services.market_data.providers.base import FxDataProvider, MarketDataProvider
 from app.services.market_data.types import AssetSearchResult, FxPoint, PricePoint, ProviderError
@@ -169,6 +170,34 @@ async def test_no_cross_run_memory_every_call_restarts_at_providers_zero() -> No
     await cascade.execute(assets, _START, _END)
 
     assert p0.calls == ["T0", "T0"]  # called again on the second run, no memoization
+
+
+@pytest.mark.asyncio
+async def test_merge_cascade_results_combines_disjoint_runs() -> None:
+    """Bootstrap-window run + incremental-window run over disjoint assets
+
+    (Changeset C04 Step 7's per-asset lookback split) merge into one report.
+    """
+    bootstrap_assets = [_asset("NEW0")]
+    incremental_assets = [_asset("OLD0"), _asset("OLD1")]
+
+    p0 = _FakeMarketProvider(resolves={"NEW0"})
+    bootstrap_result = await MarketDataCascade([("p0", p0)]).execute(
+        bootstrap_assets, _START, _END
+    )
+
+    p1 = _FakeMarketProvider(resolves={"OLD0"})
+    p2 = _FakeMarketProvider(resolves={"OLD1"})
+    incremental_result = await MarketDataCascade([("p1", p1), ("p2", p2)]).execute(
+        incremental_assets, _START, _END
+    )
+
+    merged = merge_cascade_results([bootstrap_result, incremental_result])
+
+    assert merged.total_assets_processed == 3
+    assert len(merged.resolved) == 3
+    assert merged.resolved_by_provider == {"p0": 1, "p1": 1, "p2": 1}
+    assert merged.failures == []
 
 
 # ── FX data cascade ─────────────────────────────────────────────────────────────

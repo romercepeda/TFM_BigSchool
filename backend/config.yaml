@@ -51,15 +51,14 @@ i18n:
 # deprecated singular `provider` key. Old form, still readable for one release
 # (Changeset C04 §7): `provider: twelve_data`
 #
-# NOTE: kept to [twelve_data] here rather than D12 §3's fresh-install default
-# of [twelve_data, eodhd, finnhub] — the cascade isn't wired into the service
-# yet (USE_CASCADE=false, Changeset C04 Step 2/7), and once the Step 4
-# startup check lands, listing a provider here without its API key set in
-# .env will refuse to start. Extend this list once EODHD/Finnhub keys are
-# confirmed available and the cascade is enabled.
+# Shipped default order per D12 §3. Requires MARKET_DATA_EODHD_API_KEY and
+# MARKET_DATA_FINNHUB_API_KEY set in .env (Changeset C04 §8's startup check
+# enforces this) — confirmed present as of Changeset C04 Step 7.
 market_data:
   providers:
     - twelve_data
+    - eodhd
+    - finnhub
   failure_report_retention_days: 30
   twelve_data:
     base_url: https://api.twelvedata.com
