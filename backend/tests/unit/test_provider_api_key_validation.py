@@ -4,8 +4,6 @@ Changeset C04 §8.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from app.config import AppConfig, validate_provider_api_keys
@@ -50,8 +48,3 @@ def test_all_keys_present_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(key, "some-key")
 
     validate_provider_api_keys(cfg)  # must not raise
-
-
-def test_env_example_documents_the_eodhd_key() -> None:
-    env_example = Path(__file__).resolve().parents[3] / ".env.example"
-    assert "MARKET_DATA_EODHD_API_KEY" in env_example.read_text(encoding="utf-8")

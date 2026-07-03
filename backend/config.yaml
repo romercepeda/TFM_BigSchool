@@ -60,6 +60,7 @@ i18n:
 market_data:
   providers:
     - twelve_data
+  failure_report_retention_days: 30
   twelve_data:
     base_url: https://api.twelvedata.com
     daily_call_budget: 800

@@ -6,6 +6,7 @@ detect its tables and will not generate migrations for them.
 
 from app.db.models.ai_report import AnalysisJob, AnalysisReport, UploadedFile
 from app.db.models.asset import Asset
+from app.db.models.cascade_failure import CascadeFailureEntry, CascadeFailureReport
 from app.db.models.holding import Holding
 from app.db.models.indicator import Indicator, IndicatorSnapshot
 from app.db.models.lot import Lot
@@ -24,4 +25,5 @@ __all__ = [
     "Indicator", "IndicatorSnapshot",
     "UploadedFile", "AnalysisJob", "AnalysisReport",
     "Permission", "Role", "RolePermission", "UserRole",
+    "CascadeFailureReport", "CascadeFailureEntry",
 ]

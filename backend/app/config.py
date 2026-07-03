@@ -150,6 +150,9 @@ class MarketDataConfig(BaseModel):
     providers: list[Literal["twelve_data", "eodhd", "finnhub"]] = [
         "twelve_data", "eodhd", "finnhub",
     ]
+    # Spec D12 §6.3 — how long CascadeFailureReport rows are kept before a
+    # cleanup pass hard-deletes them. Operational data, not the audit log.
+    failure_report_retention_days: int = Field(default=30, ge=1)
     twelve_data: TwelveDataConfig = TwelveDataConfig()
     finnhub: FinnhubConfig = FinnhubConfig()
     eodhd: EODHDConfig = EODHDConfig()

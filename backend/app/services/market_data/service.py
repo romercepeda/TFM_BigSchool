@@ -11,22 +11,27 @@ import logging
 import os
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_config
+from app.config import AppConfig, get_config
 from app.db.models.asset import Asset
 from app.db.models.holding import Holding
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
+from app.services.market_data.cascade import FxDataCascade, MarketDataCascade
 from app.services.market_data.providers.base import FxDataProvider, MarketDataProvider
 from app.services.market_data.types import AssetSearchResult, FxPoint, PricePoint, ProviderError
 
 logger = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 400  # MA200 needs 200 trading days ≈ 285 calendar days; 400 gives safe margin
+
+
+def _cascade_enabled() -> bool:
+    """Spec D12 / Changeset C04 §10 feature flag — off by default until Step 7."""
+    return os.environ.get("USE_CASCADE", "false").strip().lower() == "true"
 
 # US exchanges where no market prefix/suffix is needed.
 _US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "BATS", "OTC", "CBOE", "NMFQS"}
@@ -60,10 +65,20 @@ class MarketDataService:
         market_provider: MarketDataProvider,
         fx_provider: FxDataProvider,
         market_provider_name: str,
+        *,
+        market_cascade: MarketDataCascade | None = None,
+        fx_cascade: FxDataCascade | None = None,
     ) -> None:
         self._market = market_provider
         self._fx = fx_provider
         self._provider_name = market_provider_name
+        # Both None until Changeset C04 Step 7 flips USE_CASCADE=true. Only
+        # the daily update (market) and FX rate lookups (fx) consult the
+        # cascade (D12 §5.1/§5.2) — get_current_price and search_assets stay
+        # on the single first-in-list provider, per D12's scope (§5.5 for
+        # search; get_current_price is an on-demand lookup D12 doesn't cover).
+        self._market_cascade = market_cascade
+        self._fx_cascade = fx_cascade
 
     # ── Asset search — always live, never cached (D09 §8) ─────────────────────
 
@@ -78,6 +93,8 @@ class MarketDataService:
     # ── FX pair support check ──────────────────────────────────────────────────
 
     async def is_fx_pair_supported(self, quote: str, base: str) -> bool:
+        if self._fx_cascade is not None:
+            return await self._fx_cascade.is_pair_supported(quote, base)
         return await self._fx.is_pair_supported(quote, base)
 
     # ── Historical FX rate with DB cache (D09 §7.1) ───────────────────────────
@@ -108,7 +125,10 @@ class MarketDataService:
             return row.rate
 
         try:
-            point = await self._fx.get_historical_rate(quote, base, on_date)
+            if self._fx_cascade is not None:
+                point, _provider = await self._fx_cascade.get_historical_rate(quote, base, on_date)
+            else:
+                point = await self._fx.get_historical_rate(quote, base, on_date)
         except ProviderError as exc:
             logger.warning("FX historical fetch failed %s/%s %s: %s", quote, base, on_date, exc)
             return None
@@ -128,7 +148,10 @@ class MarketDataService:
         if quote.upper() == base.upper():
             return Decimal("1")
 
-        point = await self._fx.get_current_rate(quote, base)
+        if self._fx_cascade is not None:
+            point, _provider = await self._fx_cascade.get_current_rate(quote, base)
+        else:
+            point = await self._fx.get_current_rate(quote, base)
         await self._persist_fx(db, point)
         return point.rate
 
@@ -154,7 +177,13 @@ class MarketDataService:
 
         Stops early on rate-limit errors (D09 §6.3). Failure on one asset does not
         abort the rest. Returns a summary dict for the caller / API response.
+
+        Delegates to the cascade-enabled path (Spec D12 §5, Changeset C04) when
+        this service was built with a market_cascade — see _build_service().
         """
+        if self._market_cascade is not None:
+            return await self._run_daily_update_cascade(db)
+
         from app.db.models.portfolio import Portfolio
         from app.services.price_level_service import apply_crossings
 
@@ -265,6 +294,132 @@ class MarketDataService:
             "indicator_snapshots": indicator_snapshots,
         }
 
+    # ── Cascade-enabled daily update (Spec D12 §5, Changeset C04) ─────────────
+    #
+    # Deliberately duplicates most of run_daily_update()'s per-asset persist/
+    # indicator/alert logic rather than sharing it: the two paths coexist only
+    # for the migration window behind USE_CASCADE, and Changeset C04 Step 7
+    # deletes run_daily_update()'s single-provider body entirely once the flag
+    # is always on, at which point this becomes the only implementation.
+    # Unifying them now would mean touching the live path before Step 7.
+
+    async def _run_daily_update_cascade(self, db: AsyncSession) -> dict:
+        """Cascade-enabled daily update. Same persistence/indicator/alert
+        behavior as run_daily_update(), but resolves prices via
+        MarketDataCascade and persists a CascadeFailureReport (D12 §6)
+        instead of just counting failures.
+        """
+        from app.db.models.portfolio import Portfolio
+        from app.services.indicator_service import run_daily_indicators
+        from app.services.market_data.cascade import CascadeAssetRequest
+        from app.services.market_data.cascade_reports import (
+            cleanup_old_cascade_reports,
+            persist_cascade_result,
+        )
+        from app.services.price_level_service import apply_crossings
+
+        assert self._market_cascade is not None  # only called when set
+
+        cfg = get_config()
+        today = date.today()
+        start_date = today - timedelta(days=_LOOKBACK_DAYS)
+
+        assets_result = await db.execute(
+            select(Asset)
+            .join(Holding, Holding.asset_id == Asset.id)
+            .join(Portfolio, Portfolio.id == Holding.portfolio_id)
+            .where(Portfolio.status == "active")
+            .distinct()
+        )
+        assets = list(assets_result.scalars().all())
+        assets_by_id = {a.id: a for a in assets}
+        logger.info("Cascade daily update: %d assets to process.", len(assets))
+
+        requests = [
+            CascadeAssetRequest(asset_id=a.id, ticker=a.ticker, market=a.market) for a in assets
+        ]
+        cascade_result = await self._market_cascade.execute(requests, start_date, today)
+
+        alerts = 0
+        indicator_snapshots = 0
+
+        for asset_id, success in cascade_result.resolved.items():
+            asset = assets_by_id[asset_id]
+
+            now = datetime.now(UTC)
+            for point in success.points:
+                ins = pg_insert(AssetPriceHistory).values(
+                    asset_id=asset.id,
+                    as_of_date=point.as_of_date,
+                    close_price=point.price,
+                    volume=point.volume,
+                    provider=success.provider,
+                    fetched_at=now,
+                )
+                stmt = ins.on_conflict_do_update(
+                    constraint="uq_asset_price_date",
+                    set_={"volume": ins.excluded.volume},
+                    where=AssetPriceHistory.volume.is_(None),
+                )
+                await db.execute(stmt)
+
+            sorted_points = sorted(success.points, key=lambda p: p.as_of_date)
+            prices_sorted = [p.price for p in sorted_points]
+            volumes_sorted = [p.volume for p in sorted_points]
+            try:
+                written = await run_daily_indicators(
+                    db, asset, prices_sorted, today, volumes=volumes_sorted
+                )
+                indicator_snapshots += written
+            except Exception as exc:
+                logger.error("Indicator job failed for %s: %s", asset.ticker, exc)
+
+            recent_result = await db.execute(
+                select(AssetPriceHistory)
+                .where(AssetPriceHistory.asset_id == asset.id)
+                .order_by(AssetPriceHistory.as_of_date.desc())
+                .limit(2)
+            )
+            recent = list(recent_result.scalars().all())
+
+            if len(recent) >= 2:
+                current_close = recent[0].close_price
+                previous_close = recent[1].close_price
+                close_date = recent[0].as_of_date
+
+                holdings_result = await db.execute(
+                    select(Holding).where(Holding.asset_id == asset.id)
+                )
+                for holding in holdings_result.scalars().all():
+                    crossed = await apply_crossings(
+                        db,
+                        holding.id,
+                        previous_close=previous_close,
+                        current_close=current_close,
+                        close_date=close_date,
+                    )
+                    alerts += len(crossed)
+
+        report = await persist_cascade_result(db, cascade_result)
+        deleted = await cleanup_old_cascade_reports(
+            db, retention_days=cfg.market_data.failure_report_retention_days
+        )
+        if deleted:
+            logger.info("Cascade report cleanup: removed %d report(s) past retention.", deleted)
+
+        await db.commit()
+        logger.info(
+            "Cascade daily update complete: processed=%d failed=%d alerts=%d indicators=%d",
+            len(cascade_result.resolved), len(cascade_result.failures), alerts, indicator_snapshots,
+        )
+        return {
+            "assets_processed": len(cascade_result.resolved),
+            "assets_failed": len(cascade_result.failures),
+            "alerts_triggered": alerts,
+            "indicator_snapshots": indicator_snapshots,
+            "cascade_report_id": str(report.id),
+        }
+
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
 
@@ -280,41 +435,70 @@ def get_market_data_service() -> MarketDataService:
     return _service
 
 
-def _build_service() -> MarketDataService:
+def _build_market_provider_adapter(name: str, cfg: AppConfig) -> MarketDataProvider:
+    """Instantiate one market data adapter by its config-key name.
+
+    Shared by the single "primary" provider (get_current_price/search_assets,
+    D12 §5.5 — never cascaded) and, when USE_CASCADE=true, every entry of the
+    full cascade list.
+    """
+    from app.services.market_data.providers.eodhd import EODHDProvider
     from app.services.market_data.providers.finnhub import FinnhubProvider
-    from app.services.market_data.providers.frankfurter import FrankfurterProvider
     from app.services.market_data.providers.twelve_data import TwelveDataProvider
+
+    if name == "eodhd":
+        api_key = os.environ.get("MARKET_DATA_EODHD_API_KEY", "")
+        if not api_key:
+            logger.warning("MARKET_DATA_EODHD_API_KEY not set — provider calls will fail.")
+        return EODHDProvider(
+            base_url=cfg.market_data.eodhd.base_url,
+            api_key=api_key,
+            daily_call_budget=cfg.market_data.eodhd.daily_call_budget,
+        )
+    if name == "finnhub":
+        api_key = os.environ.get("MARKET_DATA_FINNHUB_API_KEY", "")
+        if not api_key:
+            logger.warning("MARKET_DATA_FINNHUB_API_KEY not set — provider calls will fail.")
+        return FinnhubProvider(base_url=cfg.market_data.finnhub.base_url, api_key=api_key)
+
+    # "twelve_data" and any unrecognized name (schema already restricts the
+    # Literal to these three, so this is unreachable in practice).
+    api_key = os.environ.get("MARKET_DATA_TWELVE_DATA_API_KEY", "")
+    if not api_key:
+        logger.warning("MARKET_DATA_TWELVE_DATA_API_KEY not set — provider calls will fail.")
+    return TwelveDataProvider(base_url=cfg.market_data.twelve_data.base_url, api_key=api_key)
+
+
+def _build_service() -> MarketDataService:
+    from app.services.market_data.providers.frankfurter import FrankfurterProvider
 
     cfg = get_config()
 
     fx_provider = FrankfurterProvider(base_url=cfg.fx_data.frankfurter.base_url)
 
-    # Pre-cascade legacy path (USE_CASCADE=false) — only ever looks at the
-    # first entry of the cascade list and only knows twelve_data/finnhub.
-    # Retired once Changeset C04 Step 7 flips USE_CASCADE=true; a "eodhd"
-    # or unrecognized first entry here falls through to finnhub, same as
-    # before this changeset (single active provider, no cascade wiring yet).
-    if cfg.market_data.providers[0] == "twelve_data":
-        api_key = os.environ.get("MARKET_DATA_TWELVE_DATA_API_KEY", "")
-        if not api_key:
-            logger.warning("MARKET_DATA_TWELVE_DATA_API_KEY not set — provider calls will fail.")
-        market_provider: MarketDataProvider = TwelveDataProvider(
-            base_url=cfg.market_data.twelve_data.base_url,
-            api_key=api_key,
+    # The single "primary" provider — used by get_current_price/search_assets
+    # regardless of USE_CASCADE (D12 §5.5: search never cascades; on-demand
+    # current-price lookups aren't in D12's cascade scope either).
+    primary_name = cfg.market_data.providers[0]
+    market_provider = _build_market_provider_adapter(primary_name, cfg)
+
+    market_cascade: MarketDataCascade | None = None
+    fx_cascade: FxDataCascade | None = None
+    if _cascade_enabled():
+        market_cascade = MarketDataCascade(
+            [
+                (name, _build_market_provider_adapter(name, cfg))
+                for name in cfg.market_data.providers
+            ]
         )
-        provider_name = "twelve_data"
-    else:
-        api_key = os.environ.get("MARKET_DATA_FINNHUB_API_KEY", "")
-        if not api_key:
-            logger.warning("MARKET_DATA_FINNHUB_API_KEY not set — provider calls will fail.")
-        market_provider = FinnhubProvider(
-            base_url=cfg.market_data.finnhub.base_url,
-            api_key=api_key,
-        )
-        provider_name = "finnhub"
+        # v1 has a single FX provider (D12 §5.2); wrapped in the cascade
+        # anyway so a second one is a config change, not a code change.
+        fx_cascade = FxDataCascade([(name, fx_provider) for name in cfg.fx_data.providers])
 
     return MarketDataService(
         market_provider=market_provider,
         fx_provider=fx_provider,
-        market_provider_name=provider_name,
+        market_provider_name=primary_name,
+        market_cascade=market_cascade,
+        fx_cascade=fx_cascade,
     )
