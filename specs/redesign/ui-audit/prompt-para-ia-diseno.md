@@ -14,6 +14,8 @@ Eres mi diseñador/a UI/UX senior. Te adjunto un informe técnico completo (`inf
 
 **Contexto técnico que debes respetar en cualquier propuesta**: el frontend es TypeScript puro sobre Web Components nativos (Custom Elements + Shadow DOM), sin React/Vue/Angular y sin ninguna librería de UI ni de gráficos — todo el sistema visual se resuelve con custom properties CSS (design tokens) y HTML/CSS tabular. Cualquier propuesta de rediseño tiene que poder implementarse dentro de ese mismo sistema de tokens (o proponer una evolución razonable de él), no asumir un framework distinto ni una librería de componentes de terceros.
 
+**Control de versiones**: todo el trabajo de este rediseño (tokens nuevos, componentes, pantallas) debe implementarse sobre la rama `NvoDiseño`, creada a partir de `master`. No se debe trabajar directamente sobre `master` ni mezclar este trabajo con otras ramas o changesets en curso.
+
 ## Lo que necesito que hagas
 
 1. **Diagnóstico visual y de UX** a partir de las 10 capturas y del informe: identifica problemas de jerarquía visual, densidad de información, consistencia entre pantallas, accesibilidad de contraste (revisa en particular el tema oscuro, cuyas sombras usan el mismo `rgb(0 0 0 / …)` que el modo claro — ver §2.4 del informe) y cualquier inconsistencia que veas entre los 5 temas de color (§2.2).
