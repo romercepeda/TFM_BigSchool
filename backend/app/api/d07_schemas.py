@@ -42,6 +42,9 @@ class AnalysisReportSummary(BaseModel):
     id: UUID
     holding_id: UUID
     report_date: date | None
+    report_date_source: str
+    report_period_name: str | None
+    report_period_name_source: str
     provider: str
     model_version: str
     global_signal: str | None
@@ -59,6 +62,9 @@ class AnalysisReportDetail(BaseModel):
     uploaded_file_id: UUID | None
     analysis_job_id: UUID
     report_date: date | None
+    report_date_source: str
+    report_period_name: str | None
+    report_period_name_source: str
     provider: str
     model_version: str
     extracted_metrics: dict
@@ -66,3 +72,10 @@ class AnalysisReportDetail(BaseModel):
     global_signal: str | None
     confidence_notes: str | None
     created_at: datetime
+
+
+class AnalysisReportPatchRequest(BaseModel):
+    """Body for PATCH /ai-reports/{id} — Changeset C05 §7."""
+
+    report_date: date | None = None
+    report_period_name: str | None = None

@@ -3,15 +3,27 @@
   "title": "AIExtractionOutput",
   "description": "Structured output from the AI financial report analysis (Spec D07 §4.2)",
   "type": "object",
-  "required": ["report_date", "metrics", "executive_summary", "global_signal"],
+  "required": ["asset_match", "report_date", "metrics", "executive_summary", "global_signal"],
   "additionalProperties": false,
   "properties": {
+    "asset_match": {
+      "description": "true if the PDF's subject company matches the given Asset Context (ticker/name); false if the document is clearly about a different company",
+      "type": "boolean"
+    },
+    "asset_match_notes": {
+      "description": "Required when asset_match is false: which company the PDF actually appears to be about. Null when asset_match is true.",
+      "oneOf": [{"type": "string"}, {"type": "null"}]
+    },
     "report_date": {
       "description": "ISO 8601 date of the financial report, or null if not determinable",
       "oneOf": [
         {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
         {"type": "null"}
       ]
+    },
+    "report_period_name": {
+      "description": "Short label for the accounting period the report covers (e.g. 'Q1 2026', 'FY 2025', 'H1 2026'), or null if not determinable",
+      "oneOf": [{"type": "string"}, {"type": "null"}]
     },
     "metrics": {
       "type": "object",

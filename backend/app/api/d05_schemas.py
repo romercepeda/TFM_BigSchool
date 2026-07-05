@@ -44,6 +44,9 @@ class SnapshotOut(BaseModel):
     zone: str | None
     source: str
     created_at: datetime
+    # Report period name of the AnalysisReport that produced this value
+    # (Changeset C05 §8). Always None for source='scheduled_job'.
+    source_report_name: str | None = None
 
 
 class IndicatorSnapshotHistoryOut(BaseModel):

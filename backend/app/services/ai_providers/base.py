@@ -32,7 +32,10 @@ class ExtractedMetrics(BaseModel):
 
 
 class ExtractionOutput(BaseModel):
+    asset_match: bool = True
+    asset_match_notes: str | None = None
     report_date: str | None = None
+    report_period_name: str | None = None
     metrics: ExtractedMetrics
     executive_summary: str
     global_signal: Literal["bullish", "neutral", "bearish"] | None = None

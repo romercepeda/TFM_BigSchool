@@ -448,6 +448,20 @@ async def get_asset_indicator_history(
         for row in prices_result.scalars().all():
             close_prices[row.as_of_date] = row.close_price
 
+    # Resolve report_period_name for ai_analysis-sourced snapshots (C05 §8).
+    # source_ref stores AnalysisReport.id as a string; batched into one query.
+    report_names: dict[str, str | None] = {}
+    ai_refs = {s.source_ref for s in snapshots if s.source == "ai_analysis" and s.source_ref}
+    if ai_refs:
+        from app.db.models.ai_report import AnalysisReport
+
+        reports_result = await db.execute(
+            select(AnalysisReport.id, AnalysisReport.report_period_name).where(
+                AnalysisReport.id.in_([UUID(ref) for ref in ai_refs])
+            )
+        )
+        report_names = {str(report_id): name for report_id, name in reports_result.all()}
+
     result = []
     for i, snap in enumerate(snapshots):
         prev_snap = snapshots[i + 1] if i + 1 < len(snapshots) else None
@@ -458,6 +472,11 @@ async def get_asset_indicator_history(
             close_price=close_prices.get(snap.as_of_date),
             previous_value_numeric=prev_snap.value_numeric if prev_snap else None,
         )
+        source_report_name = (
+            report_names.get(snap.source_ref)
+            if snap.source == "ai_analysis" and snap.source_ref
+            else None
+        )
         result.append({
             "id": snap.id,
             "as_of_date": snap.as_of_date,
@@ -466,6 +485,7 @@ async def get_asset_indicator_history(
             "zone": zone,
             "source": snap.source,
             "created_at": snap.created_at,
+            "source_report_name": source_report_name,
         })
 
     return result

@@ -46,6 +46,52 @@ def _make_db_session() -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+# ── Report date / name resolution (Changeset C05 §5) ──────────────────────────
+
+_REPORT_PERIOD_NAME_MAX_LEN = 40
+
+
+def _resolve_report_date(
+    report_date_str: str | None, *, today: date, job_id: str,
+) -> tuple[date, str]:
+    """Resolve the as_of_date for a report and its provenance (C05 §5).
+
+    A missing, unparsable, or future-dated report_date falls back to today
+    (the processing date) rather than blocking the analysis — a future date
+    is never a legitimate fiscal reference point, so it is treated the same
+    as a null extraction.
+    """
+    if report_date_str:
+        try:
+            parsed = date.fromisoformat(report_date_str)
+        except ValueError:
+            logger.warning(
+                "Job %s: invalid report_date %r — using upload-date fallback.",
+                job_id, report_date_str,
+            )
+        else:
+            if parsed > today:
+                logger.warning(
+                    "Job %s: report_date %s is in the future — using upload-date fallback.",
+                    job_id, parsed,
+                )
+            else:
+                return parsed, "ai_extracted"
+    return today, "upload_fallback"
+
+
+def _resolve_report_period_name(raw_name: str | None) -> str | None:
+    """Trim/normalize the AI-extracted report period name (C05 §3).
+
+    Truncated defensively to the DB column length so an overly verbose AI
+    response never fails the insert.
+    """
+    if not raw_name:
+        return None
+    name = raw_name.strip()
+    return name[:_REPORT_PERIOD_NAME_MAX_LEN] if name else None
+
+
 # ── Core async analysis logic ─────────────────────────────────────────────────
 
 
@@ -138,21 +184,31 @@ async def _run_analysis(job_id: str) -> None:
 
         # Build AnalysisReport
         extracted = result.parsed_json  # type: ignore[index]
-        report_date_str = extracted.get("report_date")
-        report_date: date | None = None
-        if report_date_str:
-            try:
-                report_date = date.fromisoformat(report_date_str)
-            except ValueError:
-                logger.warning(
-                    "Job %s: invalid report_date %r — using None.", job_id, report_date_str
-                )
+
+        # Asset/file correspondence check (Changeset C05) — a mismatch is a
+        # deterministic content problem, not a transient failure, so it goes
+        # straight to failed without retrying and without creating a report.
+        if extracted.get("asset_match") is False:
+            notes = extracted.get("asset_match_notes")
+            detail = f" {notes}" if notes else ""
+            raise NonRetryableError(
+                f"The uploaded file does not appear to correspond to "
+                f"{asset_context['ticker']} ({asset_context['name']}).{detail}"
+            )
+        report_date, report_date_source = _resolve_report_date(
+            extracted.get("report_date"), today=now.date(), job_id=job_id,
+        )
+        report_period_name = _resolve_report_period_name(extracted.get("report_period_name"))
+        report_period_name_source = "ai_extracted" if report_period_name else "unset"
 
         report = AnalysisReport(
             holding_id=job.holding_id,
             uploaded_file_id=job.uploaded_file_id,
             analysis_job_id=job.id,
             report_date=report_date,
+            report_date_source=report_date_source,
+            report_period_name=report_period_name,
+            report_period_name_source=report_period_name_source,
             provider=provider_name,
             model_version=result.model_version,
             extracted_metrics=extracted.get("metrics", {}),
@@ -165,7 +221,7 @@ async def _run_analysis(job_id: str) -> None:
         await db.flush()  # assign report.id
 
         # Write IndicatorSnapshots for on_ai_analysis fundamentals
-        snap_date = report_date or now.date()
+        snap_date = report_date
         await _write_indicator_snapshots(
             db=db,
             asset_id=holding.asset_id,

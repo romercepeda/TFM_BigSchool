@@ -88,6 +88,9 @@ permissions:
   - code: analysis.delete
     name_key: "permission.analysis.delete.name"
     description_key: "permission.analysis.delete.description"
+  - code: analysis.edit
+    name_key: "permission.analysis.edit.name"
+    description_key: "permission.analysis.edit.description"
 
   # ── settings (across specs) ─────────────────────────────────────────────────
   - code: settings.view_own
@@ -170,6 +173,7 @@ roles:
       - price_level.delete
       - analysis.upload
       - analysis.view
+      - analysis.edit
       - analysis.delete
       - settings.view_own
       - settings.edit_own
@@ -213,6 +217,7 @@ roles:
       - price_level.delete
       - analysis.upload
       - analysis.view
+      - analysis.edit
       - analysis.delete
       - settings.view_own
       - settings.edit_own

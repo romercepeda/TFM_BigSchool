@@ -17,7 +17,10 @@ from app.services.ai_providers.base import AIProvider, ExtractionOutput, Extract
 
 
 _VALID_EXTRACTION = {
+    "asset_match": True,
+    "asset_match_notes": None,
     "report_date": "2024-03-31",
+    "report_period_name": "Q1 2024",
     "metrics": {
         "per": 18.5,
         "per_basis": "GAAP",
@@ -162,6 +165,67 @@ class TestSchemaValidation:
         }
         result = _parse(json.dumps(bad))
         assert result.parse_status == "schema_error"
+
+
+# ── Tests: asset_match (Changeset C05 — file/asset correspondence check) ─────
+
+
+class TestAssetMatch:
+    def test_matching_asset_parses_ok(self):
+        result = _parse(json.dumps(_VALID_EXTRACTION))
+        assert result.succeeded is True
+        assert result.parsed_json["asset_match"] is True
+
+    def test_mismatched_asset_still_parses_but_flagged_false(self):
+        mismatch = {
+            **_VALID_EXTRACTION,
+            "asset_match": False,
+            "asset_match_notes": "This document is a quarterly report for Microsoft Corporation.",
+            "metrics": {k: None for k in _VALID_EXTRACTION["metrics"]},
+        }
+        result = _parse(json.dumps(mismatch))
+        assert result.parse_status == "ok"
+        assert result.parsed_json["asset_match"] is False
+        assert "Microsoft" in result.parsed_json["asset_match_notes"]
+
+    def test_missing_asset_match_defaults_to_true(self):
+        # Backward compatibility: older/legacy responses without the field
+        # are treated as a match rather than blocking the pipeline.
+        legacy = dict(_VALID_EXTRACTION)
+        del legacy["asset_match"]
+        del legacy["asset_match_notes"]
+        output = ExtractionOutput.model_validate(legacy)
+        assert output.asset_match is True
+
+    def test_invalid_asset_match_type_fails(self):
+        bad = {**_VALID_EXTRACTION, "asset_match": "maybe"}
+        result = _parse(json.dumps(bad))
+        assert result.parse_status == "schema_error"
+
+
+# ── Tests: report_period_name (Changeset C05 §3) ──────────────────────────────
+
+
+class TestReportPeriodName:
+    def test_present_name_parses(self):
+        output = ExtractionOutput.model_validate(_VALID_EXTRACTION)
+        assert output.report_period_name == "Q1 2024"
+
+    def test_null_name_is_valid(self):
+        extraction = {**_VALID_EXTRACTION, "report_period_name": None}
+        output = ExtractionOutput.model_validate(extraction)
+        assert output.report_period_name is None
+
+    def test_missing_name_defaults_to_null(self):
+        legacy = dict(_VALID_EXTRACTION)
+        del legacy["report_period_name"]
+        output = ExtractionOutput.model_validate(legacy)
+        assert output.report_period_name is None
+
+    def test_non_standard_name_passes_through(self):
+        extraction = {**_VALID_EXTRACTION, "report_period_name": "Interim update — March 2026"}
+        output = ExtractionOutput.model_validate(extraction)
+        assert output.report_period_name == "Interim update — March 2026"
 
 
 # ── Tests: Pydantic ExtractionOutput model ────────────────────────────────────

@@ -43,6 +43,15 @@ _JOB_STATUS_ENUM = Enum(
     "queued", "running", "succeeded", "failed", name="analysis_job_status_enum"
 )
 _GLOBAL_SIGNAL_ENUM = Enum("bullish", "neutral", "bearish", name="global_signal_enum")
+# "legacy_unknown" exists only for the backfill of pre-C05 rows (Changeset C05 §4);
+# new rows only ever use the other three values.
+_REPORT_DATE_SOURCE_ENUM = Enum(
+    "ai_extracted", "upload_fallback", "user_edited", "legacy_unknown",
+    name="report_date_source_enum",
+)
+_REPORT_PERIOD_NAME_SOURCE_ENUM = Enum(
+    "ai_extracted", "user_edited", "unset", name="report_period_name_source_enum",
+)
 
 
 class UploadedFile(Base):
@@ -118,7 +127,11 @@ class AnalysisJob(Base):
 
 
 class AnalysisReport(Base):
-    """Immutable outcome of a successful analysis. User-deletable (§9.3)."""
+    """Outcome of a successful analysis. User-deletable (§9.3).
+
+    report_date and report_period_name are editable after creation via
+    PATCH /analyses/{id} (Changeset C05 §7) — no longer fully immutable.
+    """
 
     __tablename__ = "analysis_reports"
 
@@ -133,6 +146,13 @@ class AnalysisReport(Base):
         ForeignKey("analysis_jobs.id", ondelete="CASCADE"), nullable=False
     )
     report_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    report_date_source: Mapped[str] = mapped_column(
+        _REPORT_DATE_SOURCE_ENUM, nullable=False, default="ai_extracted"
+    )
+    report_period_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    report_period_name_source: Mapped[str] = mapped_column(
+        _REPORT_PERIOD_NAME_SOURCE_ENUM, nullable=False, default="unset"
+    )
     provider: Mapped[str] = mapped_column(_AI_PROVIDER_ENUM, nullable=False)
     model_version: Mapped[str] = mapped_column(String(64), nullable=False)
     extracted_metrics: Mapped[dict] = mapped_column(JSONB, nullable=False)

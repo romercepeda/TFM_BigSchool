@@ -121,7 +121,7 @@ Permissions are named `<domain>.<action>` where `<domain>` matches the domain sp
 | `lot` | `lot.create`, `lot.edit`, `lot.delete` | D03 |
 | `sale` | `sale.create`, `sale.edit`, `sale.delete` | D03 |
 | `price_level` | `price_level.view`, `price_level.create`, `price_level.edit`, `price_level.delete` | D06 |
-| `analysis` | `analysis.upload`, `analysis.view`, `analysis.delete` | D07 |
+| `analysis` | `analysis.upload`, `analysis.view`, `analysis.edit`, `analysis.delete` | D07 (edit: C05) |
 | `settings` | `settings.view_own`, `settings.edit_own` | (across specs) |
 | `user` | `user.list`, `user.view_any`, `user.change_own_password`, `user.change_any_password` | D01 |
 | `role` | `role.list`, `role.assign`, `role.revoke` | D11 (this spec) |

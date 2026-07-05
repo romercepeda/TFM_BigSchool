@@ -1,17 +1,19 @@
-"""AI Report Analysis API endpoints — Spec D07.
+"""AI Report Analysis API endpoints — Spec D07, Changeset C05.
 
 All write endpoints are nested under /portfolios/{pid}/holdings/{hid}/ to enforce
-portfolio ownership before the upload is accepted. Read/delete endpoints use a flat
-/ai-reports/{...} prefix with per-report ownership checks via UploadedFile.user_id.
+portfolio ownership before the upload is accepted. Read/edit/delete endpoints use a
+flat /ai-reports/{...} prefix with per-report ownership checks via UploadedFile.user_id.
 
 Endpoints:
     POST   /portfolios/{pid}/holdings/{hid}/ai-reports          — upload PDF, enqueue job
     GET    /portfolios/{pid}/holdings/{hid}/ai-reports          — list reports for holding
     GET    /ai-reports/jobs                                     — list jobs for current user
     GET    /ai-reports/{report_id}                              — get one report (full detail)
+    PATCH  /ai-reports/{report_id}                              — edit report_date/name (C05 §7)
     DELETE /ai-reports/{report_id}                              — delete report + cascade
 """
 
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -20,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.d07_schemas import (
     AnalysisJobResponse,
     AnalysisReportDetail,
+    AnalysisReportPatchRequest,
     AnalysisReportSummary,
     UploadReportResponse,
 )
@@ -40,6 +43,13 @@ _flat_router = APIRouter(prefix="/ai-reports", tags=["ai-reports"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _analysis_edit_enabled() -> bool:
+    """Changeset C05 §11 Step 6 — flipped to true now that the history-screen
+    editing UI (Step 6) ships alongside this endpoint. Set
+    ENABLE_ANALYSIS_EDIT=false to disable without a redeploy if needed."""
+    return os.environ.get("ENABLE_ANALYSIS_EDIT", "true").strip().lower() == "true"
 
 
 async def _require_holding(
@@ -183,6 +193,54 @@ async def get_report(
     if report is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Report not found.")
     return AnalysisReportDetail.model_validate(report)
+
+
+@_flat_router.patch(
+    "/{report_id}",
+    response_model=AnalysisReportDetail,
+    dependencies=[Depends(require_permission("analysis.edit"))],
+)
+async def patch_report(
+    report_id: UUID,
+    body: AnalysisReportPatchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AnalysisReportDetail:
+    """Edit report_date and/or report_period_name (Changeset C05 §7).
+
+    Updates the report row and, when the date changes, every derived
+    IndicatorSnapshot's as_of_date atomically. A date collision with another
+    analysis's snapshot is rejected with 409 (§7.1) and leaves nothing written.
+    """
+    if not _analysis_edit_enabled():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found.")
+
+    report = await ai_report_service.get_report(db, report_id, current_user.id)
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Report not found.")
+
+    if body.report_period_name is not None and len(body.report_period_name) > 40:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="report_period_name must be at most 40 characters.",
+        )
+
+    try:
+        updated = await ai_report_service.update_report_metadata(
+            db,
+            report,
+            new_report_date=body.report_date,
+            new_report_period_name=body.report_period_name,
+        )
+    except ai_report_service.DateCollisionError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Another analysis already exists with this date for this asset.",
+        ) from exc
+
+    await db.commit()
+    await db.refresh(updated)
+    return AnalysisReportDetail.model_validate(updated)
 
 
 @_flat_router.delete(

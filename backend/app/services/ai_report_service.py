@@ -290,6 +290,136 @@ async def get_jobs_for_user(
     return list(result.scalars().all())
 
 
+# ── Update report metadata (Changeset C05 §7) ─────────────────────────────────
+
+
+class DateCollisionError(Exception):
+    """Raised when a report-date edit collides with another analysis's
+    snapshot for the same (indicator, subject, date) — C05 §7.1."""
+
+    def __init__(self, conflicting_date):
+        self.conflicting_date = conflicting_date
+        super().__init__(f"Another analysis already has a report dated {conflicting_date}.")
+
+
+async def update_report_metadata(
+    db: AsyncSession,
+    report: AnalysisReport,
+    *,
+    new_report_date=None,
+    new_report_period_name: str | None = None,
+) -> AnalysisReport:
+    """Atomically update report_date/report_period_name and derived snapshots.
+
+    Only fields explicitly provided (non-None) are changed. Raises
+    DateCollisionError — with nothing written — if the new date collides
+    with a snapshot from a *different* analysis (C05 §7.1); the caller maps
+    this to HTTP 409.
+    """
+    if new_report_date is not None and new_report_date != report.report_date:
+        await _retarget_report_snapshots(db, report, new_report_date)
+        report.report_date = new_report_date
+        report.report_date_source = "user_edited"
+
+    if new_report_period_name is not None and new_report_period_name != report.report_period_name:
+        report.report_period_name = new_report_period_name
+        report.report_period_name_source = "user_edited"
+
+    await db.flush()
+    return report
+
+
+def plan_snapshot_retarget(
+    own_rows: list[IndicatorSnapshot],
+    existing_by_indicator: dict,
+    *,
+    report_id_str: str,
+    new_date,
+) -> list[tuple[IndicatorSnapshot, IndicatorSnapshot | None]]:
+    """Pure C05 §7.1 collision decision — no DB access, fully unit-testable.
+
+    Args:
+        own_rows: this report's own IndicatorSnapshot rows (any current date).
+        existing_by_indicator: {indicator_id: row-or-None} — whatever already
+            occupies `new_date` for that indicator, if anything.
+        report_id_str: str(report.id), to recognize "this same analysis".
+        new_date: the date being moved to (only used for the error message).
+
+    Returns:
+        [(row, consolidate_target_or_None), ...] where consolidate_target is
+        set when `row` must be deleted and its values merged onto an existing
+        row already at new_date owned by this same report (self-collision).
+
+    Raises:
+        DateCollisionError: an indicator's target date is held by a
+            *different* analysis. Nothing has been mutated at this point —
+            the caller applies the plan only after this returns cleanly.
+    """
+    plan: list[tuple[IndicatorSnapshot, IndicatorSnapshot | None]] = []
+    for row in own_rows:
+        existing = existing_by_indicator.get(row.indicator_id)
+
+        if existing is not None and existing.id != row.id and existing.source_ref != report_id_str:
+            raise DateCollisionError(new_date)
+
+        other_self_row = existing if (existing is not None and existing.id != row.id) else None
+        plan.append((row, other_self_row))
+    return plan
+
+
+async def _retarget_report_snapshots(
+    db: AsyncSession,
+    report: AnalysisReport,
+    new_date,
+) -> None:
+    """Move every IndicatorSnapshot owned by this report to new_date (C05 §7.1).
+
+    Fetches candidates in two batched queries, delegates the collision
+    decision to the pure `plan_snapshot_retarget`, then applies the plan:
+      - no existing row at new_date for that indicator -> move this row.
+      - existing row at new_date belongs to this same report (self-collision,
+        e.g. undoing a prior edit) -> consolidate onto it (D05 §5
+        unification rule) and drop the now-redundant row.
+      - existing row at new_date belongs to a *different* analysis -> abort
+        the whole edit with DateCollisionError, nothing written (all-or-nothing).
+    """
+    report_id_str = str(report.id)
+    own_rows_result = await db.execute(
+        select(IndicatorSnapshot).where(
+            IndicatorSnapshot.source == "ai_analysis",
+            IndicatorSnapshot.source_ref == report_id_str,
+        )
+    )
+    own_rows = list(own_rows_result.scalars().all())
+    if not own_rows:
+        return
+
+    indicator_ids = [row.indicator_id for row in own_rows]
+    subject_type = own_rows[0].subject_type
+    subject_id = own_rows[0].subject_id
+    existing_result = await db.execute(
+        select(IndicatorSnapshot).where(
+            IndicatorSnapshot.indicator_id.in_(indicator_ids),
+            IndicatorSnapshot.subject_type == subject_type,
+            IndicatorSnapshot.subject_id == subject_id,
+            IndicatorSnapshot.as_of_date == new_date,
+        )
+    )
+    existing_by_indicator = {row.indicator_id: row for row in existing_result.scalars().all()}
+
+    plan = plan_snapshot_retarget(
+        own_rows, existing_by_indicator, report_id_str=report_id_str, new_date=new_date,
+    )
+
+    for row, other_self_row in plan:
+        if other_self_row is None:
+            row.as_of_date = new_date
+        else:
+            other_self_row.value_numeric = row.value_numeric
+            other_self_row.value_text = row.value_text
+            await db.delete(row)
+
+
 # ── Delete report (§9.3) ──────────────────────────────────────────────────────
 
 
