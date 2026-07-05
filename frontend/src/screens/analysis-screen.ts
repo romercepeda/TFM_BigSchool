@@ -1,10 +1,15 @@
 import { BaseComponent } from '../components/common/base-component.js';
+import '../components/header-bar.js';
 import '../components/pdf-uploader.js';
 import { t } from '../i18n/i18n.js';
-import { listReports, getReport, deleteReport, getJobs } from '../api/analyses.js';
+import { listReports, getReport, deleteReport, patchAnalysis, getJobs } from '../api/analyses.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
+import { ApiError } from '../api/types.js';
 import type { AiReportSummary, AiReportDetail } from '../api/types.js';
+
+type EditField = 'date' | 'name';
+type FieldStatus = 'saving' | 'saved' | 'error';
 
 export class AnalysisScreen extends BaseComponent {
   private _portfolioId = '';
@@ -14,6 +19,11 @@ export class AnalysisScreen extends BaseComponent {
   private _expandedDetail: AiReportDetail | null = null;
   private _confirmDeleteId: string | null = null;
   private _error = '';
+
+  // Inline date/name editing (Changeset C05 §7)
+  private _editing: { id: string; field: EditField } | null = null;
+  private _fieldStatus: Record<string, FieldStatus> = {};
+  private _fieldError: Record<string, string> = {};
 
   // Job tracking state
   private _jobId: string | null = null;
@@ -39,8 +49,9 @@ export class AnalysisScreen extends BaseComponent {
   private async _load(): Promise<void> {
     try {
       this._reports = await listReports(this._portfolioId, this._holdingId);
-    } catch {
-      this._error = t('common.error.generic');
+    } catch (ex) {
+      console.error('Failed to load analysis history', ex);
+      this._error = t('analysis.history.load_error');
     }
     this._rerender();
   }
@@ -326,7 +337,21 @@ export class AnalysisScreen extends BaseComponent {
           font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold);
           color: #fff; white-space: nowrap; }
         .report-meta { flex: 1; min-width: 0; }
-        .report-date { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-1); }
+        .report-date, .report-name { font-size: var(--font-size-xs); color: var(--color-text-muted);
+          margin-bottom: var(--space-1); display: flex; align-items: center; gap: var(--space-1); }
+        .report-name { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+        .report-name--missing { color: var(--color-warning); font-style: italic; }
+        .warn-icon { color: var(--color-warning); cursor: help; font-size: var(--font-size-xs); }
+        .edit-icon-btn { border: none; background: transparent; color: var(--color-text-muted);
+          cursor: pointer; font-size: var(--font-size-xs); padding: 0 2px; opacity: 0.6; }
+        .edit-icon-btn:hover { opacity: 1; color: var(--color-accent); }
+        .edit-row { margin-bottom: var(--space-1); }
+        .edit-input { font-size: var(--font-size-xs); padding: 2px var(--space-2);
+          border: 1px solid var(--color-accent); border-radius: var(--radius-sm); }
+        .field-status { font-size: 10px; margin-left: var(--space-1); }
+        .field-status--saving { color: var(--color-text-muted); }
+        .field-status--saved { color: var(--color-success); }
+        .field-status--error { color: var(--color-danger); }
         .summary { font-size: var(--font-size-sm); color: var(--color-text-secondary);
           white-space: pre-wrap; margin-top: var(--space-2); line-height: 1.5; }
         .report-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
@@ -354,6 +379,7 @@ export class AnalysisScreen extends BaseComponent {
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-6);
           cursor: pointer; background: transparent; }
       </style>
+      <pi-header-bar></pi-header-bar>
       <div class="page">
         <h2>${t('analysis.title')}</h2>
         <pi-pdf-uploader id="uploader"></pi-pdf-uploader>
@@ -371,7 +397,8 @@ export class AnalysisScreen extends BaseComponent {
               <div class="report-header">
                 ${r.global_signal ? `<span class="signal-badge" style="background:${this._signalColor(r.global_signal)}">${this._signalLabel(r.global_signal)}</span>` : ''}
                 <div class="report-meta">
-                  ${r.report_date ? `<div class="report-date">${t('analysis.report_date')}: ${r.report_date}</div>` : ''}
+                  ${this._renderDateField(r)}
+                  ${this._renderNameField(r)}
                   ${r.executive_summary ? `<div class="summary">${r.executive_summary}</div>` : ''}
                   <div class="provider">${r.provider} · ${r.model_version}</div>
                 </div>
@@ -454,6 +481,8 @@ export class AnalysisScreen extends BaseComponent {
         void this._delete(id);
       });
     });
+
+    this._wireEditableFields();
   }
 
   private async _toggleExpand(id: string): Promise<void> {
@@ -471,6 +500,156 @@ export class AnalysisScreen extends BaseComponent {
       }
     }
     this._rerender();
+  }
+
+  // ── Inline date/name editing (Changeset C05 §7) ──────────────────────────────
+
+  private _fieldKey(id: string, field: EditField): string {
+    return `${id}:${field}`;
+  }
+
+  private _startEdit(id: string, field: EditField): void {
+    this._editing = { id, field };
+    delete this._fieldStatus[this._fieldKey(id, field)];
+    delete this._fieldError[this._fieldKey(id, field)];
+    this._rerender();
+  }
+
+  private _cancelEdit(): void {
+    this._editing = null;
+    this._rerender();
+  }
+
+  private async _commitEdit(id: string, field: EditField, rawValue: string): Promise<void> {
+    const report = this._reports.find((r) => r.id === id);
+    if (!report) {
+      this._editing = null;
+      this._rerender();
+      return;
+    }
+
+    let value = rawValue;
+    if (field === 'date') {
+      if (!value || value === report.report_date) {
+        this._editing = null;
+        this._rerender();
+        return;
+      }
+    } else {
+      value = value.trim().slice(0, 40);
+      if (value === (report.report_period_name ?? '')) {
+        this._editing = null;
+        this._rerender();
+        return;
+      }
+    }
+
+    const key = this._fieldKey(id, field);
+    this._editing = null;
+    this._fieldStatus[key] = 'saving';
+    delete this._fieldError[key];
+    this._rerender();
+
+    try {
+      const body = field === 'date' ? { report_date: value } : { report_period_name: value };
+      const updated = await patchAnalysis(id, body);
+      const idx = this._reports.findIndex((r) => r.id === id);
+      if (idx !== -1) this._reports[idx] = { ...this._reports[idx], ...updated };
+      this._fieldStatus[key] = 'saved';
+    } catch (ex) {
+      this._fieldStatus[key] = 'error';
+      this._fieldError[key] = ex instanceof ApiError && ex.status === 409
+        ? t('analysis.history.entry.date_collision_error')
+        : t('common.save_error');
+    }
+    this._rerender();
+  }
+
+  private _renderDateField(r: AiReportSummary): string {
+    const key = this._fieldKey(r.id, 'date');
+    const status = this._fieldStatus[key];
+    const isEditing = this._editing?.id === r.id && this._editing.field === 'date';
+    const showFallbackWarning = r.report_date_source === 'upload_fallback';
+
+    if (isEditing) {
+      return `
+        <div class="edit-row">
+          <input type="date" class="edit-input date-input" data-id="${r.id}" value="${r.report_date ?? ''}" />
+        </div>
+      `;
+    }
+
+    return `
+      <div class="report-date">
+        ${showFallbackWarning
+          ? `<span class="warn-icon" title="${t('analysis.history.entry.date_fallback_warning')}">⚠</span>`
+          : ''}
+        <span>${t('analysis.report_date')}: ${r.report_date ?? '—'}</span>
+        <button class="edit-icon-btn" data-id="${r.id}" data-field="date" title="${t('common.button.edit')}">✎</button>
+        ${this._renderFieldStatus(status, this._fieldError[key])}
+      </div>
+    `;
+  }
+
+  private _renderNameField(r: AiReportSummary): string {
+    const key = this._fieldKey(r.id, 'name');
+    const status = this._fieldStatus[key];
+    const isEditing = this._editing?.id === r.id && this._editing.field === 'name';
+    const isUnset = r.report_period_name_source === 'unset';
+
+    if (isEditing) {
+      return `
+        <div class="edit-row">
+          <input type="text" maxlength="40" class="edit-input name-input" data-id="${r.id}" value="${r.report_period_name ?? ''}" />
+        </div>
+      `;
+    }
+
+    return `
+      <div class="report-name${isUnset ? ' report-name--missing' : ''}">
+        <span>${r.report_period_name ?? t('analysis.history.entry.name_missing_warning')}</span>
+        <button class="edit-icon-btn" data-id="${r.id}" data-field="name" title="${t('common.button.edit')}">✎</button>
+        ${this._renderFieldStatus(status, this._fieldError[key])}
+      </div>
+    `;
+  }
+
+  private _renderFieldStatus(status: FieldStatus | undefined, error?: string): string {
+    if (status === 'saving') return `<span class="field-status field-status--saving">${t('common.saving')}</span>`;
+    if (status === 'saved') return `<span class="field-status field-status--saved">${t('common.saved')}</span>`;
+    if (status === 'error') return `<span class="field-status field-status--error">${error ?? t('common.save_error')}</span>`;
+    return '';
+  }
+
+  private _wireEditableFields(): void {
+    this.shadow.querySelectorAll('.edit-icon-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const el = btn as HTMLElement;
+        const id = el.dataset['id']!;
+        const field = el.dataset['field'] as EditField;
+        this._startEdit(id, field);
+      });
+    });
+
+    this.shadow.querySelectorAll<HTMLInputElement>('.date-input').forEach((input) => {
+      const id = input.dataset['id']!;
+      input.addEventListener('blur', () => void this._commitEdit(id, 'date', input.value));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') this._cancelEdit();
+      });
+      input.focus();
+    });
+
+    this.shadow.querySelectorAll<HTMLInputElement>('.name-input').forEach((input) => {
+      const id = input.dataset['id']!;
+      input.addEventListener('blur', () => void this._commitEdit(id, 'name', input.value));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') this._cancelEdit();
+      });
+      input.focus();
+    });
   }
 
   private async _delete(id: string): Promise<void> {

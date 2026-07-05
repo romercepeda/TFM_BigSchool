@@ -58,16 +58,24 @@ export class IndicatorCard extends BaseComponent {
       .filter((s) => s && s !== zoneMeaningKey)
       .join('\n\n');
 
-    // History: 2 previous snapshots
+    // History: 2 previous snapshots. Values sourced from an AI analysis get a
+    // native title= tooltip with the report's period name (C05 §8); values
+    // from the scheduled daily job never show one (there's no "report" behind them).
     const prevSnaps = snaps.slice(1);
     const historyHtml = prevSnaps.length > 0
       ? `<div class="history">
-          ${prevSnaps.map((s) => `
-            <div class="hist-item">
+          ${prevSnaps.map((s) => {
+            const tooltip = s.source === 'ai_analysis'
+              ? (s.source_report_name || t('indicator.card.tooltip.name_missing'))
+              : '';
+            const titleAttr = tooltip ? ` title="${tooltip}"` : '';
+            return `
+            <div class="hist-item"${titleAttr}>
               <div class="hist-date">${this._shortDate(s.as_of_date)}</div>
               <div class="hist-val" style="color:${zoneColor[s.zone ?? ''] ?? 'var(--color-text-muted)'}">${this._displayValue(ind, s)}</div>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
          </div>`
       : '';
 
@@ -119,6 +127,7 @@ export class IndicatorCard extends BaseComponent {
           padding-top: var(--space-2); border-top: 1px solid var(--color-border);
         }
         .hist-item { display: flex; flex-direction: column; gap: 1px; }
+        .hist-item[title] { cursor: help; }
         .hist-date { font-size: 10px; color: var(--color-text-muted); }
         .hist-val  { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
       </style>

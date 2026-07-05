@@ -1,4 +1,4 @@
-import { get, del } from './client.js';
+import { get, patch, del } from './client.js';
 import type { AiReportSummary, AiReportDetail, Notification, UploadReportResponse } from './types.js';
 
 const BASE_URL: string = import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
@@ -34,6 +34,11 @@ export const getReport = (reportId: string) =>
 
 export const deleteReport = (reportId: string) =>
   del<void>(`/ai-reports/${reportId}`);
+
+export const patchAnalysis = (
+  reportId: string,
+  body: { report_date?: string; report_period_name?: string },
+) => patch<AiReportDetail>(`/ai-reports/${reportId}`, body);
 
 export const getNotifications = () =>
   get<Notification[]>('/ai-reports/jobs?status_filter=queued,running');

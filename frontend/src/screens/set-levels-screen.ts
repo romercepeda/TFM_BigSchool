@@ -1,4 +1,5 @@
 import { BaseComponent } from '../components/common/base-component.js';
+import '../components/header-bar.js';
 import '../components/price-level-form.js';
 import { t } from '../i18n/i18n.js';
 import { listPriceLevels, deletePriceLevel } from '../api/price-levels.js';
@@ -38,6 +39,7 @@ export class SetLevelsScreen extends BaseComponent {
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-4); }
       </style>
+      <pi-header-bar></pi-header-bar>
       <div class="page">
         <h2>${t('set_levels.title')}</h2>
         <pi-price-level-form id="form"></pi-price-level-form>

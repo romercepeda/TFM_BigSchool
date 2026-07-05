@@ -1,4 +1,5 @@
 import { BaseComponent } from '../components/common/base-component.js';
+import '../components/header-bar.js';
 import { t } from '../i18n/i18n.js';
 import { listLots, listSales } from '../api/holdings.js';
 import { navigate } from '../router/router.js';
@@ -39,6 +40,7 @@ export class HistoryScreen extends BaseComponent {
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-6); }
       </style>
+      <pi-header-bar></pi-header-bar>
       <div class="page">
         <h2>${t('history.title')}</h2>
         <h3>${t('history.lots')}</h3>

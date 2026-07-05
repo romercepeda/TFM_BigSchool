@@ -200,6 +200,7 @@ export interface IndicatorSnapshot {
   zone: string | null;
   source: string;
   created_at: string;
+  source_report_name: string | null;
 }
 
 export interface IndicatorSnapshotHistory {
@@ -226,10 +227,16 @@ export interface PriceLevel {
 
 // ── AI Analysis ───────────────────────────────────────────────────────────────
 
+export type ReportDateSource = 'ai_extracted' | 'upload_fallback' | 'user_edited' | 'legacy_unknown';
+export type ReportPeriodNameSource = 'ai_extracted' | 'user_edited' | 'unset';
+
 export interface AiReportSummary {
   id: string;
   holding_id: string;
   report_date: string | null;
+  report_date_source: ReportDateSource;
+  report_period_name: string | null;
+  report_period_name_source: ReportPeriodNameSource;
   provider: string;
   model_version: string;
   global_signal: 'bullish' | 'neutral' | 'bearish' | null;
