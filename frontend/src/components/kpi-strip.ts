@@ -1,58 +1,57 @@
 import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
-import { formatCurrency, formatPercent } from '../utils/format.js';
-import type { PortfolioKpis } from '../api/types.js';
+
+// Portfolio performance KPIs (TWR/CAGR/Max drawdown/Volatility/Sharpe) are not
+// computed yet (C07 §6, §8) — this strip shows an honest pending state instead
+// of fabricating values. Wire real figures here once the daily close job
+// calculates them.
+const KPI_LABEL_KEYS = [
+  'screen.dashboard.kpi.twr',
+  'screen.dashboard.kpi.cagr',
+  'screen.dashboard.kpi.max_drawdown',
+  'screen.dashboard.kpi.volatility',
+  'screen.dashboard.kpi.sharpe',
+] as const;
 
 export class KpiStrip extends BaseComponent {
-  private _kpis: PortfolioKpis | null = null;
-
-  set kpis(value: PortfolioKpis | null) {
-    this._kpis = value;
-    if (this.shadow) this.shadow.innerHTML = this.render();
-  }
-
   protected render(): string {
-    const k = this._kpis;
-    if (!k) return '<style>:host{display:block}</style><div></div>';
-
-    const gainColor = k.total_gain_loss >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
     return `
       <style>
         :host { display: block; }
+        :host { display: block; margin-bottom: var(--space-6); }
+        .section-label {
+          font-size: var(--font-size-xs); color: var(--color-text-muted);
+          text-transform: uppercase; letter-spacing: 0.05em;
+          padding: var(--space-3) var(--space-4) 0;
+          border: 1px solid var(--color-border); border-bottom: none;
+          border-radius: var(--radius-md) var(--radius-md) 0 0;
+          background: var(--color-bg-secondary);
+        }
         .strip {
           display: flex; gap: var(--space-4); flex-wrap: wrap;
-          padding: var(--space-3) var(--space-4);
+          padding: var(--space-2) var(--space-4) var(--space-3);
           background: var(--color-bg-secondary);
-          border-bottom: 1px solid var(--color-border);
+          border: 1px solid var(--color-border); border-top: none;
+          border-radius: 0 0 var(--radius-md) var(--radius-md);
         }
-        .kpi { display: flex; flex-direction: column; gap: 2px; }
+        .kpi { display: flex; flex-direction: column; gap: 2px; opacity: 0.7; }
         .label { font-size: var(--font-size-xs); color: var(--color-text-muted); }
-        .value { font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); }
+        .value {
+          font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
+          font-size: var(--font-size-base); font-weight: var(--font-weight-semibold);
+          color: var(--color-text-secondary);
+        }
+        .hint { font-size: 10px; color: var(--color-text-muted); font-style: italic; }
       </style>
+      <div class="section-label">${t('screen.dashboard.kpi.section')}</div>
       <div class="strip">
-        <div class="kpi">
-          <span class="label">${t('kpi.invested')}</span>
-          <span class="value">${formatCurrency(k.total_invested, k.base_currency)}</span>
-        </div>
-        <div class="kpi">
-          <span class="label">${t('kpi.current_value')}</span>
-          <span class="value">${formatCurrency(k.current_value, k.base_currency)}</span>
-        </div>
-        <div class="kpi">
-          <span class="label">${t('kpi.gain_loss')}</span>
-          <span class="value" style="color:${gainColor}">
-            ${formatCurrency(k.total_gain_loss, k.base_currency)}
-            (${formatPercent(k.total_gain_loss_pct)})
-          </span>
-        </div>
-        <div class="kpi">
-          <span class="label">${t('kpi.unrealized')}</span>
-          <span class="value">${formatCurrency(k.unrealized_gain_loss, k.base_currency)}</span>
-        </div>
-        <div class="kpi">
-          <span class="label">${t('kpi.realized')}</span>
-          <span class="value">${formatCurrency(k.realized_gain_loss, k.base_currency)}</span>
-        </div>
+        ${KPI_LABEL_KEYS.map((labelKey) => `
+          <div class="kpi">
+            <span class="label">${t(labelKey)}</span>
+            <span class="value">${t('screen.dashboard.kpi.pending')}</span>
+            <span class="hint">${t('screen.dashboard.kpi.pending_hint')}</span>
+          </div>
+        `).join('')}
       </div>
     `;
   }

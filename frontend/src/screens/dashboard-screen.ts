@@ -1,5 +1,6 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
+import '../components/kpi-strip.js';
 import { t } from '../i18n/i18n.js';
 import { getPortfolio, updatePortfolio, archivePortfolio } from '../api/portfolios.js';
 import { listHoldings } from '../api/holdings.js';
@@ -125,6 +126,7 @@ export class DashboardScreen extends BaseComponent {
         </div>
         <div class="portfolio-meta">${p?.base_currency ?? ''} · ${p?.status ?? ''}</div>
       </div>
+      <pi-kpi-strip></pi-kpi-strip>
       <div class="actions">
         <button class="btn" id="add-btn">${t('screen.dashboard.add_asset')}</button>
         <button class="btn-outline" id="alerts-btn">${t('screen.dashboard.alerts')}</button>
