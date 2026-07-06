@@ -133,12 +133,12 @@ export class IndicatorCard extends BaseComponent {
       </style>
       <div class="card">
         <div class="name-row">
-          <div class="name">${ind.name}</div>
+          <div class="name">${t(ind.name_key)}</div>
           ${fullTooltip ? `<div class="tip-icon" id="tip-icon">?</div>` : ''}
         </div>
         <div class="value" style="color:${zc}">${displayValue}</div>
         ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
-        ${current?.zone ? `<div class="zone" style="color:${zc}">${t('indicator.zone.' + current.zone, { zone: current.zone })}</div>` : ''}
+        ${current?.zone ? `<div class="zone" style="color:${zc}">${t('zone.' + current.zone)}</div>` : ''}
         ${historyHtml}
         ${fullTooltip ? `<div class="tip-box" id="tip-box">${fullTooltip}</div>` : ''}
       </div>
