@@ -1,0 +1,177 @@
+/* ============================================================================
+   Terminal Premium — tema para Portfolio IA
+   Dirección visual "1c". Casi-negro + oro discreto, cifras monoespaciadas.
+   Modo oscuro = principal; incluye variante clara de acompañamiento.
+
+   Sigue el mismo patrón que dark.css / ocean.css: solo se sobrescriben
+   tokens; todo el espaciado y la escala tipográfica siguen viniendo de
+   tokens.css. Se añaden algunos tokens NUEVOS (fuente mono, zonas de
+   indicador, elevación por tema) — ver notas al final.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   TOKENS NUEVOS A AÑADIR EN tokens.css (:root) — comunes a todos los temas.
+   Se dejan aquí documentados; muévelos a tokens.css para que existan siempre.
+   --------------------------------------------------------------------------- */
+:root {
+  /* Fuente monoespaciada para cifras, símbolos y datos tabulares.
+     Cárgala en index.html:
+     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"> */
+  --font-family-display: 'Space Grotesk', system-ui, sans-serif;   /* títulos / UI */
+  --font-family-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace; /* cifras */
+
+  /* Elevación tokenizada POR TEMA (resuelve §2.4 del informe:
+     hoy las sombras usan el mismo rgb(0 0 0 /…) en claro y oscuro).
+     En claro son sombras; en oscuro se convierten en realces de borde. */
+  --elevation-1: var(--shadow-sm);
+  --elevation-2: var(--shadow-md);
+  --elevation-3: var(--shadow-lg);
+
+  /* Zonas de indicador — SEMÁNTICAS + símbolo para daltonismo.
+     Cada zona lleva color de texto, fondo tenue, borde y un glifo. */
+  --zone-positive:        var(--color-success);
+  --zone-positive-bg:     var(--color-success-light);
+  --zone-positive-border: var(--color-success);
+  --zone-positive-glyph:  "\25B2";   /* ▲ */
+
+  --zone-neutral:         var(--color-warning);
+  --zone-neutral-bg:      var(--color-warning-light);
+  --zone-neutral-border:  var(--color-warning);
+  --zone-neutral-glyph:   "\25CF";   /* ● */
+
+  --zone-attention:        var(--color-danger);
+  --zone-attention-bg:     var(--color-danger-light);
+  --zone-attention-border: var(--color-danger);
+  --zone-attention-glyph:  "\25BC";  /* ▼ */
+}
+
+/* ===========================================================================
+   TERMINAL — OSCURO (principal)
+   =========================================================================== */
+[data-theme="terminal"] {
+  /* Backgrounds */
+  --color-bg-primary:   #08090b;   /* lienzo casi-negro */
+  --color-bg-secondary: #101318;   /* nav, cabeceras */
+  --color-bg-surface:   #101318;   /* tarjetas/celdas sobre líneas */
+
+  /* Text */
+  --color-text-primary:   #e7e9ed;
+  --color-text-secondary: #99a0ab;
+  --color-text-muted:     #5c6472;
+
+  /* Accent — oro discreto */
+  --color-accent:       #c9a45c;
+  --color-accent-hover: #d9b876;
+  --color-accent-light: #2a2412;
+
+  /* Danger / Success / Warning — calibrados para AA sobre #08090b */
+  --color-danger:        #e46a6a;
+  --color-danger-light:  #2a1518;
+  --color-success:       #4fbf87;
+  --color-success-light: #10261b;
+  --color-warning:       #c9a45c;
+  --color-warning-light: #241f10;
+
+  /* Borders — líneas de rejilla del "terminal" */
+  --color-border:       #1d222b;
+  --color-border-focus: #c9a45c;
+
+  /* Tipografía */
+  --font-family-sans: var(--font-family-display);
+
+  /* Elevación: en oscuro NO usamos sombra negra (invisible); usamos
+     un realce sutil de borde + una sombra proyectada muy suave. */
+  --elevation-1: 0 0 0 1px #1d222b;
+  --elevation-2: 0 8px 20px -12px rgb(0 0 0 / 0.7), 0 0 0 1px #1d222b;
+  --elevation-3: 0 24px 50px -24px rgb(0 0 0 / 0.75), 0 0 0 1px #1d222b;
+
+  /* Zonas */
+  --zone-positive-bg:     #10261b;
+  --zone-positive-border: #24402e;
+  --zone-neutral-bg:      #241f10;
+  --zone-neutral-border:  #3a3418;
+  --zone-attention-bg:    #2a1518;
+  --zone-attention-border:#45231f;
+}
+
+/* ===========================================================================
+   TERMINAL — CLARO (acompañamiento)
+   =========================================================================== */
+[data-theme="terminal-light"] {
+  /* Backgrounds */
+  --color-bg-primary:   #f5f5f2;   /* papel neutro */
+  --color-bg-secondary: #ffffff;
+  --color-bg-surface:   #ffffff;
+
+  /* Text */
+  --color-text-primary:   #14161a;
+  --color-text-secondary: #565b64;
+  --color-text-muted:     #8b909a;
+
+  /* Accent — oro más profundo para contraste sobre claro */
+  --color-accent:       #9a7930;
+  --color-accent-hover: #856827;
+  --color-accent-light: #f2ebd8;
+
+  /* Danger / Success / Warning — AA sobre #f5f5f2 */
+  --color-danger:        #b23b3b;
+  --color-danger-light:  #f6e4e4;
+  --color-success:       #1f7a4d;
+  --color-success-light: #e2f1e8;
+  --color-warning:       #9a7930;
+  --color-warning-light: #f2ebd8;
+
+  /* Borders */
+  --color-border:       #e7e7e2;
+  --color-border-focus: #9a7930;
+
+  /* Tipografía */
+  --font-family-sans: var(--font-family-display);
+
+  /* Elevación: sombras reales, tenues y cálidas */
+  --elevation-1: 0 1px 2px 0 rgb(40 40 30 / 0.06);
+  --elevation-2: 0 4px 10px -4px rgb(40 40 30 / 0.12);
+  --elevation-3: 0 24px 50px -24px rgb(40 40 30 / 0.26);
+
+  /* Zonas */
+  --zone-positive-bg:     #e2f1e8;
+  --zone-positive-border: #bfe0cc;
+  --zone-neutral-bg:      #f2ebd8;
+  --zone-neutral-border:  #e2d5b3;
+  --zone-attention-bg:    #f6e4e4;
+  --zone-attention-border:#e5c3c3;
+}
+
+/* ============================================================================
+   NOTAS DE IMPLEMENTACIÓN (para la rama NvoDiseño)
+
+   1. FUENTES: añade el <link> de Google Fonts indicado arriba en index.html
+      (Space Grotesk + JetBrains Mono). Alternativa self-hosted vía @font-face
+      si no quieres depender de la CDN.
+
+   2. TOKENS NUEVOS: mueve el bloque :root de este archivo (font-family-mono,
+      elevation-*, zone-*) a tokens.css para que existan en TODOS los temas,
+      no solo en terminal. Los demás temas heredarán valores por defecto
+      correctos porque las zonas se derivan de success/warning/danger.
+
+   3. CIFRAS MONO: aplica font-family:var(--font-family-mono) +
+      font-variant-numeric:tabular-nums a todo dato numérico (valor de cartera,
+      P&L, precios, unidades, métricas). Es lo que da el carácter "terminal".
+
+   4. ELEVACIÓN: sustituye los usos directos de --shadow-sm/md/lg en los
+      componentes por --elevation-1/2/3. Así el modo oscuro deja de usar
+      sombras negras invisibles (§2.4).
+
+   5. ZONAS DE INDICADOR (daltonismo): además del color, renderiza SIEMPRE el
+      glifo. Patrón sugerido para la píldora de señal:
+         .signal { border:1px solid var(--zone-neutral-border);
+                   color:var(--zone-neutral); background:var(--zone-neutral-bg); }
+         .signal[data-zone="positive"]  { color:var(--zone-positive);  border-color:var(--zone-positive-border);  background:var(--zone-positive-bg); }
+         .signal[data-zone="attention"] { color:var(--zone-attention); border-color:var(--zone-attention-border); background:var(--zone-attention-bg); }
+         .signal::before { content: var(--zone-neutral-glyph); }
+         .signal[data-zone="positive"]::before  { content: var(--zone-positive-glyph); }
+         .signal[data-zone="attention"]::before { content: var(--zone-attention-glyph); }
+
+   6. THEME PICKER: añade "terminal" y "terminal-light" a app-config.ts junto a
+      los temas existentes (Por defecto, Pastel, Oscuro, Ocean, Forest).
+   ============================================================================ */

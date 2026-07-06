@@ -1,0 +1,32 @@
+{
+  "//": "C07 · Claves i18n a AÑADIR/CORREGIR en frontend/src/i18n/locales/es.json. Fusiona estas claves con el archivo existente (no reemplaces el archivo entero). Replica las mismas claves en en.json con su traducción al inglés.",
+
+  "//_nombres_indicador": "FIX §8: name_key nunca resuelto → hoy se ven en inglés/cru­do. Añadir estos nombres.",
+  "indicator.ma_200.name": "Media Móvil 200",
+  "indicator.ma_50_200_cross.name": "Cruce MM 50/200",
+  "indicator.rsi_14.name": "RSI (14)",
+  "indicator.macd.name": "MACD",
+  "indicator.rvol.name": "Volumen Relativo",
+  "indicator.per.name": "PER",
+  "indicator.roe.name": "ROE",
+  "indicator.debt_ebitda.name": "Deuda / EBITDA",
+  "indicator.revenue_growth_yoy.name": "Crecimiento Ingresos",
+  "indicator.analyst_sentiment.name": "Sentimiento Analistas",
+  "indicator.twr.name": "Rentabilidad total",
+  "indicator.cagr.name": "CAGR",
+  "indicator.max_drawdown.name": "Máxima caída",
+  "indicator.volatility.name": "Volatilidad",
+  "indicator.sharpe.name": "Ratio Sharpe",
+
+  "//_zona_label": "FIX §8: la tarjeta renderiza `indicator.zone.<zone>` que NO existe como etiqueta (solo existe `indicator.zone.<zone>.meaning`). Debe usar `zone.<zone>` (ya existe). Estas claves ya están en es.json y se dejan aquí solo como referencia: zone.positive=Positivo, zone.neutral=Neutral, zone.attention=Atención, zone.unknown='Sin datos'.",
+
+  "//_historico_indicador": "NUEVO C07: etiquetas para el histórico por indicador (valor actual + hasta 2 lecturas anteriores).",
+  "indicator.history.title": "Histórico",
+  "indicator.history.empty": "Sin lecturas anteriores",
+  "indicator.history.previous": "Anterior",
+
+  "//_kpis_ghost": "NUEVO C07: estado 'aún no calculado' para los KPIs de cartera (TWR/CAGR/Drawdown/Volatilidad/Sharpe) que están catalogados pero no se calculan.",
+  "screen.dashboard.kpi.pending": "—",
+  "screen.dashboard.kpi.pending_hint": "Se calculará al cierre diario",
+  "screen.dashboard.kpi.section": "Rendimiento de cartera"
+}
