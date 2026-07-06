@@ -36,47 +36,45 @@ export class IndicatorCard extends BaseComponent {
 
     const snaps = this._snapshots;
     const current = snaps[0] ?? null;
-
-    const zoneColor: Record<string, string> = {
-      overbought: 'var(--color-danger)',
-      bullish:    'var(--color-success)',
-      bearish:    'var(--color-danger)',
-      neutral:    'var(--color-text-muted)',
-      positive:   'var(--color-success)',
-      attention:  'var(--color-danger)',
-    };
-    const zc = zoneColor[current?.zone ?? ''] ?? 'var(--color-text-primary)';
     const displayValue = current ? this._displayValue(ind, current) : '—';
+    const zone = current?.zone ?? null;
 
     // Tooltip content
     const tooltipKey = `indicator.${ind.code}.tooltip`;
     const tooltipDesc = t(tooltipKey);
     const tooltipText = tooltipDesc !== tooltipKey ? tooltipDesc : t(`indicator.${ind.code}.description`);
-    const zoneMeaningKey = current?.zone ? `indicator.zone.${current.zone}.meaning` : '';
+    const zoneMeaningKey = zone ? `indicator.zone.${zone}.meaning` : '';
     const zoneMeaning = zoneMeaningKey ? t(zoneMeaningKey) : '';
     const fullTooltip = [tooltipText, zoneMeaning]
       .filter((s) => s && s !== zoneMeaningKey)
       .join('\n\n');
 
-    // History: 2 previous snapshots. Values sourced from an AI analysis get a
+    // Zone pill: color + glyph (never color alone — colorblind accessibility, C07 §8).
+    const zonePill = current
+      ? `<div class="signal" data-zone="${zone ?? 'unknown'}">${t('zone.' + (zone ?? 'unknown'))}</div>`
+      : '';
+
+    // History: up to 2 previous snapshots. Values sourced from an AI analysis get a
     // native title= tooltip with the report's period name (C05 §8); values
     // from the scheduled daily job never show one (there's no "report" behind them).
     const prevSnaps = snaps.slice(1);
-    const historyHtml = prevSnaps.length > 0
-      ? `<div class="history">
-          ${prevSnaps.map((s) => {
-            const tooltip = s.source === 'ai_analysis'
-              ? (s.source_report_name || t('indicator.card.tooltip.name_missing'))
-              : '';
-            const titleAttr = tooltip ? ` title="${tooltip}"` : '';
-            return `
-            <div class="hist-item"${titleAttr}>
-              <div class="hist-date">${this._shortDate(s.as_of_date)}</div>
-              <div class="hist-val" style="color:${zoneColor[s.zone ?? ''] ?? 'var(--color-text-muted)'}">${this._displayValue(ind, s)}</div>
-            </div>
-          `;
-          }).join('')}
-         </div>`
+    const historyHtml = current
+      ? prevSnaps.length > 0
+        ? `<div class="history">
+            ${prevSnaps.map((s) => {
+              const tooltip = s.source === 'ai_analysis'
+                ? (s.source_report_name || t('indicator.card.tooltip.name_missing'))
+                : '';
+              const titleAttr = tooltip ? ` title="${tooltip}"` : '';
+              return `
+              <div class="hist-item"${titleAttr}>
+                <div class="hist-date">${this._shortDate(s.as_of_date)}</div>
+                <div class="hist-val">${this._displayValue(ind, s)}</div>
+              </div>
+            `;
+            }).join('')}
+           </div>`
+        : `<div class="history history--empty">${t('indicator.history.empty')}</div>`
       : '';
 
     return `
@@ -116,29 +114,58 @@ export class IndicatorCard extends BaseComponent {
           font-size: var(--font-size-xs); color: var(--color-text-primary);
           white-space: pre-line; line-height: 1.45;
           z-index: 9999;
-          box-shadow: 0 4px 12px rgba(0,0,0,.18);
+          box-shadow: var(--elevation-2);
           pointer-events: none;
         }
-        .value { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); }
-        .zone  { font-size: var(--font-size-xs); margin-top: 2px; }
+        .value {
+          font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
+          font-size: var(--font-size-lg); font-weight: var(--font-weight-bold);
+          color: var(--color-text-primary);
+        }
         .unit  { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .signal {
+          display: inline-flex; align-items: center; gap: 4px;
+          margin-top: var(--space-1);
+          border: 1px solid var(--color-border); border-radius: var(--radius-full);
+          padding: 1px var(--space-2);
+          font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
+          color: var(--color-text-muted); background: transparent;
+        }
+        .signal::before { content: ''; }
+        .signal[data-zone="positive"] {
+          color: var(--zone-positive); border-color: var(--zone-positive-border); background: var(--zone-positive-bg);
+        }
+        .signal[data-zone="positive"]::before { content: var(--zone-positive-glyph); }
+        .signal[data-zone="neutral"] {
+          color: var(--zone-neutral); border-color: var(--zone-neutral-border); background: var(--zone-neutral-bg);
+        }
+        .signal[data-zone="neutral"]::before { content: var(--zone-neutral-glyph); }
+        .signal[data-zone="attention"] {
+          color: var(--zone-attention); border-color: var(--zone-attention-border); background: var(--zone-attention-bg);
+        }
+        .signal[data-zone="attention"]::before { content: var(--zone-attention-glyph); }
         .history {
           display: flex; gap: var(--space-3); margin-top: var(--space-2);
           padding-top: var(--space-2); border-top: 1px solid var(--color-border);
         }
+        .history--empty { font-size: var(--font-size-xs); color: var(--color-text-muted); font-style: italic; }
         .hist-item { display: flex; flex-direction: column; gap: 1px; }
         .hist-item[title] { cursor: help; }
         .hist-date { font-size: 10px; color: var(--color-text-muted); }
-        .hist-val  { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+        .hist-val  {
+          font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
+          font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
+          color: var(--color-text-secondary);
+        }
       </style>
       <div class="card">
         <div class="name-row">
           <div class="name">${t(ind.name_key)}</div>
           ${fullTooltip ? `<div class="tip-icon" id="tip-icon">?</div>` : ''}
         </div>
-        <div class="value" style="color:${zc}">${displayValue}</div>
+        <div class="value">${displayValue}</div>
         ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
-        ${current?.zone ? `<div class="zone" style="color:${zc}">${t('zone.' + current.zone)}</div>` : ''}
+        ${zonePill}
         ${historyHtml}
         ${fullTooltip ? `<div class="tip-box" id="tip-box">${fullTooltip}</div>` : ''}
       </div>

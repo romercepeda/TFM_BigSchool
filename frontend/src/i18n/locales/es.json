@@ -265,6 +265,9 @@
   "analysis.history.entry.date_collision_error": "Ya existe un análisis con esta fecha para este activo. Elige otra fecha o elimina el análisis existente primero.",
 
   "indicator.card.tooltip.name_missing": "Sin nombre — edítalo en Historial de análisis",
+  "indicator.history.title": "Histórico",
+  "indicator.history.empty": "Sin lecturas anteriores",
+  "indicator.history.previous": "Anterior",
 
   "screen.ai_report.upload": "Subir informe",
   "screen.ai_report.upload.hint": "Sube un informe financiero en PDF para análisis con IA (máx. {max_mb} MB).",

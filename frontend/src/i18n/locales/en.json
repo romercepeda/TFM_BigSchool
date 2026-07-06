@@ -265,6 +265,9 @@
   "analysis.history.entry.date_collision_error": "An analysis with this date already exists for this asset. Choose another date or delete the existing analysis first.",
 
   "indicator.card.tooltip.name_missing": "No name — edit it in Analysis history",
+  "indicator.history.title": "History",
+  "indicator.history.empty": "No previous readings",
+  "indicator.history.previous": "Previous",
 
   "screen.ai_report.upload": "Upload report",
   "screen.ai_report.upload.hint": "Upload a financial report PDF for AI analysis (max. {max_mb} MB).",
