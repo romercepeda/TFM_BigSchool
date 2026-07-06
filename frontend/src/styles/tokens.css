@@ -36,6 +36,8 @@
 
   /* Typography */
   --font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
   --font-size-xs:   0.75rem;
   --font-size-sm:   0.875rem;
   --font-size-base: 1rem;
@@ -63,6 +65,27 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Elevation — tokenized per theme (see terminal.css); other themes just alias shadows */
+  --elevation-1: var(--shadow-sm);
+  --elevation-2: var(--shadow-md);
+  --elevation-3: var(--shadow-lg);
+
+  /* Indicator zones — semantic + colorblind-safe glyph */
+  --zone-positive:        var(--color-success);
+  --zone-positive-bg:     var(--color-success-light);
+  --zone-positive-border: var(--color-success);
+  --zone-positive-glyph:  "\25B2";
+
+  --zone-neutral:         var(--color-warning);
+  --zone-neutral-bg:      var(--color-warning-light);
+  --zone-neutral-border:  var(--color-warning);
+  --zone-neutral-glyph:   "\25CF";
+
+  --zone-attention:        var(--color-danger);
+  --zone-attention-bg:     var(--color-danger-light);
+  --zone-attention-border: var(--color-danger);
+  --zone-attention-glyph:  "\25BC";
 
   /* Z-index */
   --z-dropdown: 100;

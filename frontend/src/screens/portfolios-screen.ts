@@ -68,7 +68,7 @@ export class PortfoliosScreen extends BaseComponent {
           transition: box-shadow 0.15s;
         }
         .card.active { cursor: pointer; }
-        .card.active:hover { box-shadow: var(--shadow-md); }
+        .card.active:hover { box-shadow: var(--elevation-2); }
         .card.archived { opacity: 0.75; background: var(--color-bg-secondary); }
         .card-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
         .name { font-weight: var(--font-weight-semibold); flex: 1; min-width: 0; }

@@ -4,7 +4,7 @@
 //   2. Import it in main.ts
 //   3. Add the name to the Theme union and an entry to THEMES below.
 
-export type Theme = 'default' | 'pastel' | 'dark' | 'ocean' | 'forest';
+export type Theme = 'default' | 'pastel' | 'dark' | 'ocean' | 'forest' | 'terminal' | 'terminal-light';
 
 export interface ThemeInfo {
   readonly id: Theme;
@@ -40,5 +40,15 @@ export const THEMES: readonly ThemeInfo[] = [
     id: 'forest',
     labelKey: 'settings.theme.forest',
     swatchBg: '#f0f4e8', swatchAccent: '#2d7a22', swatchBorder: '#c5d9b0',
+  },
+  {
+    id: 'terminal',
+    labelKey: 'settings.theme.terminal',
+    swatchBg: '#08090b', swatchAccent: '#c9a45c', swatchBorder: '#1d222b',
+  },
+  {
+    id: 'terminal-light',
+    labelKey: 'settings.theme.terminal_light',
+    swatchBg: '#f5f5f2', swatchAccent: '#9a7930', swatchBorder: '#e7e7e2',
   },
 ];

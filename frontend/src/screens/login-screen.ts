@@ -16,7 +16,7 @@ export class LoginScreen extends BaseComponent {
         .card {
           width: 100%; max-width: 400px; padding: var(--space-8);
           border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-          box-shadow: var(--shadow-md);
+          box-shadow: var(--elevation-2);
         }
         h1 { font-size: var(--font-size-2xl); margin-bottom: var(--space-6); }
         .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }

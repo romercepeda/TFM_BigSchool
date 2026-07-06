@@ -34,7 +34,7 @@ export class HeaderBar extends BaseComponent {
           display: flex; align-items: center; justify-content: space-between;
           padding: 0 var(--space-4); height: var(--header-height);
           background: var(--color-bg-primary); border-bottom: 1px solid var(--color-border);
-          box-shadow: var(--shadow-sm);
+          box-shadow: var(--elevation-1);
         }
         .brand { font-weight: var(--font-weight-bold); color: var(--color-accent); font-size: var(--font-size-lg); }
         .actions { display: flex; align-items: center; gap: var(--space-3); }

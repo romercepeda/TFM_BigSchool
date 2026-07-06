@@ -36,7 +36,7 @@ export class AddAssetScreen extends BaseComponent {
           display: none; position: absolute; top: 100%; left: 0; right: 0;
           background: var(--color-bg-primary); border: 1px solid var(--color-border);
           border-top: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-          box-shadow: var(--shadow-md); max-height: 220px; overflow-y: auto;
+          box-shadow: var(--elevation-2); max-height: 220px; overflow-y: auto;
           z-index: var(--z-dropdown);
         }
         .ticker-option {

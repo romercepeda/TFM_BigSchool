@@ -7,6 +7,7 @@ import './styles/themes/pastel.css';
 import './styles/themes/dark.css';
 import './styles/themes/ocean.css';
 import './styles/themes/forest.css';
+import './styles/themes/terminal.css';
 
 import { applyTheme, currentTheme } from './state/theme-state.js';
 
