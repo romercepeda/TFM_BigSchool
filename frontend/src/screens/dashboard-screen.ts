@@ -1,6 +1,7 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
 import '../components/kpi-strip.js';
+import '../components/asset-row.js';
 import { t } from '../i18n/i18n.js';
 import { getPortfolio, updatePortfolio, archivePortfolio } from '../api/portfolios.js';
 import { listHoldings } from '../api/holdings.js';
@@ -40,11 +41,28 @@ export class DashboardScreen extends BaseComponent {
     this._loading = false;
     this.shadow.innerHTML = this.render();
     this.afterRender();
+    this._mountAssetRows();
   }
 
   private _rerender(): void {
     this.shadow.innerHTML = this.render();
     this.afterRender();
+    this._mountAssetRows();
+  }
+
+  private _mountAssetRows(): void {
+    const list = this.shadow.getElementById('holdings-list');
+    if (!list) return;
+    const rows = list.querySelectorAll('pi-asset-row') as NodeListOf<HTMLElement & {
+      holding: Holding;
+      portfolioId: string;
+    }>;
+    rows.forEach((row, i) => {
+      const h = this._holdings[i];
+      if (!h) return;
+      row.holding = h;
+      row.portfolioId = this._portfolioId;
+    });
   }
 
   protected render(): string {
@@ -77,20 +95,6 @@ export class DashboardScreen extends BaseComponent {
         .section-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold);
           color: var(--color-text-primary); margin-bottom: var(--space-3); }
         .holdings-list { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
-        .holding-row {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: var(--space-4); border-bottom: 1px solid var(--color-border);
-          cursor: pointer; transition: background 0.15s;
-        }
-        .holding-row:last-child { border-bottom: none; }
-        .holding-row:hover { background: var(--color-bg-surface); }
-        .holding-left { display: flex; flex-direction: column; gap: 2px; }
-        .holding-ticker { font-weight: var(--font-weight-semibold); font-size: var(--font-size-base); }
-        .holding-market { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: normal; }
-        .holding-name { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
-        .holding-right { text-align: right; }
-        .holding-price { font-weight: var(--font-weight-medium); }
-        .holding-qty { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .empty { color: var(--color-text-muted); padding: var(--space-8); text-align: center; }
         .loading { color: var(--color-text-muted); padding: var(--space-8); text-align: center; }
         .error-msg { color: var(--color-danger); padding: var(--space-4); border: 1px solid var(--color-danger);
@@ -135,22 +139,8 @@ export class DashboardScreen extends BaseComponent {
       <div class="section-title">${t('screen.dashboard.holdings')}</div>
       ${this._holdings.length === 0
         ? `<div class="empty">${t('screen.dashboard.empty')}</div>`
-        : `<div class="holdings-list">
-            ${this._holdings.map((h) => `
-              <div class="holding-row" data-id="${h.id}">
-                <div class="holding-left">
-                  <span class="holding-ticker">
-                    ${h.asset.ticker}
-                    ${h.asset.market ? `<span class="holding-market">${h.asset.market}</span>` : ''}
-                  </span>
-                  <span class="holding-name">${h.asset.name}</span>
-                </div>
-                <div class="holding-right">
-                  <div class="holding-price">${Number(h.aggregates.avg_purchase_price_quote).toFixed(2)} ${h.asset.quote_currency}</div>
-                  <div class="holding-qty">${Number(h.aggregates.quantity_held).toLocaleString()} ${t('screen.dashboard.units')}</div>
-                </div>
-              </div>
-            `).join('')}
+        : `<div class="holdings-list" id="holdings-list">
+            ${this._holdings.map(() => '<pi-asset-row></pi-asset-row>').join('')}
           </div>`}
     `;
   }
@@ -163,11 +153,6 @@ export class DashboardScreen extends BaseComponent {
     this.shadow.getElementById('alerts-btn')?.addEventListener('click', () =>
       navigate(`/portfolios/${pid}/alerts`));
     this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
-
-    this.shadow.querySelectorAll('.holding-row').forEach((el) => {
-      el.addEventListener('click', () =>
-        navigate(`/portfolios/${pid}/assets/${(el as HTMLElement).dataset['id']}`));
-    });
 
     // Rename
     this.shadow.getElementById('rename-btn')?.addEventListener('click', () => {
