@@ -1,4 +1,5 @@
 import { BaseComponent } from '../components/common/base-component.js';
+import '../components/header-bar.js';
 import { t } from '../i18n/i18n.js';
 import { listPortfolios, updatePortfolio, archivePortfolio, restorePortfolio, deletePortfolio } from '../api/portfolios.js';
 import { navigate } from '../router/router.js';
@@ -84,6 +85,7 @@ export class PortfoliosScreen extends BaseComponent {
         .section-label { font-size: var(--font-size-xs); color: var(--color-text-muted);
           text-transform: uppercase; letter-spacing: 0.05em; margin: var(--space-4) 0 var(--space-2); }
       </style>
+      <pi-header-bar></pi-header-bar>
       <div class="page">
         <div class="header">
           <h2>${t('screen.portfolios.title')}</h2>
