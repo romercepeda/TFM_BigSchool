@@ -295,9 +295,9 @@ export class AnalysisScreen extends BaseComponent {
         }
         .job-panel__error-detail {
           font-size: var(--font-size-xs); color: var(--color-danger);
-          background: rgba(0,0,0,0.04); border-radius: var(--radius-sm);
+          background: color-mix(in srgb, currentColor 8%, transparent); border-radius: var(--radius-sm);
           padding: var(--space-2) var(--space-3); margin: var(--space-2) 0;
-          text-align: left; word-break: break-word; font-family: monospace;
+          text-align: left; word-break: break-word; font-family: var(--font-family-mono);
         }
 
         /* Spinner */
@@ -323,6 +323,7 @@ export class AnalysisScreen extends BaseComponent {
 
         .indicator-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
         .indicator-chip {
+          font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
           font-size: var(--font-size-xs); padding: 3px var(--space-2);
           border: 1px solid var(--color-border); border-radius: var(--radius-sm);
           color: var(--color-text-secondary); white-space: nowrap;
@@ -369,7 +370,10 @@ export class AnalysisScreen extends BaseComponent {
         .metric-cell { background: var(--color-bg-secondary); border-radius: var(--radius-sm);
           padding: var(--space-2) var(--space-3); }
         .metric-label { display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); }
-        .metric-val { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-top: 2px; }
+        .metric-val {
+          display: block; font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
+          font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); margin-top: 2px;
+        }
         .confidence { font-size: var(--font-size-xs); color: var(--color-text-muted);
           margin-top: var(--space-2); font-style: italic; }
         .provider { font-size: var(--font-size-xs); color: var(--color-text-muted); }
