@@ -9,7 +9,7 @@ export class AssetRow extends BaseComponent {
 
   set holding(value: Holding) {
     this._holding = value;
-    if (this.shadow) this.shadow.innerHTML = this.render();
+    if (this.shadow) { this.shadow.innerHTML = this.render(); this.afterRender(); }
   }
 
   set portfolioId(value: string) {
