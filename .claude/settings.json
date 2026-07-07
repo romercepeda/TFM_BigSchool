@@ -5,7 +5,10 @@
       "Bash(python -c ' *)",
       "Bash(git status *)",
       "Bash(git check-ignore *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
     ]
   }
 }
