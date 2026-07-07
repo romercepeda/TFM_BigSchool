@@ -125,8 +125,8 @@ class MarketDataCascade:
         last_error_by_provider: dict[str, str] = {}
         for provider_name, provider in self._providers:
             providers_tried.append(provider_name)
-            symbol = provider_symbol(ticker, market, provider_name)
             try:
+                symbol = provider_symbol(ticker, market, provider_name)
                 point = await provider.get_current_price(symbol)
             except ProviderError as exc:
                 last_error_by_provider[provider_name] = exc.upstream_message
@@ -172,8 +172,8 @@ class MarketDataCascade:
 
             for asset_id, req in list(unresolved.items()):
                 providers_tried[asset_id].append(provider_name)
-                symbol = provider_symbol(req.ticker, req.market, provider_name)
                 try:
+                    symbol = provider_symbol(req.ticker, req.market, provider_name)
                     points = await provider.get_historical_series(symbol, start_date, end_date)
                 except ProviderError as exc:
                     error_kinds[asset_id].append(exc.error_kind)

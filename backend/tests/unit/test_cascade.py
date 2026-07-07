@@ -206,6 +206,22 @@ async def test_get_current_price_raises_when_all_providers_fail() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_current_price_falls_through_when_symbol_qualification_fails() -> None:
+    """provider_symbol() itself can raise ProviderError (e.g. Finnhub refusing
+    a bare ticker on a non-US market — the IDR incident). That must be
+    treated as this provider's failure, not crash the whole call."""
+    finnhub = _FakeMarketProvider(resolves={"IDR"})  # would wrongly "succeed" if ever called
+    eodhd = _FakeMarketProvider(resolves={"IDR.MC"})
+    cascade = MarketDataCascade([("finnhub", finnhub), ("eodhd", eodhd)])
+
+    point, provider_name = await cascade.get_current_price("IDR", "BME")
+
+    assert provider_name == "eodhd"
+    assert point.price == Decimal("1.00")
+    assert finnhub.calls == []  # never actually called — refused before the HTTP call
+
+
+@pytest.mark.asyncio
 async def test_merge_cascade_results_combines_disjoint_runs() -> None:
     """Bootstrap-window run + incremental-window run over disjoint assets
 
