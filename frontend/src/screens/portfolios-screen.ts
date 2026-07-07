@@ -50,6 +50,9 @@ export class PortfoliosScreen extends BaseComponent {
         .btn { background: var(--color-accent); color: #fff; padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); font-weight: var(--font-weight-medium); }
         .btn:hover { background: var(--color-accent-hover); }
+        .btn-outline { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-sm); color: var(--color-text-secondary); }
+        .btn-outline:hover { background: var(--color-bg-surface); }
         .btn-sm { background: var(--color-accent); color: #fff; padding: 2px var(--space-3);
           border-radius: var(--radius-sm); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
         .btn-sm:hover { background: var(--color-accent-hover); }
@@ -90,7 +93,7 @@ export class PortfoliosScreen extends BaseComponent {
         <div class="header">
           <h2>${t('screen.portfolios.title')}</h2>
           <div class="header-actions">
-            <button class="btn-ghost" id="toggle-archived-btn">
+            <button class="btn-outline" id="toggle-archived-btn">
               ${this._showArchived ? t('screen.portfolios.hide_archived') : t('screen.portfolios.archived')}
             </button>
             <button class="btn" id="new-btn">${t('screen.portfolios.create')}</button>

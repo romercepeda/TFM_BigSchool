@@ -166,6 +166,8 @@ export class AssetDetailScreen extends BaseComponent {
         .btn-xs-danger:hover { background: var(--color-danger); color: #fff; }
         .btn-xs-primary { padding: 1px var(--space-2); border-radius: var(--radius-sm);
           font-size: var(--font-size-xs); background: var(--color-accent); color: #fff; }
+        .lot-actions { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+        .lot-actions button { width: 100%; text-align: center; }
 
         .confirm-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); flex-wrap: wrap; }
         .confirm-label { color: var(--color-text-secondary); }
@@ -390,7 +392,7 @@ export class AssetDetailScreen extends BaseComponent {
                       <td class="num">${formatNumber(Number(l.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
                       <td class="num">${formatNumber(lqty * Number(l.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       ${anyLotNotes ? `<td>${l.notes ?? ''}</td>` : ''}
-                      <td class="num">
+                      <td class="num lot-actions">
                         <button class="btn-xs" data-edit-lot="${l.id}" data-lot-date="${l.purchase_date}" data-lot-qty="${l.quantity}" data-lot-price="${l.unit_price}" data-lot-notes="${l.notes ?? ''}">${t('common.button.edit')}</button>
                         <button class="btn-xs-danger" data-delete-lot="${l.id}">${t('common.button.delete')}</button>
                       </td>

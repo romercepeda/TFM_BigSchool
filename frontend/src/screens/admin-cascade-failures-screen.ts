@@ -153,7 +153,7 @@ export class AdminCascadeFailuresScreen extends BaseComponent {
                 </tbody>
               </table>
               <div class="pagination">
-                <button class="btn-outline" id="prev-btn" ${this._page <= 1 ? 'disabled' : ''}>${t('common.button.back')}</button>
+                <button class="btn-outline" id="prev-btn" ${this._page <= 1 ? 'disabled' : ''}>${t('admin.users.prev')}</button>
                 <span>${this._page} / ${totalPages}</span>
                 <button class="btn-outline" id="next-btn" ${this._page >= totalPages ? 'disabled' : ''}>${t('admin.users.next')}</button>
               </div>

@@ -30,20 +30,24 @@ export class SetLevelsScreen extends BaseComponent {
     ]);
 
     this._levels = levelsResult.status === 'fulfilled' ? levelsResult.value : [];
+    const holding = holdingResult.status === 'fulfilled' ? holdingResult.value : null;
+    if (holding) this._quoteCurrency = holding.asset.quote_currency;
 
-    if (holdingResult.status === 'fulfilled') {
-      const holding = holdingResult.value;
-      this._quoteCurrency = holding.asset.quote_currency;
+    // Render immediately with the levels we already have — don't block on the
+    // (potentially slow, live-provider-backed) current-price lookup below.
+    this.shadow.innerHTML = this.render();
+    this._wire();
+
+    if (holding) {
       try {
         const price = await getAssetPrice(holding.asset.ticker, holding.asset.market);
         this._currentPrice = Number(price.price);
       } catch {
         this._currentPrice = null;
       }
+      const form = this.shadow.getElementById('form') as (HTMLElement & { currentPrice: number | null }) | null;
+      if (form) form.currentPrice = this._currentPrice;
     }
-
-    this.shadow.innerHTML = this.render();
-    this._wire();
   }
 
   protected render(): string {
@@ -57,7 +61,9 @@ export class SetLevelsScreen extends BaseComponent {
           padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
           margin-bottom: var(--space-2); }
         .level-status { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-left: var(--space-2); }
-        .del-btn { color: var(--color-danger); font-size: var(--font-size-sm); }
+        .del-btn { padding: 1px var(--space-2); border-radius: var(--radius-sm);
+          font-size: var(--font-size-xs); border: 1px solid var(--color-danger); color: var(--color-danger); }
+        .del-btn:hover { background: var(--color-danger); color: #fff; }
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); color: var(--color-text-secondary); margin-top: var(--space-4); }
       </style>

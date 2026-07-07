@@ -29,6 +29,7 @@
   "admin.users.provider": "Proveedor",
   "admin.users.roles": "Roles",
   "admin.users.created_at": "Creado",
+  "admin.users.prev": "Anterior",
   "admin.users.next": "Siguiente",
 
   "admin.roles.title": "Roles",

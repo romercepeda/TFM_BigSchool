@@ -38,7 +38,11 @@ export class AdminRolesScreen extends BaseComponent {
       <style>
         :host { display: block; }
         .page { padding: var(--space-6); max-width: 720px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
         h2 { font-size: var(--font-size-xl); }
+        .btn-outline { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-sm); color: var(--color-text-secondary); }
+        .btn-outline:hover { background: var(--color-bg-surface); }
         .tabs { display: flex; gap: var(--space-2); margin: var(--space-4) 0; }
         .tab { padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary); border: 1px solid var(--color-border); }
         .tab.active { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
@@ -58,7 +62,10 @@ export class AdminRolesScreen extends BaseComponent {
       </style>
       <pi-header-bar></pi-header-bar>
       <div class="page">
-        <h2>${t('admin.roles.title')}</h2>
+        <div class="header">
+          <h2>${t('admin.roles.title')}</h2>
+          <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
+        </div>
         <div class="tabs">
           <span class="tab" id="users-tab">${t('admin.users.title')}</span>
           <span class="tab active">${t('admin.roles.title')}</span>
@@ -85,6 +92,7 @@ export class AdminRolesScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('users-tab')?.addEventListener('click', () => navigate('/admin/users'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
   }
 }
 

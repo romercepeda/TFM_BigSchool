@@ -94,8 +94,13 @@ export class HeaderBar extends BaseComponent {
           color: var(--color-danger);
         }
 
-        button { color: var(--color-text-secondary); font-size: var(--font-size-sm); cursor: pointer; }
-        button:hover { color: var(--color-accent); }
+        .actions button {
+          color: var(--color-text-secondary); font-size: var(--font-size-sm); cursor: pointer;
+          border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+          padding: var(--space-2) var(--space-4); background: transparent; line-height: 1;
+        }
+        .actions button:hover { color: var(--color-accent); background: var(--color-bg-surface); }
+        .actions button#settings-btn { padding: var(--space-2) var(--space-3); }
       </style>
       <header>
         <span class="brand">Portfolio IA</span>

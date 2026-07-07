@@ -77,6 +77,7 @@ export class AdminUsersScreen extends BaseComponent {
       <div class="page">
         <div class="header">
           <h2>${t('admin.users.title')}</h2>
+          <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
         </div>
         <div class="tabs">
           <span class="tab active">${t('admin.users.title')}</span>
@@ -107,7 +108,7 @@ export class AdminUsersScreen extends BaseComponent {
                 </tbody>
               </table>
               <div class="pagination">
-                <button class="btn-outline" id="prev-btn" ${this._offset === 0 ? 'disabled' : ''}>${t('common.button.back')}</button>
+                <button class="btn-outline" id="prev-btn" ${this._offset === 0 ? 'disabled' : ''}>${t('admin.users.prev')}</button>
                 <span>${page} / ${totalPages}</span>
                 <button class="btn-outline" id="next-btn" ${this._offset + PAGE_SIZE >= this._total ? 'disabled' : ''}>${t('admin.users.next')}</button>
               </div>
@@ -118,6 +119,7 @@ export class AdminUsersScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('roles-tab')?.addEventListener('click', () => navigate('/admin/roles'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
 
     this.shadow.querySelectorAll<HTMLElement>('.row').forEach((row) => {
       row.addEventListener('click', () => navigate(`/admin/users/${row.dataset['id']}`));
