@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python build_pptx.py)",
+      "Bash(python -c ' *)",
+      "Bash(git status *)",
+      "Bash(git check-ignore *)",
+      "Bash(git fetch *)"
+    ]
+  }
+}
