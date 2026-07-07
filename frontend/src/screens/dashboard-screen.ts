@@ -1,5 +1,6 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
+import '../components/portfolio-header.js';
 import '../components/kpi-strip.js';
 import '../components/asset-row.js';
 import { t } from '../i18n/i18n.js';
@@ -42,12 +43,20 @@ export class DashboardScreen extends BaseComponent {
     this.shadow.innerHTML = this.render();
     this.afterRender();
     this._mountAssetRows();
+    this._mountPortfolioHeader();
   }
 
   private _rerender(): void {
     this.shadow.innerHTML = this.render();
     this.afterRender();
     this._mountAssetRows();
+    this._mountPortfolioHeader();
+  }
+
+  private _mountPortfolioHeader(): void {
+    const header = this.shadow.getElementById('portfolio-header') as
+      (HTMLElement & { portfolioId: string }) | null;
+    if (header) header.portfolioId = this._portfolioId;
   }
 
   private _mountAssetRows(): void {
@@ -130,6 +139,7 @@ export class DashboardScreen extends BaseComponent {
         </div>
         <div class="portfolio-meta">${p?.base_currency ?? ''} · ${p?.status ?? ''}</div>
       </div>
+      <pi-portfolio-header id="portfolio-header"></pi-portfolio-header>
       <pi-kpi-strip></pi-kpi-strip>
       <div class="actions">
         <button class="btn" id="add-btn">${t('screen.dashboard.add_asset')}</button>

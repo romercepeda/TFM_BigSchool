@@ -8,6 +8,16 @@ portfolios:
   max_active_per_user: 10
   name_max_length: 60
 
+# Changeset C08 — portfolioHeader. Deliberately a separate `portfolio:`
+# section (singular) rather than nested under `portfolios:` above.
+portfolio:
+  summary:
+    cache_ttl_seconds: 300
+  performance:
+    # Not consumed by Changeset C08 itself — added ahead of the future
+    # D14 Sharpe ratio work so that spec finds it already in place.
+    risk_free_rate: 0.03
+
 uploads:
   max_file_size_mb: 20
 

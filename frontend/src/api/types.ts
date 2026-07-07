@@ -91,15 +91,22 @@ export interface Portfolio {
   archived_at: string | null;
 }
 
-export interface PortfolioKpis {
-  portfolio_id: string;
+// PortfolioHeader summary (Changeset C08). Decimal fields arrive as strings
+// (Spec D10 §7.4) to preserve precision — parse with Number() before formatting.
+export interface TrendPoint {
+  date: string;
+  value: string;
+  estimated: boolean;
+}
+
+export interface PortfolioSummary {
+  total_value: string;
+  total_invested: string;
+  unrealized_pnl: string;
+  unrealized_pnl_pct: string;
+  trend_30d: TrendPoint[];
+  computed_at: string;
   base_currency: string;
-  total_invested: number;
-  current_value: number;
-  total_gain_loss: number;
-  total_gain_loss_pct: number;
-  unrealized_gain_loss: number;
-  realized_gain_loss: number;
 }
 
 // ── Holdings ──────────────────────────────────────────────────────────────────

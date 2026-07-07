@@ -92,6 +92,14 @@
   "kpi.unrealized": "No realizado",
   "kpi.realized": "Realizado",
 
+  "portfolio_header.total_value": "Valor total",
+  "portfolio_header.invested": "Invertido",
+  "portfolio_header.unrealized_pnl": "P&L latente",
+  "portfolio_header.trend_30d": "30 días",
+  "portfolio_header.loading_error": "No se pudo cargar el resumen",
+  "portfolio_header.retry": "Reintentar",
+  "portfolio_header.tooltip.estimated": "Valor estimado (datos incompletos)",
+
   "alerts.title": "Alertas",
   "alerts.empty": "No hay alertas activadas.",
   "alerts.dismiss": "Descartar",

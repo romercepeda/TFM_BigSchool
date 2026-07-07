@@ -4,7 +4,8 @@ These describe the API contract for /portfolios/* endpoints.
 Separate from the ORM model (app/db/models/portfolio.py), which describes the database.
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -39,3 +40,32 @@ class PortfolioResponse(BaseModel):
     archived_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+# ── Portfolio summary (Changeset C08) ─────────────────────────────────────────
+
+
+class TrendPoint(BaseModel):
+    """One day of the 30-day trend series (Changeset C08 §4).
+
+    estimated=True means the value uses a last-known-previous-close fallback
+    (for price and/or FX rate) rather than an exact match for `date` — per
+    Spec D09 §4.3, missing data is flagged, never silently invented.
+    """
+    date: date
+    value: Decimal
+    estimated: bool
+
+
+class PortfolioSummary(BaseModel):
+    """PortfolioHeader payload (Changeset C08 §3) — Valor Total, Invertido,
+    P&L Latente, and the 30-day trend. All monetary fields are in the
+    portfolio's base_currency.
+    """
+    total_value: Decimal
+    total_invested: Decimal
+    unrealized_pnl: Decimal
+    unrealized_pnl_pct: Decimal
+    trend_30d: list[TrendPoint]
+    computed_at: datetime
+    base_currency: str

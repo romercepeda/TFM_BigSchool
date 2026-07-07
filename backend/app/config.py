@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
@@ -55,6 +56,33 @@ def _migrate_singular_provider_key(data: object, *, section: str) -> object:
 class PortfoliosConfig(BaseModel):
     max_active_per_user: int = 10
     name_max_length: int = 60
+
+
+class PortfolioSummaryConfig(BaseModel):
+    """Changeset C08 §5/§9 — the in-memory portfolioHeader cache. 0 disables caching."""
+
+    cache_ttl_seconds: int = Field(default=300, ge=0)
+
+
+class PortfolioPerformanceConfig(BaseModel):
+    """Changeset C08 §9 — added ahead of the future D14 Sharpe ratio work, not
+
+    consumed by C08 itself. Decimal (not float) per Spec D04 §3.2, since this
+    value will eventually feed a Decimal-only calculation.
+    """
+
+    risk_free_rate: Decimal = Field(default=Decimal("0.03"), ge=0, le=Decimal("0.20"))
+
+
+class PortfolioConfig(BaseModel):
+    """Singular `portfolio:` section (Changeset C08) — deliberately separate
+
+    from the existing plural `portfolios:` section (Spec D02's per-user
+    limits) rather than nested inside it, per the changeset's own §9 table.
+    """
+
+    summary: PortfolioSummaryConfig = PortfolioSummaryConfig()
+    performance: PortfolioPerformanceConfig = PortfolioPerformanceConfig()
 
 
 class UploadsConfig(BaseModel):
@@ -203,6 +231,7 @@ class AppConfig(BaseModel):
     """Root configuration object. Available via get_config() throughout the app."""
 
     portfolios: PortfoliosConfig = PortfoliosConfig()
+    portfolio: PortfolioConfig = PortfolioConfig()
     uploads: UploadsConfig = UploadsConfig()
     authentication: AuthenticationConfig = AuthenticationConfig()
     indicators: IndicatorsConfig = IndicatorsConfig()

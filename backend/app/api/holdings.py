@@ -39,7 +39,7 @@ from app.db.models.holding import Holding
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import asset_service, lot_service, sale_service
+from app.services import asset_service, lot_service, sale_service, summary_cache
 from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
 
@@ -213,6 +213,7 @@ async def add_holding(
         raise _bad_request(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
     detail = await lot_service.get_holding_detail(db, holding.id, portfolio_id)
     return HoldingDetailResponse(
         id=detail.id,
@@ -270,6 +271,7 @@ async def delete_holding(
         raise _NOT_FOUND_HOLDING
     await db.delete(holding)
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
 
 
 # ── Lot endpoints ─────────────────────────────────────────────────────────────
@@ -320,6 +322,7 @@ async def add_lot(
         raise _bad_request(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
     await db.refresh(lot)
     return LotResponse.model_validate(lot)
 
@@ -361,6 +364,7 @@ async def edit_lot(
         raise _conflict(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
     await db.refresh(lot)
     return LotResponse.model_validate(lot)
 
@@ -393,6 +397,7 @@ async def delete_lot(
         raise _conflict(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
 
 
 # ── Sale endpoints ────────────────────────────────────────────────────────────
@@ -443,6 +448,7 @@ async def create_sale(
         raise _bad_request(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
     await db.refresh(sale)
     # Reload with lot_consumptions eager-loaded.
     sale_detail = await sale_service.get_sale(db, sale.id, holding_id)
@@ -495,6 +501,7 @@ async def edit_sale(
         raise _bad_request(str(exc))
 
     await db.commit()
+    summary_cache.invalidate(portfolio_id)
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -532,3 +539,4 @@ async def delete_sale(
 
     await sale_service.delete_sale(db, sale)
     await db.commit()
+    summary_cache.invalidate(portfolio_id)

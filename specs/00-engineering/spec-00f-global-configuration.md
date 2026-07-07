@@ -172,6 +172,15 @@ Added by Spec D11 (Roles & Permissions) / Changeset C02 §6. See Spec D11 §11 f
 | `security.default_admin_email` | string (email format) | `admin@portfolioia.local` | The email of the administrator user auto-created on first startup if no administrator exists. |
 | `security.default_admin_password_length` | integer, 16–64 | `24` | Length in characters of the auto-generated initial password. |
 
+### 7.11 Portfolio summary (`portfolio`)
+
+Added by Changeset C08 (Portfolio Header). Deliberately a separate singular `portfolio:` section rather than nested under the existing plural `portfolios:` (Section 7.1) — the two cover unrelated concerns (per-user portfolio limits vs. the portfolioHeader computation).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.summary.cache_ttl_seconds` | integer ≥ 0 | `300` | TTL of the in-memory portfolio summary cache. Set to `0` to disable caching (useful for debugging). |
+| `portfolio.performance.risk_free_rate` | Decimal, 0.0–0.20 | `0.03` | Annual risk-free rate used by the future Sharpe ratio calculation (Spec D14). Not consumed by Changeset C08; added preemptively so that future work finds it in place. |
+
 ---
 
 ## 8. Example `config.yaml`
@@ -180,6 +189,12 @@ Added by Spec D11 (Roles & Permissions) / Changeset C02 §6. See Spec D11 §11 f
 portfolios:
   max_active_per_user: 10
   name_max_length: 60
+
+portfolio:
+  summary:
+    cache_ttl_seconds: 300
+  performance:
+    risk_free_rate: 0.03
 
 uploads:
   max_file_size_mb: 20

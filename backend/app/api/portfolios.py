@@ -3,6 +3,7 @@
 Endpoints:
     POST   /portfolios                    — create a new portfolio
     GET    /portfolios                    — list portfolios (active by default)
+    GET    /portfolios/{id}/summary       — portfolioHeader summary (Changeset C08)
     PATCH  /portfolios/{id}               — rename a portfolio
     POST   /portfolios/{id}/archive       — archive (soft-delete)
     POST   /portfolios/{id}/restore       — restore from archive
@@ -20,12 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.portfolio_schemas import (
     CreatePortfolioRequest,
     PortfolioResponse,
+    PortfolioSummary,
     RenamePortfolioRequest,
 )
 from app.auth.dependencies import get_current_user
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
+from app.services import summary_service
 from app.services.portfolio_service import (
     archive_portfolio,
     create_portfolio,
@@ -107,6 +110,26 @@ async def get_one(
     if portfolio is None:
         raise _NOT_FOUND
     return PortfolioResponse.model_validate(portfolio)
+
+
+@router.get(
+    "/{portfolio_id}/summary",
+    response_model=PortfolioSummary,
+    dependencies=[Depends(require_permission("portfolio.list"))],
+)
+async def get_summary(
+    portfolio_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PortfolioSummary:
+    """Return the portfolioHeader summary (Changeset C08): total value, invested,
+    unrealized P&L, and the 30-day trend. Archived portfolios still return a
+    summary — archived does not mean unreadable (Spec D02 §6).
+    """
+    portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
+    if portfolio is None:
+        raise _NOT_FOUND
+    return await summary_service.get_summary(db, portfolio, current_user.id)
 
 
 @router.patch(
