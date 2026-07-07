@@ -218,18 +218,13 @@
 
   "screen.price_level.title": "Price levels",
   "screen.price_level.add": "Add level",
+  "screen.price_level.direction_label": "Direction",
   "screen.price_level.direction.buy": "Buy",
   "screen.price_level.direction.sell": "Sell",
   "screen.price_level.price": "Target price",
-  "screen.price_level.notes": "Notes",
+  "screen.price_level.notes": "Notes (optional)",
   "screen.price_level.status.armed": "Active",
   "screen.price_level.status.touched": "Triggered",
-
-  "price_level.form.price": "Target price",
-  "price_level.form.direction": "Direction",
-  "price_level.direction.above": "Above",
-  "price_level.direction.below": "Below",
-  "price_level.form.label": "Label (optional)",
 
   "set_levels.title": "Price levels",
   "set_levels.existing": "Configured levels",

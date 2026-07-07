@@ -53,7 +53,7 @@ Asset records are created on-demand the first time any user adds that asset to a
 | `created_at` | timestamp (UTC) | Set when the first lot for this `(portfolio, asset)` pair is created. |
 | `updated_at` | timestamp (UTC) | |
 
-Uniqueness constraint: at most one `Holding` per `(portfolio_id, asset_id)` pair. A holding is created automatically when the user adds the first lot of an asset to a portfolio, and is removed automatically when the last lot of that holding is deleted (see Section 6.3).
+Uniqueness constraint: at most one `Holding` per `(portfolio_id, asset_id)` pair. A holding is created automatically when the user adds the first lot of an asset to a portfolio. It is **not** removed automatically when its last lot is deleted (see Section 6.3) — it is only removed via the explicit "delete asset" action (`DELETE /portfolios/{pid}/holdings/{hid}`), which the user triggers deliberately from the asset detail screen.
 
 ### 3.3 `Lot` (purchase event)
 
@@ -145,9 +145,9 @@ The user's recourse is to delete the dependent sale(s) first (which restores the
 
 ### 6.3 Deletion behavior
 
-Lot deletion is **permanent (hard delete)** — there is no archive state for lots. The user is asked to confirm before deletion. If, after deletion, the parent `Holding` has no remaining lots and no sales, the `Holding` itself is also deleted automatically (the user no longer owns this asset in this portfolio).
+Lot deletion is **permanent (hard delete)** — there is no archive state for lots. The user is asked to confirm before deletion. The parent `Holding` is always preserved, even if this was its last remaining lot and no sales exist — the holding is then shown with zero lots and zeroed aggregates (Section 8). The user can add a new lot to it at any time, exactly as they would for any other holding.
 
-If the parent `Holding` still has other lots after the deletion, the holding is preserved.
+The holding is only removed by the explicit "delete asset" action (Section 3.2), never as a side effect of deleting its last lot.
 
 ---
 

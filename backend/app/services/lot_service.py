@@ -3,15 +3,15 @@
 Rules enforced here (Spec D03 §6):
   - quantity and unit_price must be > 0.
   - A lot with quantity_consumed > 0 cannot be edited or deleted (consumed rule §6.2).
-  - When the last lot of a holding is deleted and no sales remain, the holding is
-    auto-deleted (§6.3).
+  - The parent holding is preserved even when its last lot is deleted (§6.3); it is
+    only removed via the explicit "delete asset" action.
   - Aggregated holding views (§8) are computed here from lot data.
 """
 
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -190,10 +190,12 @@ async def edit_lot(
     return lot
 
 
-async def delete_lot(db: AsyncSession, lot: Lot) -> bool:
-    """Delete a lot. Returns True if the parent holding was also deleted (no lots/sales remain).
+async def delete_lot(db: AsyncSession, lot: Lot) -> None:
+    """Delete a lot. Caller must commit afterwards.
 
-    Raises ValueError if the lot has been consumed by sales (Spec D03 §6.2 / §6.3).
+    Raises ValueError if the lot has been consumed by sales (Spec D03 §6.2).
+    The parent holding is preserved even if this was its last lot (Spec D03 §6.3) —
+    it is only removed via the explicit "delete asset" action.
     """
     if lot.quantity_consumed > 0:
         raise ValueError(
@@ -201,25 +203,5 @@ async def delete_lot(db: AsyncSession, lot: Lot) -> bool:
             "Delete the dependent sale(s) first."
         )
 
-    holding_id = lot.holding_id
     await db.delete(lot)
     await db.flush()
-
-    # Auto-delete the holding if it now has no lots and no sales (Spec D03 §6.3).
-    lot_count_result = await db.execute(
-        select(func.count()).select_from(Lot).where(Lot.holding_id == holding_id)
-    )
-    sale_count_result = await db.execute(
-        select(func.count()).select_from(Sale).where(Sale.holding_id == holding_id)
-    )
-    if lot_count_result.scalar_one() == 0 and sale_count_result.scalar_one() == 0:
-        holding_result = await db.execute(
-            select(Holding).where(Holding.id == holding_id)
-        )
-        holding = holding_result.scalar_one_or_none()
-        if holding is not None:
-            await db.delete(holding)
-            await db.flush()
-            return True
-
-    return False

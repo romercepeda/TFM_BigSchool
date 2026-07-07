@@ -217,19 +217,21 @@ export interface IndicatorSnapshotHistory {
 
 // ── Price Levels ──────────────────────────────────────────────────────────────
 
-export type PriceLevelDirection = 'above' | 'below';
-export type AlertStatus = 'pending' | 'triggered' | 'dismissed';
+export type PriceLevelDirection = 'buy' | 'sell';
+export type PriceLevelStatus = 'armed' | 'touched';
 
 export interface PriceLevel {
   id: string;
   holding_id: string;
-  price: number;
   direction: PriceLevelDirection;
-  label: string | null;
-  per: number[];
-  alert_status: AlertStatus;
-  triggered_at: string | null;
+  target_price: number;
+  note: string | null;
+  status: PriceLevelStatus;
   created_at: string;
+  updated_at: string;
+  touched_at: string | null;
+  touched_at_close_price: number | null;
+  touched_at_close_date: string | null;
 }
 
 // ── AI Analysis ───────────────────────────────────────────────────────────────

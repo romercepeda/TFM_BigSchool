@@ -1,13 +1,24 @@
 import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
-import { createPriceLevel } from '../api/price-levels.js';
+import { createPriceLevels } from '../api/price-levels.js';
+import type { PriceLevelDirection } from '../api/types.js';
 import { required, positiveNumber } from '../utils/validation.js';
 
 export class PriceLevelForm extends BaseComponent {
+  private _portfolioId = '';
   private _holdingId = '';
+  private _currentPrice: number | null = null;
+
+  set portfolioId(value: string) {
+    this._portfolioId = value;
+  }
 
   set holdingId(value: string) {
     this._holdingId = value;
+  }
+
+  set currentPrice(value: number | null) {
+    this._currentPrice = value;
   }
 
   protected render(): string {
@@ -31,17 +42,17 @@ export class PriceLevelForm extends BaseComponent {
         button[type=submit]:hover { background: var(--color-accent-hover); }
       </style>
       <form id="level-form">
-        <label>${t('price_level.form.price')}
-          <input type="number" id="price" step="0.01" placeholder="0.00" required />
+        <label>${t('screen.price_level.price')}
+          <input type="number" id="target-price" step="0.01" placeholder="0.00" required />
         </label>
-        <label>${t('price_level.form.direction')}
+        <label>${t('screen.price_level.direction_label')}
           <select id="direction">
-            <option value="above">${t('price_level.direction.above')}</option>
-            <option value="below">${t('price_level.direction.below')}</option>
+            <option value="buy">${t('screen.price_level.direction.buy')}</option>
+            <option value="sell">${t('screen.price_level.direction.sell')}</option>
           </select>
         </label>
-        <label>${t('price_level.form.label')}
-          <input type="text" id="label-field" />
+        <label>${t('screen.price_level.notes')}
+          <input type="text" id="note" />
         </label>
         <div id="error" class="error"></div>
         <button type="submit">${t('common.button.save')}</button>
@@ -52,17 +63,20 @@ export class PriceLevelForm extends BaseComponent {
   protected afterRender(): void {
     this.shadow.getElementById('level-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const price = (this.shadow.getElementById('price') as HTMLInputElement).value;
-      const direction = (this.shadow.getElementById('direction') as HTMLSelectElement).value as 'above' | 'below';
-      const label = (this.shadow.getElementById('label-field') as HTMLInputElement).value;
+      const targetPrice = (this.shadow.getElementById('target-price') as HTMLInputElement).value;
+      const direction = (this.shadow.getElementById('direction') as HTMLSelectElement).value as PriceLevelDirection;
+      const note = (this.shadow.getElementById('note') as HTMLInputElement).value;
       const errEl = this.shadow.getElementById('error')!;
 
-      const err = required(price) ?? positiveNumber(price);
+      const err = required(targetPrice) ?? positiveNumber(targetPrice);
       if (err) { errEl.textContent = t(err); return; }
       errEl.textContent = '';
 
       try {
-        await createPriceLevel(this._holdingId, { price: Number(price), direction, label: label || undefined });
+        await createPriceLevels(this._portfolioId, this._holdingId, {
+          levels: [{ direction, target_price: Number(targetPrice), note: note || undefined }],
+          asset_price_at_event: this._currentPrice ?? undefined,
+        });
         this.dispatchEvent(new CustomEvent('level-created', { bubbles: true, composed: true }));
       } catch (ex) {
         errEl.textContent = (ex as Error).message;

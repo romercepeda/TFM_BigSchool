@@ -23,7 +23,7 @@ export interface LotIn {
 }
 
 export interface AddAssetBody { asset: AssetIn; lot: LotIn; }
-export interface AddLotBody   { purchase_date: string; quantity: number; unit_price: number; notes?: string; }
+export interface AddLotBody   { purchase_date: string; quantity: number; unit_price: number; notes?: string; fx_rate_origin?: string; }
 export interface AddSaleBody  { lot_id: string; quantity: number; price_per_unit: number; sold_at: string; }
 
 export const listHoldings  = (portfolioId: string)               => get<Holding[]>(`/portfolios/${portfolioId}/holdings`);

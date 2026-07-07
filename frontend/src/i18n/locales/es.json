@@ -218,18 +218,13 @@
 
   "screen.price_level.title": "Niveles de precio",
   "screen.price_level.add": "Añadir nivel",
+  "screen.price_level.direction_label": "Dirección",
   "screen.price_level.direction.buy": "Compra",
   "screen.price_level.direction.sell": "Venta",
   "screen.price_level.price": "Precio objetivo",
-  "screen.price_level.notes": "Notas",
+  "screen.price_level.notes": "Notas (opcional)",
   "screen.price_level.status.armed": "Activo",
   "screen.price_level.status.touched": "Alcanzado",
-
-  "price_level.form.price": "Precio objetivo",
-  "price_level.form.direction": "Dirección",
-  "price_level.direction.above": "Por encima",
-  "price_level.direction.below": "Por debajo",
-  "price_level.form.label": "Etiqueta (opcional)",
 
   "set_levels.title": "Niveles de precio",
   "set_levels.existing": "Niveles configurados",

@@ -1,6 +1,6 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
-import { dismissAlert } from '../api/price-levels.js';
+import { deletePriceLevel } from '../api/price-levels.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import type { PriceLevel } from '../api/types.js';
@@ -26,7 +26,7 @@ export class AlertsScreen extends BaseComponent {
   }
 
   protected render(): string {
-    const triggered = this._levels.filter((l) => l.alert_status === 'triggered');
+    const touched = this._levels.filter((l) => l.status === 'touched');
     return `
       <style>
         :host { display: block; }
@@ -43,13 +43,13 @@ export class AlertsScreen extends BaseComponent {
       </style>
       <div class="page">
         <h2>${t('alerts.title')}</h2>
-        ${triggered.length === 0
+        ${touched.length === 0
           ? `<div class="empty">${t('alerts.empty')}</div>`
-          : triggered.map((l) => `
+          : touched.map((l) => `
             <div class="alert">
-              <div class="alert-price">${formatCurrency(l.price, 'EUR')} ${t('price_level.direction.' + l.direction)}</div>
-              ${l.label ? `<div class="alert-meta">${l.label}</div>` : ''}
-              ${l.triggered_at ? `<div class="alert-meta">${formatDateTime(l.triggered_at)}</div>` : ''}
+              <div class="alert-price">${formatCurrency(l.target_price, 'EUR')} ${t('screen.price_level.direction.' + l.direction)}</div>
+              ${l.note ? `<div class="alert-meta">${l.note}</div>` : ''}
+              ${l.touched_at ? `<div class="alert-meta">${formatDateTime(l.touched_at)}</div>` : ''}
               <button class="dismiss-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.dismiss')}</button>
             </div>
           `).join('')}
@@ -64,7 +64,7 @@ export class AlertsScreen extends BaseComponent {
     this.shadow.querySelectorAll('.dismiss-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const el = btn as HTMLElement;
-        await dismissAlert(el.dataset['hid']!, el.dataset['lid']!);
+        await deletePriceLevel(this._portfolioId, el.dataset['hid']!, el.dataset['lid']!);
         void this._load();
       });
     });

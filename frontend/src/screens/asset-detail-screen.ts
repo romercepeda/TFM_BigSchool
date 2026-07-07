@@ -673,6 +673,7 @@ export class AssetDetailScreen extends BaseComponent {
       quantity: Number(f.qty),
       unit_price: Number(f.price),
       notes: f.notes || undefined,
+      fx_rate_origin: 'auto',
     };
     try {
       await addLot(this._portfolioId, this._holdingId, body);

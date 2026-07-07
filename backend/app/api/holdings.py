@@ -381,7 +381,10 @@ async def delete_lot(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a lot. Returns 409 if consumed by sales. Auto-deletes holding if no lots/sales remain."""
+    """Delete a lot. Returns 409 if consumed by sales.
+
+    The holding is preserved even if this was its last remaining lot.
+    """
     await _require_portfolio(portfolio_id, current_user, db)
     holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
     if holding is None:
