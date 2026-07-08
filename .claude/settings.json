@@ -8,7 +8,21 @@
       "Bash(git fetch *)",
       "Bash(git commit -m ' *)",
       "Bash(git checkout *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app/api/auth.py', encoding='utf-8'\\).read\\(\\)\\); ast.parse\\(open\\('app/auth/schemas.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(cd /tmp)",
+      "Bash(rm -f cookies.txt)",
+      "Bash(curl -s -c cookies.txt -X POST http://localhost:8000/auth/guest -H \"Content-Type: application/json\" -d '{\"email\":\"curl-verify@test.com\"}' -o login.json)",
+      "Bash(python3 -c \"import json; print\\(json.load\\(open\\('login.json'\\)\\)['session']['csrf_token']\\)\")",
+      "Bash(python -c \"import json; print\\(json.load\\(open\\('login.json'\\)\\)['session']['csrf_token']\\)\")",
+      "Bash(az account *)",
+      "PowerShell(az account show 2>&1)",
+      "PowerShell(az account list --output table 2>&1)",
+      "Bash(where az *)",
+      "Read(//c/Program Files/Microsoft SDKs/Azure/CLI2/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft SDKs/Azure/**)",
+      "Bash(ls \"/c/Program Files/Microsoft SDKs/Azure/CLI2/wbin\" 2>&1 | head -20)",
+      "Read(//c/Program Files/Microsoft SDKs/Azure/CLI2/wbin/**)"
     ]
   }
 }
