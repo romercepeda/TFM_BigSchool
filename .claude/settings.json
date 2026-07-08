@@ -45,7 +45,16 @@
       "Bash(printf '#!/bin/sh\\\\nexec celery -A app.worker:celery_app worker --loglevel=info\\\\n')",
       "Bash(git diff *)",
       "Bash(xxd)",
-      "Bash(docker run *)"
+      "Bash(docker run *)",
+      "Bash(grep -rInE \"\\(AIza[0-9A-Za-z_\\\\-]{35}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN \\(RSA|EC|OPENSSH|PGP\\) PRIVATE KEY-----\\)\" --exclude-dir=node_modules --exclude-dir=.git .)",
+      "Bash(grep -iE \"\\\\.env$|\\\\.env\\\\.|secret|credential|\\\\.pem$|\\\\.key$|\\\\.pfx$|id_rsa|\\\\.p12$|config\\\\.local|settings\\\\.local\")",
+      "Bash(grep -oE \"\\(JWT_SIGNING_KEY|GOOGLE_OAUTH_CLIENT_SECRET|MICROSOFT_OAUTH_CLIENT_SECRET|MARKET_DATA_[A-Z_]+_API_KEY|AI_[A-Z]+_API_KEY|GITHUB_TOKEN|GH_TOKEN\\)[=: ][\\\\\"']?[A-Za-z0-9_\\\\-\\\\.\\\\/+]{12,}\")",
+      "Bash(grep -oE \"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}\")",
+      "Bash(grep -iE \"\\(secret|api[_-]?key|token\\)[\\\\\"' ]*[:=][\\\\\"' ]*[A-Za-z0-9_\\\\-]{24,}\")",
+      "Bash(grep -viE \"your-|change-me|placeholder|<password>|TU_PASSWORD|csrf_token|access_token|refresh_token|X-CSRF-Token|session_token|jwt_signing_key.*generat|resource_token|__TRACKED_VAR__|__CMDSUB\")",
+      "Bash(grep -rInE \"password\\\\s*=\\\\s*[\\\\\"'][^\\\\\"']{6,}[\\\\\"']|api_key\\\\s*=\\\\s*[\\\\\"'][^\\\\\"']{10,}[\\\\\"']\" --include=\"*.py\" --include=\"*.ts\" backend/ frontend/)",
+      "Bash(grep -oE \"sk-ant-[A-Za-z0-9_\\\\-]{20,}|sk-proj-[A-Za-z0-9_\\\\-]{20,}|eyJ[A-Za-z0-9_\\\\-]{10,}\\\\.[A-Za-z0-9_\\\\-]{10,}\\\\.[A-Za-z0-9_\\\\-]{10,}\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/services/ai_report_service.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
     ]
   }
 }
