@@ -54,7 +54,19 @@
       "Bash(grep -viE \"your-|change-me|placeholder|<password>|TU_PASSWORD|csrf_token|access_token|refresh_token|X-CSRF-Token|session_token|jwt_signing_key.*generat|resource_token|__TRACKED_VAR__|__CMDSUB\")",
       "Bash(grep -rInE \"password\\\\s*=\\\\s*[\\\\\"'][^\\\\\"']{6,}[\\\\\"']|api_key\\\\s*=\\\\s*[\\\\\"'][^\\\\\"']{10,}[\\\\\"']\" --include=\"*.py\" --include=\"*.ts\" backend/ frontend/)",
       "Bash(grep -oE \"sk-ant-[A-Za-z0-9_\\\\-]{20,}|sk-proj-[A-Za-z0-9_\\\\-]{20,}|eyJ[A-Za-z0-9_\\\\-]{10,}\\\\.[A-Za-z0-9_\\\\-]{10,}\\\\.[A-Za-z0-9_\\\\-]{10,}\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/services/ai_report_service.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/services/ai_report_service.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python -c \"import playwright; print\\('py playwright ok'\\)\")",
+      "Bash(node -e \"require\\('playwright'\\); console.log\\('node playwright ok'\\)\")",
+      "Bash(python -m playwright install chromium)",
+      "Bash(python -m playwright install chromium --dry-run)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(python stage1_guest_login.py)",
+      "Bash(python stage2_add_asset.py)",
+      "Bash(python guest_full_walkthrough.py)",
+      "Bash(python guest_extra.py)",
+      "Bash(python add_walkthrough.py)",
+      "Bash(where soffice *)",
+      "Bash(where libreoffice *)"
     ]
   }
 }
