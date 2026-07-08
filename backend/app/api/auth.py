@@ -17,6 +17,7 @@ Token strategy (Spec 00b §2, updated by C01):
     - There is no separate refresh endpoint — the session renews on the next login.
 """
 
+import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -73,13 +74,17 @@ async def _count_active_portfolios(db: AsyncSession, user_id: UUID) -> int:
 
 
 def _set_session_cookies(response: Response, token: str, csrf_token: str) -> None:
+    # BACKEND_BASE_URL is only ever https:// in a deployed environment; local
+    # dev sets it to http://localhost:8000, where Secure cookies would be
+    # dropped by the browser (Spec 00b §6 — HTTPS in deployment, HTTP is ok locally).
+    secure = os.environ.get("BACKEND_BASE_URL", "").startswith("https://")
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
         samesite="lax",
         max_age=_SESSION_MAX_AGE,
-        secure=False,   # set True when serving over HTTPS
+        secure=secure,
         path="/",
     )
     response.set_cookie(
@@ -88,7 +93,7 @@ def _set_session_cookies(response: Response, token: str, csrf_token: str) -> Non
         httponly=False,  # must be readable by JavaScript
         samesite="lax",
         max_age=_SESSION_MAX_AGE,
-        secure=False,
+        secure=secure,
         path="/",
     )
 
@@ -129,6 +134,7 @@ async def _build_login_response(
         session=LoginSessionOut(
             portfolios_count=portfolios_count,
             notifications_poll_interval_seconds=cfg.ai.notifications.poll_interval_seconds,
+            csrf_token=csrf_token,
         ),
     )
 

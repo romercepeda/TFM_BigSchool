@@ -66,9 +66,17 @@ class LoginUserOut(BaseModel):
 
 
 class LoginSessionOut(BaseModel):
-    """Session metadata returned in the login response body (C01 §4)."""
+    """Session metadata returned in the login response body (C01 §4).
+
+    csrf_token mirrors the value set in the non-httpOnly pi_csrf cookie. It is
+    also returned in the body because the frontend and backend live on
+    different hostnames in production, so document.cookie on the frontend
+    page cannot read a cookie set by a cross-host response — the frontend
+    must keep this value in memory instead (see api/client.ts).
+    """
     portfolios_count: int
     notifications_poll_interval_seconds: int
+    csrf_token: str
 
 
 class LoginResponse(BaseModel):

@@ -27,6 +27,7 @@ export interface LoginUserOut {
 export interface LoginSessionOut {
   portfolios_count: number;
   notifications_poll_interval_seconds: number;
+  csrf_token: string;
 }
 
 export interface LoginResponse {

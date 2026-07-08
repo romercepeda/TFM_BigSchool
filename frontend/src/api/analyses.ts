@@ -1,12 +1,8 @@
 import { get, patch, del } from './client.js';
 import type { AiReportSummary, AiReportDetail, Notification, UploadReportResponse } from './types.js';
+import { getCsrfToken } from '../state/auth-state.js';
 
 const BASE_URL: string = import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
-
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)pi_csrf=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
 
 export const uploadPdf = (portfolioId: string, holdingId: string, file: File): Promise<UploadReportResponse> => {
   const form = new FormData();

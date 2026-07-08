@@ -88,7 +88,7 @@ export class LoginScreen extends BaseComponent {
     errEl.textContent = '';
     try {
       const res = await fn();
-      setAuthState(res.user, res.session.notifications_poll_interval_seconds);
+      setAuthState(res.user, res.session.notifications_poll_interval_seconds, res.session.csrf_token);
       const redirect = consumeRedirectAfterLogin();
       if (redirect) { navigate(redirect); return; }
       // Post-login routing (D02 §10)

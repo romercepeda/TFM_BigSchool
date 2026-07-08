@@ -5,14 +5,9 @@
 import { ApiError } from './types.js';
 import { currentLanguage } from '../state/language-state.js';
 import { navigate } from '../router/router.js';
-import { clearAuthState } from '../state/auth-state.js';
+import { clearAuthState, getCsrfToken } from '../state/auth-state.js';
 
 const BASE_URL: string = import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
-
-function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)pi_csrf=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
 
 export async function request<T>(
   method: string,
