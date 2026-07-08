@@ -68,7 +68,7 @@ Set directly on `portfolio-ia-backend` and `portfolio-ia-worker` (not read from 
 
 ```
 DATABASE_URL = postgresql+asyncpg://portfolioadmin:<password>@portfolio-ia-db.postgres.database.azure.com/bigschool?ssl=require
-REDIS_URL = <Upstash Redis URL, rediss://...>
+REDIS_URL = rediss://default:<password>@<host>.upstash.io:6379   # rediss://, NOT redis:// — see §5.7
 JWT_SIGNING_KEY = <random, generated with: python -c "import secrets; print(secrets.token_hex(32))">
 FRONTEND_BASE_URL = https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io
 BACKEND_BASE_URL = https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io
@@ -79,6 +79,8 @@ AI_ANTHROPIC_API_KEY / AI_OPENAI_API_KEY / AI_GEMINI_API_KEY
 ```
 
 `BACKEND_BASE_URL` matters beyond OAuth callback construction: as of this changeset, the backend also reads it to decide the `Secure` flag on auth cookies (see §6.3) — it must start with `https://` in any real deployment, or cookies silently stop being marked `Secure`.
+
+**`DATABASE_URL` and `REDIS_URL` must be set identically on both `portfolio-ia-backend` and `portfolio-ia-worker`** — they are two separate Container Apps with independently-set env vars, not a shared config. §5.7 and §5.8 are both instances of these silently drifting apart on the worker specifically (wrong Redis scheme, then a literal unreplaced password placeholder) without anyone noticing until a report upload actually exercised that path.
 
 **Frontend** doesn't read environment variables at runtime (it's a static Nginx build) — it needs `VITE_BACKEND_BASE_URL` as a **Docker build-arg** at image build time (see §4.2). There is no frontend Container App env var to set.
 
@@ -211,7 +213,45 @@ The browser *does* still send the cookie to the backend automatically (cookie at
 
 Docker Compose's model — one image, different `command:` per service — has no equivalent in Azure Container Apps in the way this project used it. `portfolio-ia-worker` needs a dedicated entry point. Fix: `backend/start-worker.sh` (`exec celery -A app.worker:celery_app worker --loglevel=info`) is now `COPY`'d into the image and `chmod +x`'d in `backend/Dockerfile`. The worker Container App's command is configured separately to invoke it (already set on the existing `portfolio-ia-worker` app — not something `containerapp update --image` touches, so it doesn't need to be repeated on every redeploy, only if the worker's command itself changes).
 
-### 5.6 Verifying with PowerShell's `Invoke-WebRequest` can give false negatives
+### 5.6 The Celery Redis result backend crashes uploads against Upstash (and nothing reads it anyway)
+
+**Symptom (found 2026-07-08, a day after the initial deployment):** `POST /portfolios/{id}/holdings/{id}/ai-reports` (PDF report upload) returned 500. Backend logs showed `redis.exceptions.ConnectionError: Connection closed by server` raised from inside `send_task` → `on_task_call`, after ~20 retries of `celery.backends.redis: Connection to Redis lost`.
+
+**Root cause:** `backend/app/worker/__init__.py` configured Redis as **both** the Celery broker and the **result backend**. The result backend opens a persistent pubsub subscription per task on `send_task()` so a later `AsyncResult.get()` can consume the result efficiently — but nothing in this codebase ever calls `AsyncResult` or `.get()`; job status is tracked entirely via the `AnalysisJob` DB row, polled through `GET /ai-reports/jobs`. That pubsub connection was pure unread overhead, and Upstash killed it, which Celery's retry logic exhausted and then raised instead of enqueueing.
+
+**Fix:** removed `backend=` from the `Celery(...)` constructor and added `task_ignore_result=True`. Verified locally that `send_task` now goes through `celery.backends.base.DisabledBackend` — no Redis round-trip for results at all.
+
+### 5.7 `REDIS_URL` was using the plain (non-TLS) `redis://` scheme
+
+**Symptom:** even after fixing 5.6, the worker container couldn't connect to Redis *at all* on startup: `consumer: Cannot connect to redis://...upstash.io:6379//: Connection closed by server`, retried up to 100 times.
+
+**Root cause:** the `REDIS_URL` configured on both `portfolio-ia-backend` and `portfolio-ia-worker` used the `redis://` (plain TCP) scheme. Upstash Redis only accepts TLS connections on its endpoint — a plain-TCP Redis handshake gets its connection closed immediately by the server. This affected the broker connection too (not just the result-backend pubsub from 5.6), and is likely part of why the original `on_task_call` pubsub subscribe in 5.6 kept failing so aggressively.
+
+**Fix:** changed the scheme to `rediss://` (same host/port) on both container apps:
+```powershell
+& $azPath containerapp update --name "portfolio-ia-backend" --resource-group $rg --set-env-vars "REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379"
+& $azPath containerapp update --name "portfolio-ia-worker" --resource-group $rg --set-env-vars "REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379"
+```
+Worker logs confirmed `Connected to rediss://...` and `celery@... ready.` immediately after. Note: Celery logs a `Secure redis scheme specified (rediss) with no ssl options, defaulting to insecure SSL behaviour` warning — harmless here (still TLS-encrypted, just without custom cert verification options), not investigated further since it isn't blocking.
+
+**When copying `REDIS_URL` from the Upstash console, always use the `rediss://` connection string, not `redis://`**, even though Upstash's dashboard sometimes shows both.
+
+### 5.8 The worker's `DATABASE_URL` had a literal, never-replaced placeholder password
+
+**Symptom:** after fixing 5.6 and 5.7, the worker received and ran the task, but it failed with `InvalidPasswordError: password authentication failed for user "portfolioadmin"`.
+
+**Root cause:** `portfolio-ia-worker`'s `DATABASE_URL` env var was `postgresql+asyncpg://portfolioadmin:TU_PASSWORD_DB@...` — the `TU_PASSWORD_DB` placeholder was never swapped for the real password when the worker container app was created, even though `portfolio-ia-backend`'s `DATABASE_URL` had the correct password all along. Since the worker never has ingress/logs anyone actively watches, this went unnoticed until a report upload actually reached the point of writing to the DB.
+
+**Fix:** copied the real password from the backend's `DATABASE_URL` into the worker's.
+
+**Operational takeaway:** whenever `portfolio-ia-backend` and `portfolio-ia-worker` are meant to share a config value (`DATABASE_URL`, `REDIS_URL`), **diff them explicitly** after any setup or redeploy —
+```powershell
+& $azPath containerapp show --name "portfolio-ia-backend" --resource-group $rg --query "properties.template.containers[0].env" -o json
+& $azPath containerapp show --name "portfolio-ia-worker" --resource-group $rg --query "properties.template.containers[0].env" -o json
+```
+— don't assume they were set identically just because they were set at the same time.
+
+### 5.9 Verifying with PowerShell's `Invoke-WebRequest` can give false negatives
 
 During verification, `Invoke-WebRequest -WebSession` intermittently failed to carry a cookie across two calls in the same script in a way that looked like a real CSRF failure but wasn't reproducible with `curl`. **Prefer `curl` (available in Git Bash / `PowerShell` via the bundled `curl.exe`) for any CSRF/cookie verification** — it's the ground truth used throughout this changeset. If `Invoke-WebRequest` disagrees with `curl`, trust `curl`.
 
@@ -229,7 +269,9 @@ During verification, `Invoke-WebRequest -WebSession` intermittently failed to ca
 | `frontend/src/screens/login-screen.ts` | Passes `res.session.csrf_token` into `setAuthState`. |
 | `frontend/src/api/client.ts` | Reads the CSRF token from `auth-state.ts` instead of `document.cookie`. |
 | `frontend/src/api/analyses.ts` | Same fix applied to the PDF-upload fetch wrapper, which had its own duplicate (and equally broken) `document.cookie` reader. |
-| `backend/Dockerfile`, `backend/start-worker.sh` | Worker launch script baked into the image (§5.5). |
+| `backend/Dockerfile`, `backend/start-worker.sh` | Worker launch script baked into the image (§5.5) — must have LF line endings, not CRLF (a Windows editor/tool reintroducing CRLF in the working tree, even with `.gitattributes eol=lf`, silently breaks the baked-in script; `git diff` shows nothing because the *committed blob* is already normalized — only the on-disk file was wrong. Verify with `docker run --rm <image> sh -c "cat -A /start-worker.sh"` and confirm no `^M`/`$` mix before trusting a build). |
+| `backend/app/worker/__init__.py` | Removed the Redis result backend, `task_ignore_result=True` (§5.6). |
+| `frontend/src/screens/login-screen.ts` | Removed the hardcoded default email value on the login form. |
 
 This does **not** change Changeset C01's acceptance criteria — a `POST` without a valid `X-CSRF-Token` still returns 403 for every endpoint that requires an existing session. It narrows *which* endpoints require the header (session-issuing ones no longer do) and changes *how* the frontend obtains the value (body instead of cross-host cookie read).
 
@@ -259,6 +301,16 @@ curl -s -b cookies.txt -X POST "$BACKEND/portfolios" -H "Content-Type: applicati
 # 4. Login works even with a stale pi_csrf cookie already in the jar (§5.3 regression guard)
 curl -s -b cookies.txt -X POST "$BACKEND/auth/guest" -H "Content-Type: application/json" \
   -H "Origin: $FRONTEND_ORIGIN" -d '{"email":"verify2@test.com"}' -w "\n%{http_code}\n"  # expect 200
+```
+
+If the worker image changed, also confirm a report upload actually completes end to end (catches §5.6-§5.8 class of bugs, which a plain `curl` health check on the backend alone won't surface — those only show up once a task actually reaches the worker):
+
+```bash
+# after uploading a PDF via POST .../ai-reports (expect 202, with a job_id)
+curl -s -b cookies.txt "$BACKEND/ai-reports/jobs" -H "Origin: $FRONTEND_ORIGIN"
+# poll until status is "completed" or "failed" (not stuck on "queued")
+# a "failed" status with a last_error about the PDF/AI provider is fine (bad test file);
+# a "failed"/stuck-"queued" status with no last_error, or a 500 on the POST itself, is not.
 ```
 
 Also confirm the frontend is actually serving the new build, not a cached one:
