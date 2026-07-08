@@ -1,6 +1,6 @@
 # Changeset C11 — Commercial Landing Page (Eural / Portfolio IA)
 
-**Status:** Pending implementation
+**Status:** Implemented
 **Type:** Cross-spec changeset
 **Triggered by:** Need to publish a commercial landing page as the public entry point of the site, presenting Portfolio IA as the flagship product of Eural Spain Soft Technology S.L. with clear paths to login and registration.
 **Affects implementations of:** Spec D10 (Frontend Architecture), Spec D08 (i18n), Spec D01 (Authentication routes)
