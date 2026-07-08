@@ -40,7 +40,12 @@
       "Bash(pip show *)",
       "Bash(python3)",
       "Bash(python presentacion/_add_deployment_slide.py)",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/worker/__init__.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/worker/__init__.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(xxd backend/start-worker.sh)",
+      "Bash(printf '#!/bin/sh\\\\nexec celery -A app.worker:celery_app worker --loglevel=info\\\\n')",
+      "Bash(git diff *)",
+      "Bash(xxd)",
+      "Bash(docker run *)"
     ]
   }
 }
