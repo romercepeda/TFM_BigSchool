@@ -255,6 +255,23 @@ Worker logs confirmed `Connected to rediss://...` and `celery@... ready.` immedi
 
 During verification, `Invoke-WebRequest -WebSession` intermittently failed to carry a cookie across two calls in the same script in a way that looked like a real CSRF failure but wasn't reproducible with `curl`. **Prefer `curl` (available in Git Bash / `PowerShell` via the bundled `curl.exe`) for any CSRF/cookie verification** — it's the ground truth used throughout this changeset. If `Invoke-WebRequest` disagrees with `curl`, trust `curl`.
 
+### 5.10 A failed `.delay()` call leaves the AnalysisJob row orphaned in "queued" forever
+
+**Symptom (found 2026-07-08, after fixing 5.6-5.8):** the header-bar's pending-jobs badge stayed stuck on a count (4 in the observed case) that never went down, even though no upload was actually in flight.
+
+**Root cause:** `create_upload_and_job` (`backend/app/services/ai_report_service.py`) commits the `AnalysisJob` row as `status="queued"` **before** calling `analyze_report_task.delay(job.id)` — deliberately, so the worker is guaranteed to find the row once it picks up the task (see the code comment there). But during the 5.6-5.8 outage, `.delay()` itself was throwing (broker unreachable), which raised a 500 back to the client — while the `"queued"` row had *already been committed*. Nothing was ever going to transition that row out of `"queued"`: no worker ever received the task, and there was no other code path watching for "enqueue never actually happened." `GET /ai-reports/jobs?status_filter=queued,running` (the badge's data source) counted these forever.
+
+Four such rows accumulated in production during the 5.6-5.8 outage window and had to be cleaned up manually:
+```sql
+UPDATE analysis_jobs SET status='failed', last_error='...', completed_at=now()
+WHERE status IN ('queued','running') AND attempt_count=0 AND started_at IS NULL;
+```
+(`attempt_count=0 AND started_at IS NULL` scopes this to rows a worker never touched at all — never match a job that's legitimately mid-retry.)
+
+**Fix:** `create_upload_and_job` now wraps `.delay()` in try/except; on failure it marks the job `"failed"` with an explanatory `last_error` before re-raising, so a broker outage now produces a clean failed job instead of a silent leak. This is defense-in-depth on top of 5.6-5.8 actually being fixed — it stops this *specific* failure mode from recurring for any *future* broker hiccup, whatever the cause.
+
+**Operational takeaway:** if the pending-jobs badge is ever stuck again, check for `AnalysisJob` rows with `status IN ('queued','running') AND started_at IS NULL` — that combination means the row was never picked up by any worker at all, which after this fix should no longer be reachable via the upload endpoint, but could still happen if something enqueues jobs outside of `create_upload_and_job`.
+
 ---
 
 ## 6. Summary of code changes introduced by this changeset
@@ -272,6 +289,7 @@ During verification, `Invoke-WebRequest -WebSession` intermittently failed to ca
 | `backend/Dockerfile`, `backend/start-worker.sh` | Worker launch script baked into the image (§5.5) — must have LF line endings, not CRLF (a Windows editor/tool reintroducing CRLF in the working tree, even with `.gitattributes eol=lf`, silently breaks the baked-in script; `git diff` shows nothing because the *committed blob* is already normalized — only the on-disk file was wrong. Verify with `docker run --rm <image> sh -c "cat -A /start-worker.sh"` and confirm no `^M`/`$` mix before trusting a build). |
 | `backend/app/worker/__init__.py` | Removed the Redis result backend, `task_ignore_result=True` (§5.6). |
 | `frontend/src/screens/login-screen.ts` | Removed the hardcoded default email value on the login form. |
+| `backend/app/services/ai_report_service.py` | `create_upload_and_job` marks the job `"failed"` if `.delay()` raises, instead of leaving it orphaned in `"queued"` (§5.10). |
 
 This does **not** change Changeset C01's acceptance criteria — a `POST` without a valid `X-CSRF-Token` still returns 403 for every endpoint that requires an existing session. It narrows *which* endpoints require the header (session-issuing ones no longer do) and changes *how* the frontend obtains the value (body instead of cross-host cookie read).
 
