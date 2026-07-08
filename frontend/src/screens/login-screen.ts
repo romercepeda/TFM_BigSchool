@@ -1,15 +1,26 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
-import { login, guestLogin } from '../api/auth.js';
+import { login, register, guestLogin } from '../api/auth.js';
 import { setAuthState, currentUser } from '../state/auth-state.js';
 import { currentLanguage } from '../state/language-state.js';
 import { navigate, consumeRedirectAfterLogin } from '../router/router.js';
 import { listPortfolios } from '../api/portfolios.js';
+import { ApiError } from '../api/types.js';
+import { required, email as validateEmail, minLength, first } from '../utils/validation.js';
 import type { LoginResponse } from '../api/types.js';
 
+type Mode = 'login' | 'register';
+
 export class LoginScreen extends BaseComponent {
+  private _mode: Mode = 'login';
+  private _fieldErrors: { email?: string; password?: string } = {};
+  private _topError: string | null = null;
+  private _emailExists = false;
+  private _prefillEmail = '';
+
   protected render(): string {
     if (currentUser.value) return '<style>:host{display:block}</style>';
+    const isRegister = this._mode === 'register';
     return `
       <style>
         :host { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -38,6 +49,8 @@ export class LoginScreen extends BaseComponent {
           color: var(--color-text-secondary);
         }
         .error { color: var(--color-danger); font-size: var(--font-size-sm); margin-top: var(--space-2); }
+        .field-error { color: var(--color-danger); font-size: var(--font-size-sm); }
+        .mode-toggle { text-align: center; margin-top: var(--space-4); font-size: var(--font-size-sm); }
         .lang { text-align: right; margin-bottom: var(--space-4); font-size: var(--font-size-sm); }
         .lang select { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px; }
       </style>
@@ -51,31 +64,90 @@ export class LoginScreen extends BaseComponent {
         <h1>${t('login.title')}</h1>
         <div class="field">
           <label for="email">${t('login.email')}</label>
-          <input type="email" id="email" autocomplete="email" />
+          <input type="email" id="email" autocomplete="email" value="${this._prefillEmail}" />
+          ${this._fieldErrors.email ? `<div class="field-error">${t(this._fieldErrors.email)}</div>` : ''}
         </div>
         <div class="field">
           <label for="password">${t('login.password')}</label>
-          <input type="password" id="password" autocomplete="current-password" />
+          <input type="password" id="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" />
+          ${this._fieldErrors.password ? `<div class="field-error">${t(this._fieldErrors.password, { min: 8 })}</div>` : ''}
         </div>
-        <div id="error" class="error"></div>
-        <button class="btn-primary" id="login-btn">${t('login.submit')}</button>
+        ${isRegister ? `
+        <div class="field">
+          <label for="display-name">${t('register.display_name.label')}</label>
+          <input type="text" id="display-name" placeholder="${t('register.display_name.placeholder')}" />
+        </div>` : ''}
+        <div id="error" class="error">${this._renderTopError()}</div>
+        <button class="btn-primary" id="submit-btn">${isRegister ? t('register.submit') : t('login.submit')}</button>
         <button class="btn-secondary" id="guest-btn">${t('login.guest')}</button>
+        <div class="mode-toggle">
+          <a href="#" id="mode-toggle-link">${isRegister ? t('login.mode.toggle.to_login') : t('login.mode.toggle.to_register')}</a>
+        </div>
       </div>
     `;
+  }
+
+  private _renderTopError(): string {
+    if (this._emailExists) {
+      return `${t('register.error.email_exists')} <a href="#" id="switch-to-login-link">${t('register.error.email_exists.action')}</a>`;
+    }
+    return this._topError ?? '';
+  }
+
+  private _rerender(): void {
+    this.shadow.innerHTML = this.render();
+    this.afterRender();
   }
 
   protected afterRender(): void {
     this.shadow.getElementById('lang-select')?.addEventListener('change', (e) => {
       currentLanguage.value = (e.target as HTMLSelectElement).value;
     });
-    this.shadow.getElementById('login-btn')?.addEventListener('click', () => void this._doLogin());
+    this.shadow.getElementById('submit-btn')?.addEventListener('click', () => void this._doSubmit());
     this.shadow.getElementById('guest-btn')?.addEventListener('click', () => void this._doGuest());
+    this.shadow.getElementById('mode-toggle-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      this._switchMode(this._mode === 'login' ? 'register' : 'login', '');
+    });
+    this.shadow.getElementById('switch-to-login-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const email = (this.shadow.getElementById('email') as HTMLInputElement).value;
+      this._switchMode('login', email);
+    });
   }
 
-  private async _doLogin(): Promise<void> {
+  private _switchMode(mode: Mode, prefillEmail: string): void {
+    this._mode = mode;
+    this._fieldErrors = {};
+    this._topError = null;
+    this._emailExists = false;
+    this._prefillEmail = prefillEmail;
+    this._rerender();
+  }
+
+  private async _doSubmit(): Promise<void> {
     const email = (this.shadow.getElementById('email') as HTMLInputElement).value;
     const password = (this.shadow.getElementById('password') as HTMLInputElement).value;
-    await this._handleResponse(() => login({ email, password }));
+    this._prefillEmail = email;
+
+    const emailErr = first(() => required(email), () => validateEmail(email));
+    const passwordErr = first(() => required(password), () => minLength(password, 8));
+    if (emailErr || passwordErr) {
+      this._fieldErrors = { email: emailErr ?? undefined, password: passwordErr ?? undefined };
+      this._topError = null;
+      this._emailExists = false;
+      this._rerender();
+      return;
+    }
+    this._fieldErrors = {};
+
+    if (this._mode === 'register') {
+      const displayNameInput = this.shadow.getElementById('display-name') as HTMLInputElement | null;
+      const displayName = displayNameInput?.value.trim() || undefined;
+      await this._handleResponse(() => register(email, password, displayName));
+    } else {
+      await this._handleResponse(() => login({ email, password }));
+    }
   }
 
   private async _doGuest(): Promise<void> {
@@ -84,8 +156,8 @@ export class LoginScreen extends BaseComponent {
   }
 
   private async _handleResponse(fn: () => Promise<LoginResponse>): Promise<void> {
-    const errEl = this.shadow.getElementById('error')!;
-    errEl.textContent = '';
+    this._topError = null;
+    this._emailExists = false;
     try {
       const res = await fn();
       setAuthState(res.user, res.session.notifications_poll_interval_seconds, res.session.csrf_token);
@@ -101,7 +173,12 @@ export class LoginScreen extends BaseComponent {
         navigate('/portfolios');
       }
     } catch (ex) {
-      errEl.textContent = (ex as Error).message;
+      if (this._mode === 'register' && ex instanceof ApiError && ex.status === 409) {
+        this._emailExists = true;
+      } else {
+        this._topError = (ex as Error).message;
+      }
+      this._rerender();
     }
   }
 }

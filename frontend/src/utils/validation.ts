@@ -6,11 +6,11 @@ export function required(value: string): string | null {
 }
 
 export function email(value: string): string | null {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : 'validation.email';
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : 'validation.email.invalid';
 }
 
 export function minLength(value: string, min: number): string | null {
-  return value.length >= min ? null : 'validation.min_length';
+  return value.length >= min ? null : 'validation.password.min_length';
 }
 
 export function maxLength(value: string, max: number): string | null {

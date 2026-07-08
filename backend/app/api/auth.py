@@ -160,7 +160,13 @@ async def register(
             detail="An account with this email already exists.",
         )
 
-    user = await create_user(db, email=body.email, auth_provider="password", password=body.password)
+    user = await create_user(
+        db,
+        email=body.email,
+        auth_provider="password",
+        password=body.password,
+        display_name=body.display_name,
+    )
     await db.commit()
     await db.refresh(user)
     return await _build_login_response(response, user, db)

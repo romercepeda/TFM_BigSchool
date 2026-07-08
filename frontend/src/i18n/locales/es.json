@@ -62,6 +62,14 @@
   "login.password": "Contraseña",
   "login.submit": "Entrar",
   "login.guest": "Continuar como invitado",
+  "login.mode.toggle.to_register": "¿No tienes cuenta? Crear una",
+  "login.mode.toggle.to_login": "¿Ya tienes cuenta? Iniciar sesión",
+
+  "register.submit": "Crear cuenta",
+  "register.display_name.label": "Nombre a mostrar (opcional)",
+  "register.display_name.placeholder": "Ej: Juan Pérez",
+  "register.error.email_exists": "Ya existe una cuenta con este email. ¿Quieres iniciar sesión?",
+  "register.error.email_exists.action": "Sí, iniciar sesión",
 
   "screen.register.title": "Crear cuenta",
   "screen.register.email": "Email",
