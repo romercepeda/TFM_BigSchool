@@ -12,8 +12,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # This COPY is here so the image also works standalone (e.g. in CI or production).
 COPY . .
 
+# Worker startup script for Celery (used in Azure Container Apps)
+COPY start-worker.sh /start-worker.sh
+RUN chmod +x /start-worker.sh
+
 EXPOSE 8000
 
-# --reload enables hot-reload when the source volume is mounted.
-# In production this will be replaced with a fixed worker count via Gunicorn.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
