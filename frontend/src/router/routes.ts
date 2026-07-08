@@ -32,7 +32,9 @@ function route(
 }
 
 const ROUTES: RouteDef[] = [
+  route('/',                                                                    'pi-landing-page',              false),
   route('/app/login',                                                           'pi-login-screen',             false),
+  route('/app/register',                                                        'pi-login-screen',             false),
   route('/app/indicators/legend',                                              'pi-indicators-legend-screen'),
   route('/app/portfolios/new',                                                  'pi-create-portfolio-screen'),
   route('/app/portfolios/:portfolioId/add-asset',                               'pi-add-asset-screen'),

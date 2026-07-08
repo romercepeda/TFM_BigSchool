@@ -3,7 +3,7 @@ import { t } from '../i18n/i18n.js';
 import { login, register, guestLogin } from '../api/auth.js';
 import { setAuthState, currentUser } from '../state/auth-state.js';
 import { currentLanguage } from '../state/language-state.js';
-import { navigate, consumeRedirectAfterLogin } from '../router/router.js';
+import { navigate, currentPath, consumeRedirectAfterLogin } from '../router/router.js';
 import { listPortfolios } from '../api/portfolios.js';
 import { ApiError } from '../api/types.js';
 import { required, email as validateEmail, minLength, first } from '../utils/validation.js';
@@ -12,7 +12,9 @@ import type { LoginResponse } from '../api/types.js';
 type Mode = 'login' | 'register';
 
 export class LoginScreen extends BaseComponent {
-  private _mode: Mode = 'login';
+  // C11 §2: the landing's "Crear cuenta" CTAs land on /app/register, a
+  // distinct URL for the same screen — start in register mode there.
+  private _mode: Mode = currentPath() === '/app/register' ? 'register' : 'login';
   private _fieldErrors: { email?: string; password?: string } = {};
   private _topError: string | null = null;
   private _emailExists = false;

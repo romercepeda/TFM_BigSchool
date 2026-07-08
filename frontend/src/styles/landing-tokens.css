@@ -1,0 +1,19 @@
+/* Landing page design tokens — Eural brand identity (Changeset C11 §4.6).
+   Scoped to :host (the pi-landing-page shadow root) so the Eural palette
+   never cascades into the app's own tokens.css (Spec D10 §10). Imported
+   with ?inline and only referenced from pi-landing-page, so it is only
+   ever loaded while the landing is active. */
+
+:host {
+  --landing-bg:             #2d2d33;
+  --landing-bg-alt:         #26262b;
+  --landing-bg-deep:        #1f1f24;
+  --landing-text-primary:   #f5f5f5;
+  --landing-text-secondary: #a9a9b0;
+  --landing-text-muted:     #7d7d85;
+  --landing-gold:           #c9a961;
+  --landing-silver:         #c8c8ce;
+
+  --landing-font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --landing-font-display: 'Playfair Display', Georgia, serif;
+}

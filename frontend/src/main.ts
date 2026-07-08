@@ -19,6 +19,7 @@ import './components/indicator-card.js';
 import './components/price-level-form.js';
 import './components/pdf-uploader.js';
 
+import './screens/landing-page.js';
 import './screens/login-screen.js';
 import './screens/portfolios-screen.js';
 import './screens/create-portfolio-screen.js';
@@ -39,7 +40,7 @@ import './screens/admin-cascade-failures-screen.js';
 import './screens/permission-denied-screen.js';
 
 import { loadLocale } from './i18n/i18n.js';
-import { onRouteChange, resolveRoute, replace } from './router/router.js';
+import { onRouteChange, resolveRoute } from './router/router.js';
 
 // Apply stored theme before any component renders.
 applyTheme(currentTheme.value);
@@ -55,10 +56,6 @@ function renderCurrentRoute(): void {
 
 async function bootstrap(): Promise<void> {
   await loadLocale(navigator.language.startsWith('en') ? 'en' : 'es');
-
-  if (location.pathname === '/' || location.pathname === '') {
-    replace('/app/login');
-  }
 
   onRouteChange(renderCurrentRoute);
   renderCurrentRoute();
