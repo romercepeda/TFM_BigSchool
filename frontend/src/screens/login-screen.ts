@@ -53,11 +53,23 @@ export class LoginScreen extends BaseComponent {
         .error { color: var(--color-danger); font-size: var(--font-size-sm); margin-top: var(--space-2); }
         .field-error { color: var(--color-danger); font-size: var(--font-size-sm); }
         .mode-toggle { text-align: center; margin-top: var(--space-4); font-size: var(--font-size-sm); }
-        .lang { text-align: right; margin-bottom: var(--space-4); font-size: var(--font-size-sm); }
+        .top-row {
+          display: flex; justify-content: space-between; align-items: center;
+          margin-bottom: var(--space-4); font-size: var(--font-size-sm);
+        }
+        .home-link {
+          display: inline-flex; align-items: center; gap: var(--space-1);
+          color: var(--color-text-secondary); text-decoration: none;
+        }
+        .home-link:hover { color: var(--color-text-primary); }
         .lang select { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px; }
       </style>
       <div class="card">
-        <div class="lang">
+        <div class="top-row">
+          <a href="/" id="home-link" class="home-link" aria-label="${t('login.back_to_home')}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            ${t('login.back_to_home')}
+          </a>
           <select id="lang-select">
             <option value="es" ${currentLanguage.value === 'es' ? 'selected' : ''}>ES</option>
             <option value="en" ${currentLanguage.value === 'en' ? 'selected' : ''}>EN</option>
@@ -102,6 +114,10 @@ export class LoginScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
+    this.shadow.getElementById('home-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigate('/');
+    });
     this.shadow.getElementById('lang-select')?.addEventListener('change', (e) => {
       currentLanguage.value = (e.target as HTMLSelectElement).value;
     });

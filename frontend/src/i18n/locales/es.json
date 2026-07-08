@@ -57,6 +57,7 @@
   "screen.login.guest": "Continuar como invitado",
   "screen.login.register": "¿No tienes cuenta? Regístrate",
 
+  "login.back_to_home": "Volver al inicio",
   "login.title": "Iniciar sesión",
   "login.email": "Email",
   "login.password": "Contraseña",

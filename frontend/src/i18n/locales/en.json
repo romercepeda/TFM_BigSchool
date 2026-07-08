@@ -57,6 +57,7 @@
   "screen.login.guest": "Continue as guest",
   "screen.login.register": "Don't have an account? Sign up",
 
+  "login.back_to_home": "Back to home",
   "login.title": "Sign in",
   "login.email": "Email",
   "login.password": "Password",
