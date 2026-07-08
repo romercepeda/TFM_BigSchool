@@ -33,8 +33,34 @@ export function currentPath(): string {
 
 const CHANGE_PASSWORD_PATH = '/app/settings/change-password';
 
+// C11 §7: bookmarks to pre-/app URLs must keep working. Longest prefix wins
+// so a legacy path is never redirected to the wrong (shorter) target.
+const LEGACY_REDIRECTS: Record<string, string> = {
+  '/login': '/app/login',
+  '/portfolios': '/app/portfolios',
+  '/settings': '/app/settings',
+  '/admin': '/app/admin',
+  '/indicators': '/app/indicators',
+};
+
+function legacyRedirectTarget(path: string): string | null {
+  for (const [legacyPrefix, newPrefix] of Object.entries(LEGACY_REDIRECTS)) {
+    if (path === legacyPrefix || path.startsWith(`${legacyPrefix}/`)) {
+      return newPrefix + path.slice(legacyPrefix.length);
+    }
+  }
+  return null;
+}
+
 export function resolveRoute(): { screen: string; params: RouteParams } {
   const path = currentPath();
+
+  const legacyTarget = legacyRedirectTarget(path);
+  if (legacyTarget) {
+    replace(legacyTarget);
+    return resolveRoute();
+  }
+
   const match = matchRoute(path);
   if (!match) return { screen: 'not-found', params: {} };
 
