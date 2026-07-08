@@ -63,7 +63,7 @@ export class LoginScreen extends BaseComponent {
             <option value="en" ${currentLanguage.value === 'en' ? 'selected' : ''}>EN</option>
           </select>
         </div>
-        <h1>${t('login.title')}</h1>
+        <h1>${isRegister ? t('register.title') : t('login.title')}</h1>
         <div class="field">
           <label for="email">${t('login.email')}</label>
           <input type="email" id="email" autocomplete="email" value="${this._prefillEmail}" />

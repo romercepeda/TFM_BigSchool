@@ -65,6 +65,7 @@
   "login.mode.toggle.to_register": "Don't have an account? Sign up",
   "login.mode.toggle.to_login": "Already have an account? Sign in",
 
+  "register.title": "Create account",
   "register.submit": "Create account",
   "register.display_name.label": "Display name (optional)",
   "register.display_name.placeholder": "E.g. Jane Doe",
