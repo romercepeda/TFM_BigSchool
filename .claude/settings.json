@@ -22,7 +22,24 @@
       "Read(//c/Program Files/Microsoft SDKs/Azure/CLI2/**)",
       "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft SDKs/Azure/**)",
       "Bash(ls \"/c/Program Files/Microsoft SDKs/Azure/CLI2/wbin\" 2>&1 | head -20)",
-      "Read(//c/Program Files/Microsoft SDKs/Azure/CLI2/wbin/**)"
+      "Read(//c/Program Files/Microsoft SDKs/Azure/CLI2/wbin/**)",
+      "Bash(docker build *)",
+      "Bash(docker push *)",
+      "Bash(rm -f /tmp/prod_cookies.txt /tmp/prod_login.json)",
+      "Bash(curl -s -c /tmp/prod_cookies.txt -X POST __TRACKED_VAR__/auth/guest -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"prod-verify-csrf@test.com\"}' -o /tmp/prod_login.json -w 'LOGIN_STATUS:%{http_code}\\\\n')",
+      "Bash(python -c \"import json; print\\(json.load\\(open\\('/tmp/prod_login.json'\\)\\)['session']['csrf_token']\\)\")",
+      "Bash(curl -s -c /tmp/prod_cookies.txt -b /tmp/prod_cookies.txt -X POST __TRACKED_VAR__/portfolios -H 'Content-Type: application/json' -H 'X-CSRF-Token: __TRACKED_VAR__' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"name\":\"prod verify\",\"base_currency\":\"EUR\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/prod_cookies.txt -X POST __TRACKED_VAR__/portfolios -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"name\":\"prod verify no header\",\"base_currency\":\"EUR\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(rm -f /tmp/prod_cookies2.txt /tmp/prod_login2.json)",
+      "Bash(curl -s -c /tmp/prod_cookies2.txt -X POST __TRACKED_VAR__/auth/guest -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"prod-verify-csrf-2@test.com\"}' -o /tmp/prod_login2.json -w 'LOGIN_STATUS:%{http_code}\\\\n')",
+      "Bash(python -c \"import json; print\\(json.load\\(open\\('/tmp/prod_login2.json'\\)\\)['session']['csrf_token']\\)\")",
+      "Bash(curl -s -c /tmp/prod_cookies2.txt -b /tmp/prod_cookies2.txt -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios -H 'Content-Type: application/json' -H 'X-CSRF-Token: __CMDSUB_OUTPUT__' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"name\":\"prod verify 2\",\"base_currency\":\"EUR\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/prod_cookies2.txt -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"name\":\"prod verify 2 no header\",\"base_currency\":\"EUR\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -o /dev/null -w \"FRONTEND_STATUS:%{http_code}\\\\n\" \"https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/app/auth/csrf.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(pip show *)",
+      "Bash(python3)",
+      "Bash(python presentacion/_add_deployment_slide.py)"
     ]
   }
 }
