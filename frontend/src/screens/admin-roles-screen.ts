@@ -91,8 +91,8 @@ export class AdminRolesScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('users-tab')?.addEventListener('click', () => navigate('/admin/users'));
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
+    this.shadow.getElementById('users-tab')?.addEventListener('click', () => navigate('/app/admin/users'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/portfolios'));
   }
 }
 

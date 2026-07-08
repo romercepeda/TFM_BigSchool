@@ -456,7 +456,7 @@ export class AnalysisScreen extends BaseComponent {
     this.shadow.querySelector('.dismiss-btn')?.addEventListener('click', () => this._dismissJob());
 
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
+      navigate(`/app/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
 
     this.shadow.querySelectorAll('.expand-btn').forEach((btn) => {
       btn.addEventListener('click', () => {

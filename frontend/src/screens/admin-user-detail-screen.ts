@@ -145,7 +145,7 @@ export class AdminUserDetailScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/admin/users'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/admin/users'));
 
     this.shadow.querySelectorAll<HTMLElement>('[data-role]').forEach((btn) => {
       btn.addEventListener('click', () => void this._toggleRole(btn.dataset['role']!));

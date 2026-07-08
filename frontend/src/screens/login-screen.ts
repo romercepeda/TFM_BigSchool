@@ -165,12 +165,12 @@ export class LoginScreen extends BaseComponent {
       if (redirect) { navigate(redirect); return; }
       // Post-login routing (D02 §10)
       const count = res.session.portfolios_count;
-      if (count === 0) { navigate('/portfolios/new'); return; }
+      if (count === 0) { navigate('/app/portfolios/new'); return; }
       if (count === 1) {
         const portfolios = await listPortfolios();
-        navigate(`/portfolios/${portfolios[0].id}`);
+        navigate(`/app/portfolios/${portfolios[0].id}`);
       } else {
-        navigate('/portfolios');
+        navigate('/app/portfolios');
       }
     } catch (ex) {
       if (this._mode === 'register' && ex instanceof ApiError && ex.status === 409) {

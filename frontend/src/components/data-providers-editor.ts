@@ -193,7 +193,7 @@ export class DataProvidersEditor extends BaseComponent {
   protected afterRender(): void {
     this.shadow.getElementById('failure-report-link')?.addEventListener('click', (e) => {
       e.preventDefault();
-      navigate('/admin/cascade-failures');
+      navigate('/app/admin/cascade-failures');
     });
 
     // Remove

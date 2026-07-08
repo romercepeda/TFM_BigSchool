@@ -96,7 +96,7 @@ export class AddAssetScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${this._portfolioId}`));
+      navigate(`/app/portfolios/${this._portfolioId}`));
 
     this._wireTypeahead();
 
@@ -126,7 +126,7 @@ export class AddAssetScreen extends BaseComponent {
             fx_rate_origin: 'auto',
           },
         });
-        navigate(`/portfolios/${this._portfolioId}`);
+        navigate(`/app/portfolios/${this._portfolioId}`);
       } catch (ex) {
         errEl.textContent = (ex as Error).message;
       }

@@ -60,7 +60,7 @@ export class AlertsScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${this._portfolioId}`));
+      navigate(`/app/portfolios/${this._portfolioId}`));
     this.shadow.querySelectorAll('.dismiss-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const el = btn as HTMLElement;

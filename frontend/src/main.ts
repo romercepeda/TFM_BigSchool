@@ -57,7 +57,7 @@ async function bootstrap(): Promise<void> {
   await loadLocale(navigator.language.startsWith('en') ? 'en' : 'es');
 
   if (location.pathname === '/' || location.pathname === '') {
-    replace('/login');
+    replace('/app/login');
   }
 
   onRouteChange(renderCurrentRoute);

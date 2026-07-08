@@ -1,6 +1,6 @@
 // Thin fetch wrapper — Spec D10 §7.1.
 // Centralizes: base URL, credentials, Accept-Language, CSRF header,
-// error normalization, and 401 → /login redirect.
+// error normalization, and 401 → /app/login redirect.
 
 import { ApiError } from './types.js';
 import { currentLanguage } from '../state/language-state.js';
@@ -34,7 +34,7 @@ export async function request<T>(
 
   if (res.status === 401) {
     clearAuthState();
-    navigate('/login');
+    navigate('/app/login');
     throw new ApiError(401, 'unauthorized', 'Session expired. Please log in again.');
   }
 

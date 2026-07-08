@@ -106,7 +106,7 @@ export class SetLevelsScreen extends BaseComponent {
     }
     this.shadow.getElementById('form')?.addEventListener('level-created', () => void this._load());
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
+      navigate(`/app/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
     this.shadow.querySelectorAll('.del-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const levelId = (btn as HTMLElement).dataset['id']!;

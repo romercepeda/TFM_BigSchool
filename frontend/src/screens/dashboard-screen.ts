@@ -159,10 +159,10 @@ export class DashboardScreen extends BaseComponent {
     const pid = this._portfolioId;
 
     this.shadow.getElementById('add-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${pid}/add-asset`));
+      navigate(`/app/portfolios/${pid}/add-asset`));
     this.shadow.getElementById('alerts-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${pid}/alerts`));
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
+      navigate(`/app/portfolios/${pid}/alerts`));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/portfolios'));
 
     // Rename
     this.shadow.getElementById('rename-btn')?.addEventListener('click', () => {
@@ -216,7 +216,7 @@ export class DashboardScreen extends BaseComponent {
   private async _doArchive(): Promise<void> {
     try {
       await archivePortfolio(this._portfolioId);
-      navigate('/portfolios');
+      navigate('/app/portfolios');
     } catch (ex) {
       this._error = (ex as Error).message;
       this._confirmArchive = false;

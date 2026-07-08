@@ -49,7 +49,7 @@ export class CreatePortfolioScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/portfolios'));
     this.shadow.getElementById('submit-btn')?.addEventListener('click', async () => {
       const name = (this.shadow.getElementById('name') as HTMLInputElement).value;
       const currency = (this.shadow.getElementById('currency') as HTMLSelectElement).value;
@@ -59,7 +59,7 @@ export class CreatePortfolioScreen extends BaseComponent {
       errEl.textContent = '';
       try {
         const p = await createPortfolio({ name, base_currency: currency });
-        navigate(`/portfolios/${p.id}`);
+        navigate(`/app/portfolios/${p.id}`);
       } catch (ex) {
         errEl.textContent = (ex as Error).message;
       }

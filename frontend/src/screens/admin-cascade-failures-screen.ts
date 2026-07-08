@@ -167,7 +167,7 @@ export class AdminCascadeFailuresScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/settings'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/settings'));
 
     this.shadow.getElementById('apply-filters-btn')?.addEventListener('click', () => {
       this._fromDate = (this.shadow.getElementById('from-date') as HTMLInputElement).value;

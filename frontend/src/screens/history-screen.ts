@@ -74,7 +74,7 @@ export class HistoryScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
+      navigate(`/app/portfolios/${this._portfolioId}/assets/${this._holdingId}`));
   }
 }
 

@@ -31,7 +31,7 @@ export function currentPath(): string {
   return location.pathname;
 }
 
-const CHANGE_PASSWORD_PATH = '/settings/change-password';
+const CHANGE_PASSWORD_PATH = '/app/settings/change-password';
 
 export function resolveRoute(): { screen: string; params: RouteParams } {
   const path = currentPath();
@@ -40,7 +40,7 @@ export function resolveRoute(): { screen: string; params: RouteParams } {
 
   if (match.authRequired && currentUser.value === null) {
     _redirectAfterLogin = path;
-    replace('/login');
+    replace('/app/login');
     return { screen: 'pi-login-screen', params: {} };
   }
 

@@ -118,11 +118,11 @@ export class AdminUsersScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('roles-tab')?.addEventListener('click', () => navigate('/admin/roles'));
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
+    this.shadow.getElementById('roles-tab')?.addEventListener('click', () => navigate('/app/admin/roles'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/portfolios'));
 
     this.shadow.querySelectorAll<HTMLElement>('.row').forEach((row) => {
-      row.addEventListener('click', () => navigate(`/admin/users/${row.dataset['id']}`));
+      row.addEventListener('click', () => navigate(`/app/admin/users/${row.dataset['id']}`));
     });
 
     this.shadow.getElementById('prev-btn')?.addEventListener('click', () => {

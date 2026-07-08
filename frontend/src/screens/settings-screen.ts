@@ -218,7 +218,7 @@ export class SettingsScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/portfolios'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/portfolios'));
 
     // Language save
     this.shadow.getElementById('save-lang-btn')?.addEventListener('click', async () => {
@@ -243,14 +243,14 @@ export class SettingsScreen extends BaseComponent {
 
     // Change password
     this.shadow.getElementById('change-password-btn')?.addEventListener('click', () =>
-      navigate('/settings/change-password'));
+      navigate('/app/settings/change-password'));
 
     // Logout
     this.shadow.getElementById('logout-btn')?.addEventListener('click', async () => {
       await logout();
       clearAuthState();
       stopPolling();
-      navigate('/login');
+      navigate('/app/login');
     });
 
     // Theme picker — instant switch, no Save button needed

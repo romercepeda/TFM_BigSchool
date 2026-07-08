@@ -505,13 +505,13 @@ export class AssetDetailScreen extends BaseComponent {
   protected afterRender(): void {
     const pid = this._portfolioId, hid = this._holdingId;
     this.shadow.getElementById('levels-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${pid}/assets/${hid}/levels`));
+      navigate(`/app/portfolios/${pid}/assets/${hid}/levels`));
     this.shadow.getElementById('analysis-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${pid}/assets/${hid}/analysis`));
+      navigate(`/app/portfolios/${pid}/assets/${hid}/analysis`));
     this.shadow.getElementById('back-btn')?.addEventListener('click', () =>
-      navigate(`/portfolios/${pid}`));
+      navigate(`/app/portfolios/${pid}`));
     this.shadow.getElementById('legend-link')?.addEventListener('click', () =>
-      navigate('/indicators/legend'));
+      navigate('/app/indicators/legend'));
 
     // Delete holding
     this.shadow.getElementById('delete-holding-btn')?.addEventListener('click', () => {
@@ -655,7 +655,7 @@ export class AssetDetailScreen extends BaseComponent {
   private async _doDeleteHolding(): Promise<void> {
     try {
       await deleteHolding(this._portfolioId, this._holdingId);
-      navigate(`/portfolios/${this._portfolioId}`);
+      navigate(`/app/portfolios/${this._portfolioId}`);
     } catch (ex) {
       this._error = (ex as Error).message;
       this._confirmDeleteHolding = false;

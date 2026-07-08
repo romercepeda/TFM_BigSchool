@@ -102,7 +102,7 @@ export class ChangePasswordScreen extends BaseComponent {
 
   protected afterRender(): void {
     this.shadow.getElementById('submit-btn')?.addEventListener('click', () => void this._doSubmit());
-    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/settings'));
+    this.shadow.getElementById('back-btn')?.addEventListener('click', () => navigate('/app/settings'));
 
     // Keep _form in sync so values survive the full re-render a validation
     // error or the _saving flag triggers (BaseComponent replaces innerHTML,
@@ -150,7 +150,7 @@ export class ChangePasswordScreen extends BaseComponent {
       });
       updateCurrentUser(updated);
       const redirect = consumeRedirectAfterLogin();
-      navigate(redirect ?? '/portfolios');
+      navigate(redirect ?? '/app/portfolios');
     } catch (ex) {
       this._error = (ex as Error).message;
       this._saving = false;

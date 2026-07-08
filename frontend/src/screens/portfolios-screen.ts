@@ -171,7 +171,7 @@ export class PortfoliosScreen extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('new-btn')?.addEventListener('click', () => navigate('/portfolios/new'));
+    this.shadow.getElementById('new-btn')?.addEventListener('click', () => navigate('/app/portfolios/new'));
     this.shadow.getElementById('toggle-archived-btn')?.addEventListener('click', () => {
       this._showArchived = !this._showArchived;
       void this._load();
@@ -182,7 +182,7 @@ export class PortfoliosScreen extends BaseComponent {
       card.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target.closest('button') || target.closest('input')) return;
-        navigate(`/portfolios/${card.dataset['id']}`);
+        navigate(`/app/portfolios/${card.dataset['id']}`);
       });
     });
 

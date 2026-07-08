@@ -128,13 +128,13 @@ export class HeaderBar extends BaseComponent {
   }
 
   protected afterRender(): void {
-    this.shadow.getElementById('admin-btn')?.addEventListener('click', () => navigate('/admin/users'));
-    this.shadow.getElementById('settings-btn')?.addEventListener('click', () => navigate('/settings'));
+    this.shadow.getElementById('admin-btn')?.addEventListener('click', () => navigate('/app/admin/users'));
+    this.shadow.getElementById('settings-btn')?.addEventListener('click', () => navigate('/app/settings'));
     this.shadow.getElementById('logout-btn')?.addEventListener('click', async () => {
       await logout();
       clearAuthState();
       stopPolling();
-      navigate('/login');
+      navigate('/app/login');
     });
   }
 }

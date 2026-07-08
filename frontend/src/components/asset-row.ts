@@ -62,7 +62,7 @@ export class AssetRow extends BaseComponent {
   protected afterRender(): void {
     this.shadow.getElementById('row')?.addEventListener('click', () => {
       if (this._holding && this._portfolioId) {
-        navigate(`/portfolios/${this._portfolioId}/assets/${this._holding.id}`);
+        navigate(`/app/portfolios/${this._portfolioId}/assets/${this._holding.id}`);
       }
     });
   }
