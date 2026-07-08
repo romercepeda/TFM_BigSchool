@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -211,7 +212,20 @@ async def create_upload_and_job(
 
     # Enqueue Celery task — import here to avoid circular import at module load
     from app.worker.tasks import analyze_report_task
-    analyze_report_task.delay(str(job.id))
+    try:
+        analyze_report_task.delay(str(job.id))
+    except Exception as exc:
+        # The job row is already committed as "queued" — if enqueueing itself
+        # fails (e.g. broker unreachable), it would otherwise sit orphaned in
+        # "queued" forever, since no worker will ever pick it up. Mark it
+        # failed so it doesn't get stuck in the pending-jobs count (D07 §7).
+        job.status = "failed"
+        job.last_error = f"Failed to enqueue analysis task: {exc}"[:500]
+        job.completed_at = datetime.now(UTC)
+        await db.commit()
+        logger.error("Failed to enqueue analyze_report_task for job %s: %s", job.id, exc)
+        raise
+
     logger.info("Enqueued analyze_report_task for job %s (holding %s).", job.id, holding_id)
 
     return job
