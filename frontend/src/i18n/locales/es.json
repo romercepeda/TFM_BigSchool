@@ -114,6 +114,10 @@
   "alerts.title": "Alertas",
   "alerts.empty": "No hay alertas activadas.",
   "alerts.dismiss": "Descartar",
+  "alerts.loading": "Cargando alertas...",
+  "alerts.error": "No se pudieron cargar las alertas.",
+  "alerts.near_crossing.title": "Cerca de cruzar",
+  "alerts.gap_pct": "A {pct} del objetivo (precio actual: {price})",
 
   "screen.portfolios.title": "Carteras",
   "screen.portfolios.create": "Nueva cartera",

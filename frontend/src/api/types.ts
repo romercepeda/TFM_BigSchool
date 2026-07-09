@@ -235,6 +235,20 @@ export interface PriceLevel {
   touched_at_close_date: string | null;
 }
 
+// Alerts Panel (Spec D06 §6): a price level enriched with asset context.
+export interface PortfolioAlertItem extends PriceLevel {
+  asset_ticker: string;
+  asset_name: string;
+  asset_quote_currency: string;
+  current_price: number | null;
+  gap_pct: number | null;
+}
+
+export interface PortfolioAlerts {
+  touched: PortfolioAlertItem[];
+  near_crossing: PortfolioAlertItem[];
+}
+
 // ── AI Analysis ───────────────────────────────────────────────────────────────
 
 export type ReportDateSource = 'ai_extracted' | 'upload_fallback' | 'user_edited' | 'legacy_unknown';

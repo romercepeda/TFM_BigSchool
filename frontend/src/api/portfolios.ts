@@ -1,5 +1,5 @@
 import { get, post, patch, del } from './client.js';
-import type { Portfolio, PortfolioSummary } from './types.js';
+import type { Portfolio, PortfolioAlerts, PortfolioSummary } from './types.js';
 
 export interface CreatePortfolioBody { name: string; base_currency: string; }
 export interface UpdatePortfolioBody { name?: string; }
@@ -14,3 +14,4 @@ export const archivePortfolio = (id: string)                 => post<Portfolio>(
 export const restorePortfolio = (id: string)                 => post<Portfolio>(`/portfolios/${id}/restore`);
 export const deletePortfolio  = (id: string)                 => del<void>(`/portfolios/${id}`);
 export const getPortfolioSummary = (id: string)              => get<PortfolioSummary>(`/portfolios/${id}/summary`);
+export const getPortfolioAlerts  = (id: string)               => get<PortfolioAlerts>(`/portfolios/${id}/alerts`);

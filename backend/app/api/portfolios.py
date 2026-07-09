@@ -18,6 +18,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.d06_schemas import PortfolioAlertItem, PortfolioAlertsResponse
 from app.api.portfolio_schemas import (
     CreatePortfolioRequest,
     PortfolioResponse,
@@ -25,10 +26,11 @@ from app.api.portfolio_schemas import (
     RenamePortfolioRequest,
 )
 from app.auth.dependencies import get_current_user
+from app.config import get_config
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import summary_service
+from app.services import price_level_service, summary_service
 from app.services.portfolio_service import (
     archive_portfolio,
     create_portfolio,
@@ -130,6 +132,32 @@ async def get_summary(
     if portfolio is None:
         raise _NOT_FOUND
     return await summary_service.get_summary(db, portfolio, current_user.id)
+
+
+@router.get(
+    "/{portfolio_id}/alerts",
+    response_model=PortfolioAlertsResponse,
+    dependencies=[Depends(require_permission("price_level.view"))],
+)
+async def get_alerts(
+    portfolio_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PortfolioAlertsResponse:
+    """Return the Alerts Panel for a portfolio (Spec D06 §6): touched price levels
+    across all its holdings, plus armed levels close to crossing.
+    """
+    portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
+    if portfolio is None:
+        raise _NOT_FOUND
+    near_crossing_pct = get_config().alerts.near_crossing_pct
+    touched, near_crossing = await price_level_service.list_portfolio_alerts(
+        db, portfolio_id, near_crossing_pct=near_crossing_pct
+    )
+    return PortfolioAlertsResponse(
+        touched=[PortfolioAlertItem(**item) for item in touched],
+        near_crossing=[PortfolioAlertItem(**item) for item in near_crossing],
+    )
 
 
 @router.patch(

@@ -16,10 +16,12 @@ from datetime import UTC, datetime, date
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.asset import Asset
 from app.db.models.holding import Holding
+from app.db.models.market_data import AssetPriceHistory
 from app.db.models.price_level import PriceLevel, PriceLevelHistoryEntry
 
 
@@ -243,6 +245,90 @@ async def apply_crossings(
         await db.flush()
 
     return crossed
+
+
+# ── Portfolio-wide Alerts Panel (Spec D06 §6) ─────────────────────────────────
+
+
+async def list_portfolio_alerts(
+    db: AsyncSession,
+    portfolio_id: UUID,
+    *,
+    near_crossing_pct: float,
+) -> tuple[list[dict], list[dict]]:
+    """Aggregate touched and near-crossing price levels across a portfolio (Spec D06 §6).
+
+    Returns (touched, near_crossing) as dicts shaped for the PortfolioAlertItem schema.
+    'touched' is sorted by touched_at descending (§6, point 1).
+    'near_crossing' holds armed levels within near_crossing_pct of the latest known
+    close, sorted by proximity — smallest gap first (§6, point 2). Armed levels with
+    no known price yet, or too far from the target, are excluded.
+    """
+    result = await db.execute(
+        select(PriceLevel, Holding.asset_id, Asset.ticker, Asset.name, Asset.quote_currency)
+        .join(Holding, Holding.id == PriceLevel.holding_id)
+        .join(Asset, Asset.id == Holding.asset_id)
+        .where(Holding.portfolio_id == portfolio_id)
+    )
+    rows = result.all()
+    if not rows:
+        return [], []
+
+    asset_ids = {asset_id for _, asset_id, _, _, _ in rows}
+    latest_dates = (
+        select(
+            AssetPriceHistory.asset_id,
+            func.max(AssetPriceHistory.as_of_date).label("max_date"),
+        )
+        .where(AssetPriceHistory.asset_id.in_(asset_ids))
+        .group_by(AssetPriceHistory.asset_id)
+        .subquery()
+    )
+    price_result = await db.execute(
+        select(AssetPriceHistory.asset_id, AssetPriceHistory.close_price).join(
+            latest_dates,
+            (AssetPriceHistory.asset_id == latest_dates.c.asset_id)
+            & (AssetPriceHistory.as_of_date == latest_dates.c.max_date),
+        )
+    )
+    latest_prices: dict[UUID, Decimal] = {
+        row.asset_id: row.close_price for row in price_result.all()
+    }
+
+    threshold = Decimal(str(near_crossing_pct))
+    touched: list[dict] = []
+    near_crossing: list[dict] = []
+
+    for level, asset_id, ticker, name, quote_currency in rows:
+        current_price = latest_prices.get(asset_id)
+        item = {
+            "id": level.id,
+            "holding_id": level.holding_id,
+            "direction": level.direction,
+            "target_price": level.target_price,
+            "note": level.note,
+            "status": level.status,
+            "created_at": level.created_at,
+            "updated_at": level.updated_at,
+            "touched_at": level.touched_at,
+            "touched_at_close_price": level.touched_at_close_price,
+            "touched_at_close_date": level.touched_at_close_date,
+            "asset_ticker": ticker,
+            "asset_name": name,
+            "asset_quote_currency": quote_currency,
+            "current_price": current_price,
+        }
+        if level.status == "touched":
+            touched.append({**item, "gap_pct": None})
+        elif level.status == "armed" and current_price:
+            gap = abs(current_price - level.target_price) / current_price
+            if gap <= threshold:
+                near_crossing.append({**item, "gap_pct": float(gap)})
+
+    touched.sort(key=lambda i: i["touched_at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
+    near_crossing.sort(key=lambda i: i["gap_pct"])
+
+    return touched, near_crossing
 
 
 # ── Portfolio hard-delete helper ──────────────────────────────────────────────

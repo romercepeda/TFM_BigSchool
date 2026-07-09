@@ -114,6 +114,10 @@
   "alerts.title": "Alerts",
   "alerts.empty": "No triggered alerts.",
   "alerts.dismiss": "Dismiss",
+  "alerts.loading": "Loading alerts...",
+  "alerts.error": "Could not load alerts.",
+  "alerts.near_crossing.title": "Close to crossing",
+  "alerts.gap_pct": "{pct} from target (current price: {price})",
 
   "screen.portfolios.title": "Portfolios",
   "screen.portfolios.create": "New portfolio",

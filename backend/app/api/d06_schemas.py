@@ -95,3 +95,25 @@ class EvaluateResponse(BaseModel):
     holding_id: UUID
     levels_touched: list[PriceLevelResponse]
     levels_evaluated: int
+
+
+class PortfolioAlertItem(PriceLevelResponse):
+    """A price level enriched with asset context, for the portfolio-wide Alerts Panel (Spec D06 §6)."""
+    asset_ticker: str
+    asset_name: str
+    asset_quote_currency: str
+    current_price: Decimal | None
+    # Fraction of current_price separating it from target_price. Only set for
+    # 'near_crossing' items — armed levels within alerts.near_crossing_pct (§12).
+    gap_pct: float | None
+
+
+class PortfolioAlertsResponse(BaseModel):
+    """Consolidated alerts for a portfolio (Spec D06 §6).
+
+    touched: crossed levels, most recently touched first.
+    near_crossing: armed levels within the configured proximity threshold,
+    closest gap first.
+    """
+    touched: list[PortfolioAlertItem]
+    near_crossing: list[PortfolioAlertItem]
