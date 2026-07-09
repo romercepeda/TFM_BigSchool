@@ -377,6 +377,7 @@ export class AnalysisScreen extends BaseComponent {
         .confidence { font-size: var(--font-size-xs); color: var(--color-text-muted);
           margin-top: var(--space-2); font-style: italic; }
         .provider { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .shared-label { font-style: italic; }
         .empty { color: var(--color-text-muted); font-size: var(--font-size-sm); padding: var(--space-4) 0; }
         .error { color: var(--color-danger); font-size: var(--font-size-sm); }
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
@@ -404,7 +405,7 @@ export class AnalysisScreen extends BaseComponent {
                   ${this._renderDateField(r)}
                   ${this._renderNameField(r)}
                   ${r.executive_summary ? `<div class="summary">${r.executive_summary}</div>` : ''}
-                  <div class="provider">${r.provider} · ${r.model_version}</div>
+                  <div class="provider">${r.provider} · ${r.model_version}${!r.is_own ? ` · <span class="shared-label">${t('analysis.history.entry.shared_label')}</span>` : ''}</div>
                 </div>
               </div>
               ${isExpanded && this._expandedDetail ? `
@@ -416,7 +417,7 @@ export class AnalysisScreen extends BaseComponent {
               ` : ''}
               <div class="report-actions">
                 <button class="btn-sm expand-btn" data-id="${r.id}">${isExpanded ? '▲ ' + t('analysis.hide_metrics') : '▼ ' + t('analysis.show_metrics')}</button>
-                ${isConfirming ? `
+                ${!r.is_own ? '' : isConfirming ? `
                   <span class="confirm-bar">
                     ${t('analysis.delete.confirm')}
                     <button class="btn-sm btn-danger confirm-yes-btn" data-id="${r.id}">${t('common.button.confirm')}</button>
@@ -589,7 +590,7 @@ export class AnalysisScreen extends BaseComponent {
           ? `<span class="warn-icon" title="${t('analysis.history.entry.date_fallback_warning')}">⚠</span>`
           : ''}
         <span>${t('analysis.report_date')}: ${r.report_date ?? '—'}</span>
-        <button class="edit-icon-btn" data-id="${r.id}" data-field="date" title="${t('common.button.edit')}">✎</button>
+        ${r.is_own ? `<button class="edit-icon-btn" data-id="${r.id}" data-field="date" title="${t('common.button.edit')}">✎</button>` : ''}
         ${this._renderFieldStatus(status, this._fieldError[key])}
       </div>
     `;
@@ -612,7 +613,7 @@ export class AnalysisScreen extends BaseComponent {
     return `
       <div class="report-name${isUnset ? ' report-name--missing' : ''}">
         <span>${r.report_period_name ?? t('analysis.history.entry.name_missing_warning')}</span>
-        <button class="edit-icon-btn" data-id="${r.id}" data-field="name" title="${t('common.button.edit')}">✎</button>
+        ${r.is_own ? `<button class="edit-icon-btn" data-id="${r.id}" data-field="name" title="${t('common.button.edit')}">✎</button>` : ''}
         ${this._renderFieldStatus(status, this._fieldError[key])}
       </div>
     `;

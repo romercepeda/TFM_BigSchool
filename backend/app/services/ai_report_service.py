@@ -234,28 +234,65 @@ async def create_upload_and_job(
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
 
-async def get_reports_for_holding(
+async def get_reports_for_asset(
     db: AsyncSession,
-    holding_id: UUID,
-) -> list[AnalysisReport]:
-    """Return all AnalysisReports for a holding, sorted by report_date desc."""
+    asset_id: UUID,
+    *,
+    current_user_id: UUID,
+) -> list[dict]:
+    """Return all AnalysisReports for an asset, shared across every user who
+    holds it (Changeset C13) — not just the requesting user's own holding.
+
+    Sorted by report_date desc (nulls last), then created_at desc — same
+    ordering as before this changeset, now applied across every holding of
+    every user that references this asset.
+
+    Each item is a dict shaped for AnalysisReportSummary, with is_own set
+    from UploadedFile.user_id — the frontend uses it to gate edit/delete
+    controls, which remain uploader-only (§3 of the changeset).
+    """
     result = await db.execute(
-        select(AnalysisReport)
-        .where(AnalysisReport.holding_id == holding_id)
+        select(AnalysisReport, UploadedFile.user_id)
+        .outerjoin(UploadedFile, UploadedFile.id == AnalysisReport.uploaded_file_id)
+        .where(AnalysisReport.asset_id == asset_id)
         .order_by(
             AnalysisReport.report_date.desc().nulls_last(),
             AnalysisReport.created_at.desc(),
         )
     )
-    return list(result.scalars().all())
+    rows = result.all()
+    return [
+        {
+            "id": r.id,
+            "holding_id": r.holding_id,
+            "asset_id": r.asset_id,
+            "report_date": r.report_date,
+            "report_date_source": r.report_date_source,
+            "report_period_name": r.report_period_name,
+            "report_period_name_source": r.report_period_name_source,
+            "provider": r.provider,
+            "model_version": r.model_version,
+            "global_signal": r.global_signal,
+            "executive_summary": r.executive_summary,
+            "created_at": r.created_at,
+            "is_own": uploader_id == current_user_id,
+        }
+        for r, uploader_id in rows
+    ]
 
 
-async def get_report(
+async def get_own_report(
     db: AsyncSession,
     report_id: UUID,
     user_id: UUID,
 ) -> AnalysisReport | None:
-    """Return a report if it belongs to the given user (via UploadedFile.user_id)."""
+    """Return a report if it belongs to the given user (via UploadedFile.user_id).
+
+    Used for the write path (PATCH/DELETE) — sharing the Historial view
+    (Changeset C13) does not extend to editing or deleting someone else's
+    analysis. Renamed from get_report to make that intent explicit; see
+    get_viewable_report for the read path.
+    """
     result = await db.execute(
         select(AnalysisReport)
         .join(UploadedFile, UploadedFile.id == AnalysisReport.uploaded_file_id)
@@ -265,6 +302,33 @@ async def get_report(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def get_viewable_report(
+    db: AsyncSession,
+    report_id: UUID,
+    user_id: UUID,
+) -> AnalysisReport | None:
+    """Return a report if the user may view it (Changeset C13): either they
+    uploaded it, or they currently hold the same asset in one of their own
+    portfolios. Used by the single-report GET endpoint (list-item expansion,
+    post-upload result panel) — not by PATCH/DELETE, which stay uploader-only
+    via get_own_report.
+    """
+    from app.db.models.holding import Holding
+    from app.db.models.portfolio import Portfolio
+
+    report = await db.get(AnalysisReport, report_id)
+    if report is None:
+        return None
+
+    can_view = await db.scalar(
+        select(Holding.id)
+        .join(Portfolio, Portfolio.id == Holding.portfolio_id)
+        .where(Holding.asset_id == report.asset_id, Portfolio.user_id == user_id)
+        .limit(1)
+    )
+    return report if can_view is not None else None
 
 
 async def get_job(

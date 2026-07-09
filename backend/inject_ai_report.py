@@ -179,9 +179,11 @@ async def main() -> None:
         await db.flush()
 
         # 3. AnalysisReport
+        asset_id = await _find_asset_id(db)
         report = AnalysisReport(
             id=uuid4(),
             holding_id=HOLDING_ID,
+            asset_id=asset_id,
             uploaded_file_id=uploaded.id,
             analysis_job_id=job.id,
             report_date=report_date,
@@ -200,7 +202,6 @@ async def main() -> None:
         job.analysis_report_id = report.id
 
         # 4. IndicatorSnapshots
-        asset_id = await _find_asset_id(db)
         snap_count = await _upsert_indicator_snapshots(
             db, asset_id, AI_RESULT["metrics"], report.id, report_date
         )

@@ -149,10 +149,17 @@ async def list_reports(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[AnalysisReportSummary]:
-    """List all analysis reports for a holding, newest first."""
-    await _require_holding(portfolio_id, holding_id, current_user, db)
-    reports = await ai_report_service.get_reports_for_holding(db, holding_id)
-    return [AnalysisReportSummary.model_validate(r) for r in reports]
+    """List all analysis reports for the holding's asset, newest first.
+
+    Shared across every user who holds this asset (Changeset C13) — not
+    limited to the requesting holding_id, which is only used to establish
+    that the current user is authorized to see this asset's history at all.
+    """
+    holding = await _require_holding(portfolio_id, holding_id, current_user, db)
+    reports = await ai_report_service.get_reports_for_asset(
+        db, holding.asset_id, current_user_id=current_user.id
+    )
+    return [AnalysisReportSummary(**r) for r in reports]
 
 
 # ── Flat endpoints (jobs list must come before /{report_id} for correct routing) ─
@@ -188,11 +195,17 @@ async def get_report(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisReportDetail:
-    """Return full detail for one analysis report."""
-    report = await ai_report_service.get_report(db, report_id, current_user.id)
+    """Return full detail for one analysis report.
+
+    Viewable by the uploader or by any user who currently holds the same
+    asset in one of their own portfolios (Changeset C13) — editing/deleting
+    remain uploader-only, see patch_report/delete_report below.
+    """
+    report = await ai_report_service.get_viewable_report(db, report_id, current_user.id)
     if report is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Report not found.")
-    return AnalysisReportDetail.model_validate(report)
+    is_own = await ai_report_service.get_own_report(db, report_id, current_user.id) is not None
+    return AnalysisReportDetail.model_validate(report).model_copy(update={"is_own": is_own})
 
 
 @_flat_router.patch(
@@ -215,7 +228,7 @@ async def patch_report(
     if not _analysis_edit_enabled():
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Not found.")
 
-    report = await ai_report_service.get_report(db, report_id, current_user.id)
+    report = await ai_report_service.get_own_report(db, report_id, current_user.id)
     if report is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Report not found.")
 
@@ -240,7 +253,9 @@ async def patch_report(
 
     await db.commit()
     await db.refresh(updated)
-    return AnalysisReportDetail.model_validate(updated)
+    # get_own_report already proved current_user is the uploader — is_own is
+    # always true on a successful edit.
+    return AnalysisReportDetail.model_validate(updated).model_copy(update={"is_own": True})
 
 
 @_flat_router.delete(
@@ -256,9 +271,10 @@ async def delete_report(
     """Delete an analysis report and all its derived artifacts (§9.3).
 
     Cascades to: AnalysisJob, UploadedFile, linked IndicatorSnapshots.
-    This action is irreversible.
+    This action is irreversible. Uploader-only (Changeset C13) — sharing the
+    Historial view does not extend to deleting someone else's analysis.
     """
-    report = await ai_report_service.get_report(db, report_id, current_user.id)
+    report = await ai_report_service.get_own_report(db, report_id, current_user.id)
     if report is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Report not found.")
 

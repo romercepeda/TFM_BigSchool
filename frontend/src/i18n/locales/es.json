@@ -283,6 +283,7 @@
   "analysis.history.entry.edit_date_label": "Fecha del informe",
   "analysis.history.entry.edit_name_label": "Nombre del informe",
   "analysis.history.entry.date_collision_error": "Ya existe un análisis con esta fecha para este activo. Elige otra fecha o elimina el análisis existente primero.",
+  "analysis.history.entry.shared_label": "Análisis de otro usuario",
 
   "indicator.card.tooltip.name_missing": "Sin nombre — edítalo en Historial de análisis",
   "indicator.history.title": "Histórico",

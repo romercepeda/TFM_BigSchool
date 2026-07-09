@@ -261,6 +261,7 @@ export type ReportPeriodNameSource = 'ai_extracted' | 'user_edited' | 'unset';
 export interface AiReportSummary {
   id: string;
   holding_id: string;
+  asset_id: string;
   report_date: string | null;
   report_date_source: ReportDateSource;
   report_period_name: string | null;
@@ -270,6 +271,9 @@ export interface AiReportSummary {
   global_signal: 'bullish' | 'neutral' | 'bearish' | null;
   executive_summary: string;
   created_at: string;
+  // Whether the current user uploaded this analysis — shared history across
+  // every holder of the asset (Changeset C13), edit/delete stay uploader-only.
+  is_own: boolean;
 }
 
 export interface AiReportDetail extends AiReportSummary {

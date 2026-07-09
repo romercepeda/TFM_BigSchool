@@ -283,6 +283,7 @@
   "analysis.history.entry.edit_date_label": "Report date",
   "analysis.history.entry.edit_name_label": "Report name",
   "analysis.history.entry.date_collision_error": "An analysis with this date already exists for this asset. Choose another date or delete the existing analysis first.",
+  "analysis.history.entry.shared_label": "Analysis by another user",
 
   "indicator.card.tooltip.name_missing": "No name — edit it in Analysis history",
   "indicator.history.title": "History",

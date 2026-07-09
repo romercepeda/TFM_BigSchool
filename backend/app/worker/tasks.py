@@ -203,6 +203,7 @@ async def _run_analysis(job_id: str) -> None:
 
         report = AnalysisReport(
             holding_id=job.holding_id,
+            asset_id=holding.asset_id,
             uploaded_file_id=job.uploaded_file_id,
             analysis_job_id=job.id,
             report_date=report_date,

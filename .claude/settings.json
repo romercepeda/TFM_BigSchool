@@ -142,7 +142,25 @@
       "Bash(python -m py_compile backend/app/db/models/price_level.py backend/app/services/price_level_service.py backend/app/api/d06_schemas.py backend/app/api/portfolios.py backend/app/api/price_levels.py)",
       "Bash(curl -s -b /tmp/cj2.txt -X POST http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/holdings/948fcb38-3d45-4ba3-9265-66a3a01f47dc/price-levels/3bfd898b-7de1-4393-8aeb-907800d4bfa7/mark-read -H 'X-CSRF-Token: zWhbFoZAp03VjAHDdHcEe4MqAA-Veh_n5S25NKI1WPA' -w '\\\\nSTATUS:%{http_code}\\\\n')",
       "Bash(curl -s -b /tmp/cj2.txt http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/alerts)",
-      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' -b /tmp/cj2.txt -X DELETE http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/holdings/948fcb38-3d45-4ba3-9265-66a3a01f47dc/price-levels/a1d64c75-a668-4069-8e2b-0f96326373d5 -H 'X-CSRF-Token: zWhbFoZAp03VjAHDdHcEe4MqAA-Veh_n5S25NKI1WPA')"
+      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' -b /tmp/cj2.txt -X DELETE http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/holdings/948fcb38-3d45-4ba3-9265-66a3a01f47dc/price-levels/a1d64c75-a668-4069-8e2b-0f96326373d5 -H 'X-CSRF-Token: zWhbFoZAp03VjAHDdHcEe4MqAA-Veh_n5S25NKI1WPA')",
+      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios/00000000-0000-0000-0000-000000000000/holdings/00000000-0000-0000-0000-000000000000/price-levels/00000000-0000-0000-0000-000000000000/mark-read -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io')",
+      "Bash(curl -s -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/auth/login -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/auth/login -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"gbJlzUPTNKhPRuWR!\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/prodcj3.txt -c /tmp/prodcj3.txt -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios/2f27eee2-4d2e-4066-b851-bdde2c038677/holdings/2882e77f-7566-4060-84ad-25e365572521/price-levels -H 'Content-Type: application/json' -H 'X-CSRF-Token: SxwzcH0khLgmT9o4IxrFpTMNVYG5z_hhnP0OzV1rdsE' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"levels\":[{\"direction\":\"buy\",\"target_price\":5.40,\"note\":\"Entrada si baja de 5.40\"}], \"asset_price_at_event\": 5.60}')",
+      "Bash(curl -s -b /tmp/prodcj3.txt -c /tmp/prodcj3.txt -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/market-data/daily-update -H 'X-CSRF-Token: SxwzcH0khLgmT9o4IxrFpTMNVYG5z_hhnP0OzV1rdsE' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/prodcj3.txt https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios/2f27eee2-4d2e-4066-b851-bdde2c038677/alerts)",
+      "Bash(git ls-tree *)",
+      "Bash(gh repo *)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "PowerShell(gh --version 2>&1)",
+      "Bash(python -m py_compile backend/app/db/models/ai_report.py backend/app/worker/tasks.py backend/app/services/ai_report_service.py backend/app/api/d07_schemas.py backend/app/api/ai_reports.py)",
+      "Bash(python -m py_compile backend/inject_ai_report.py)",
+      "Bash(python -m py_compile backend/app/api/d07_schemas.py backend/app/api/ai_reports.py)",
+      "Bash(curl -s -b /tmp/investorcj.txt http://localhost:8000/portfolios/91f64a65-f858-4710-8150-d5b5b9dd9beb/holdings/2cd17451-7a2e-4ec0-b135-0936b5e77d97/ai-reports)",
+      "Bash(python -m json.tool)",
+      "Bash(python -m py_compile backend/app/api/ai_reports.py)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('is_own:', d['is_own']\\)\")",
+      "Bash(curl -sf http://localhost:5173)"
     ],
     "additionalDirectories": [
       "D:\\SourcesControl\\RomerPersonal\\TFM_BigSchool\\frontend\\public"

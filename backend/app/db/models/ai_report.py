@@ -16,6 +16,11 @@ Cascade on user-initiated report delete (service-layer):
 Note: AnalysisJob.analysis_report_id is a plain UUID (no FK) to avoid a circular
 foreign key between analysis_jobs and analysis_reports. Integrity is enforced at the
 service layer.
+
+AnalysisReport.asset_id (Changeset C13): the Historial list is shared across
+every user who holds the asset, not just the original uploader — holding_id
+still records provenance (used for edit/delete ownership checks), asset_id is
+the shared lookup key.
 """
 
 from datetime import date, datetime
@@ -138,6 +143,12 @@ class AnalysisReport(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     holding_id: Mapped[UUID] = mapped_column(
         ForeignKey("holdings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Denormalized from holding.asset_id at creation time (Changeset C13).
+    # Primary lookup key for the shared-across-users Historial list — mirrors
+    # how IndicatorSnapshot.subject_id already keys off holding.asset_id (§9.2).
+    asset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("assets.id"), nullable=False, index=True
     )
     uploaded_file_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("uploaded_files.id", ondelete="SET NULL"), nullable=True
