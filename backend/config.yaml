@@ -30,7 +30,8 @@ authentication:
     password:
       enabled: true
     guest:
-      enabled: true
+      enabled: false  # temporarily disabled 2026-07-09 — existing accounts only
+  allow_registration: false  # temporarily disabled 2026-07-09 — existing accounts only
 
 indicators:
   scheduled_job:

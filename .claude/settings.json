@@ -122,7 +122,16 @@
       "Bash(curl -s -b /tmp/cj.txt http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/alerts -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')",
       "Bash(npx --no-install playwright install --dry-run chromium)",
       "Bash(npx --no-install -p playwright node -e \"const {chromium}=require\\('playwright'\\); console.log\\('OK', typeof chromium.launch\\);\")",
-      "Bash(\"/c/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd\" account show --query \"{name:name, id:id, tenantId:tenantId, user:user.name}\" -o table)"
+      "Bash(\"/c/Program Files/Microsoft SDKs/Azure/CLI2/wbin/az.cmd\" account show --query \"{name:name, id:id, tenantId:tenantId, user:user.name}\" -o table)",
+      "PowerShell(Set-Location frontend; npx tsc --noEmit -p . ; Write-Host \"EXIT:$LASTEXITCODE\")",
+      "Bash(python -m py_compile backend/app/config.py backend/app/api/auth.py)",
+      "Bash(curl -s -X POST http://localhost:8000/auth/guest -H \"Content-Type: application/json\" -d '{\"email\":\"newguest@test.com\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(curl -s -X POST http://localhost:8000/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"newuser@test.com\",\"password\":\"password123\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(curl -s -X POST http://localhost:8000/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(curl -sf http://localhost:8000/docs)",
+      "Bash(curl -s -X POST http://localhost:8000/auth/guest -H \"Content-Type: application/json\" -d '{\"email\":\"newguest2@test.com\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(curl -s -X POST http://localhost:8000/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"newuser2@test.com\",\"password\":\"password123\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
+      "Bash(curl -s -o /dev/null -w \"STATUS:%{http_code}\\\\n\" -X POST http://localhost:8000/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}')"
     ],
     "additionalDirectories": [
       "D:\\SourcesControl\\RomerPersonal\\TFM_BigSchool\\frontend\\public"

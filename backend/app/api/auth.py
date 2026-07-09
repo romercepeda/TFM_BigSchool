@@ -150,9 +150,17 @@ async def register(
 ) -> LoginResponse:
     """Register a new account with email and password.
 
+    Returns 403 if self-service registration is temporarily disabled
+    (config.yaml → authentication.allow_registration).
     Returns 409 if the email is already registered.
     Returns 201 + session cookies + login payload on success.
     """
+    if not get_config().authentication.allow_registration:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account registration is temporarily disabled.",
+        )
+
     existing = await get_user_by_email(db, body.email)
     if existing is not None:
         raise HTTPException(
@@ -204,8 +212,17 @@ async def guest_login(
     - If no account exists → create a new guest account.
     - If a non-guest account exists → 409 (must use the correct method).
 
+    Returns 403 if guest login is temporarily disabled
+    (config.yaml → authentication.methods.guest.enabled).
+
     Security note: no verification is performed (Spec D01 §4.3 accepted risk).
     """
+    if not get_config().authentication.methods.guest.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest login is temporarily disabled.",
+        )
+
     existing = await get_user_by_email(db, body.email)
 
     if existing is not None:

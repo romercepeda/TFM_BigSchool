@@ -102,6 +102,10 @@ class AuthMethodsConfig(BaseModel):
 
 class AuthenticationConfig(BaseModel):
     methods: AuthMethodsConfig = AuthMethodsConfig()
+    # Self-service account creation via POST /auth/register. Separate from
+    # methods.password.enabled, which is unrelated to signing in with an
+    # existing password account.
+    allow_registration: bool = True
 
 
 class IndicatorsScheduledJobConfig(BaseModel):
