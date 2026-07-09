@@ -233,6 +233,8 @@ export interface PriceLevel {
   touched_at: string | null;
   touched_at_close_price: number | null;
   touched_at_close_date: string | null;
+  // Null = unread alert. Only meaningful while status is 'touched' (Changeset C12).
+  alert_seen_at: string | null;
 }
 
 // Alerts Panel (Spec D06 §6): a price level enriched with asset context.
@@ -247,6 +249,8 @@ export interface PortfolioAlertItem extends PriceLevel {
 export interface PortfolioAlerts {
   touched: PortfolioAlertItem[];
   near_crossing: PortfolioAlertItem[];
+  // Count of touched items with alert_seen_at null (Changeset C12).
+  unread_count: number;
 }
 
 // ── AI Analysis ───────────────────────────────────────────────────────────────

@@ -131,7 +131,18 @@
       "Bash(curl -sf http://localhost:8000/docs)",
       "Bash(curl -s -X POST http://localhost:8000/auth/guest -H \"Content-Type: application/json\" -d '{\"email\":\"newguest2@test.com\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
       "Bash(curl -s -X POST http://localhost:8000/auth/register -H \"Content-Type: application/json\" -d '{\"email\":\"newuser2@test.com\",\"password\":\"password123\"}' -w \"\\\\nSTATUS:%{http_code}\\\\n\")",
-      "Bash(curl -s -o /dev/null -w \"STATUS:%{http_code}\\\\n\" -X POST http://localhost:8000/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}')"
+      "Bash(curl -s -o /dev/null -w \"STATUS:%{http_code}\\\\n\" -X POST http://localhost:8000/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}')",
+      "Bash(curl -s -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/auth/guest -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"verify-guest@test.com\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/auth/register -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"verify-reg@test.com\",\"password\":\"password123\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -c /tmp/prodcj.txt -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/auth/login -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"email\":\"admin.demo@portfolioia.local\",\"password\":\"Administrator2026!\"}' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' -X POST https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios -H 'Content-Type: application/json' -H 'Origin: https://portfolio-ia-frontend.icysand-40c562ef.northeurope.azurecontainerapps.io' -d '{\"name\":\"x\",\"base_currency\":\"EUR\"}')",
+      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' https://portfolio-ia-backend.icysand-40c562ef.northeurope.azurecontainerapps.io/portfolios/00000000-0000-0000-0000-000000000000/alerts)",
+      "Bash(ls backend/../specs/changesets/ 2>/dev/null || ls specs/changesets/)",
+      "Read(//d/SourcesControl/RomerPersonal/TFM_BigSchool/specs/changesets/**)",
+      "Bash(python -m py_compile backend/app/db/models/price_level.py backend/app/services/price_level_service.py backend/app/api/d06_schemas.py backend/app/api/portfolios.py backend/app/api/price_levels.py)",
+      "Bash(curl -s -b /tmp/cj2.txt -X POST http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/holdings/948fcb38-3d45-4ba3-9265-66a3a01f47dc/price-levels/3bfd898b-7de1-4393-8aeb-907800d4bfa7/mark-read -H 'X-CSRF-Token: zWhbFoZAp03VjAHDdHcEe4MqAA-Veh_n5S25NKI1WPA' -w '\\\\nSTATUS:%{http_code}\\\\n')",
+      "Bash(curl -s -b /tmp/cj2.txt http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/alerts)",
+      "Bash(curl -s -o /dev/null -w 'STATUS:%{http_code}\\\\n' -b /tmp/cj2.txt -X DELETE http://localhost:8000/portfolios/f51e2a5f-1cc1-49a6-8df9-062f78c50dc9/holdings/948fcb38-3d45-4ba3-9265-66a3a01f47dc/price-levels/a1d64c75-a668-4069-8e2b-0f96326373d5 -H 'X-CSRF-Token: zWhbFoZAp03VjAHDdHcEe4MqAA-Veh_n5S25NKI1WPA')"
     ],
     "additionalDirectories": [
       "D:\\SourcesControl\\RomerPersonal\\TFM_BigSchool\\frontend\\public"

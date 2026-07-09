@@ -4,7 +4,7 @@ import '../components/portfolio-header.js';
 import '../components/kpi-strip.js';
 import '../components/asset-row.js';
 import { t } from '../i18n/i18n.js';
-import { getPortfolio, updatePortfolio, archivePortfolio } from '../api/portfolios.js';
+import { getPortfolio, updatePortfolio, archivePortfolio, getPortfolioAlerts } from '../api/portfolios.js';
 import { listHoldings } from '../api/holdings.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
@@ -14,6 +14,7 @@ export class DashboardScreen extends BaseComponent {
   private _portfolioId = '';
   private _portfolio: Portfolio | null = null;
   private _holdings: Holding[] = [];
+  private _unreadAlertsCount = 0;
   private _loading = true;
   private _error = '';
   private _renaming = false;
@@ -32,10 +33,14 @@ export class DashboardScreen extends BaseComponent {
     this._confirmArchive = false;
     this.shadow.innerHTML = this.render();
     try {
-      [this._portfolio, this._holdings] = await Promise.all([
+      const [portfolio, holdings, alerts] = await Promise.all([
         getPortfolio(this._portfolioId),
         listHoldings(this._portfolioId),
+        getPortfolioAlerts(this._portfolioId),
       ]);
+      this._portfolio = portfolio;
+      this._holdings = holdings;
+      this._unreadAlertsCount = alerts.unread_count;
     } catch (ex) {
       this._error = (ex as Error).message;
     }
@@ -88,8 +93,11 @@ export class DashboardScreen extends BaseComponent {
           border-radius: var(--radius-sm); font-weight: var(--font-weight-medium); }
         .btn:hover { background: var(--color-accent-hover); }
         .btn-outline { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
-          border-radius: var(--radius-sm); color: var(--color-text-secondary); }
+          border-radius: var(--radius-sm); color: var(--color-text-secondary); position: relative; }
         .btn-outline:hover { background: var(--color-bg-surface); }
+        .alert-badge { position: absolute; top: -8px; right: -8px; background: var(--color-danger, #d9534f);
+          color: #fff; border-radius: 999px; min-width: 18px; height: 18px; padding: 0 4px;
+          font-size: 11px; font-weight: var(--font-weight-semibold); line-height: 18px; text-align: center; }
         .btn-sm { padding: 2px var(--space-3); border-radius: var(--radius-sm);
           font-size: var(--font-size-sm); border: 1px solid var(--color-border);
           color: var(--color-text-secondary); }
@@ -143,7 +151,11 @@ export class DashboardScreen extends BaseComponent {
       <pi-kpi-strip></pi-kpi-strip>
       <div class="actions">
         <button class="btn" id="add-btn">${t('screen.dashboard.add_asset')}</button>
-        <button class="btn-outline" id="alerts-btn">${t('screen.dashboard.alerts')}</button>
+        <button class="btn-outline" id="alerts-btn">${t('screen.dashboard.alerts')}${
+          this._unreadAlertsCount > 0
+            ? `<span class="alert-badge">${this._unreadAlertsCount}</span>`
+            : ''
+        }</button>
         <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
       </div>
       <div class="section-title">${t('screen.dashboard.holdings')}</div>

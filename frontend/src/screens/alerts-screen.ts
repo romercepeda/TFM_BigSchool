@@ -1,7 +1,7 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { getPortfolioAlerts } from '../api/portfolios.js';
-import { deletePriceLevel } from '../api/price-levels.js';
+import { deletePriceLevel, markAlertSeen } from '../api/price-levels.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import type { PortfolioAlertItem } from '../api/types.js';
@@ -49,6 +49,10 @@ export class AlertsScreen extends BaseComponent {
         .alert-asset { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .alert-meta  { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: 2px; }
         .dismiss-btn { font-size: var(--font-size-sm); color: var(--color-accent); margin-top: var(--space-2); }
+        .mark-read-btn { font-size: var(--font-size-sm); color: var(--color-accent); margin-top: var(--space-2); margin-right: var(--space-3); }
+        .read-label { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--space-2); margin-right: var(--space-3); }
+        .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px;
+          background: var(--color-danger, #d9534f); margin-right: var(--space-2); vertical-align: middle; }
         .empty { color: var(--color-text-muted); text-align: center; padding: var(--space-8); }
         .error { color: var(--color-danger, red); text-align: center; padding: var(--space-4); }
         .back-btn { border: 1px solid var(--color-border); padding: var(--space-2) var(--space-4);
@@ -71,10 +75,13 @@ export class AlertsScreen extends BaseComponent {
     return `
       ${this._touched.length === 0 ? '' : this._touched.map((l) => `
         <div class="alert">
-          <div class="alert-asset">${l.asset_ticker} — ${l.asset_name}</div>
+          <div class="alert-asset">${l.alert_seen_at === null ? '<span class="unread-dot"></span>' : ''}${l.asset_ticker} — ${l.asset_name}</div>
           <div class="alert-price">${formatCurrency(l.target_price, l.asset_quote_currency)} ${t('screen.price_level.direction.' + l.direction)}</div>
           ${l.note ? `<div class="alert-meta">${l.note}</div>` : ''}
           ${l.touched_at ? `<div class="alert-meta">${formatDateTime(l.touched_at)}</div>` : ''}
+          ${l.alert_seen_at === null
+            ? `<button class="mark-read-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.mark_read')}</button>`
+            : `<span class="read-label">${t('alerts.read')}</span>`}
           <button class="dismiss-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.dismiss')}</button>
         </div>
       `).join('')}
@@ -102,6 +109,14 @@ export class AlertsScreen extends BaseComponent {
         ev.stopPropagation();
         const el = btn as HTMLElement;
         await deletePriceLevel(this._portfolioId, el.dataset['hid']!, el.dataset['lid']!);
+        void this._load();
+      });
+    });
+    this.shadow.querySelectorAll('.mark-read-btn').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const el = btn as HTMLElement;
+        await markAlertSeen(this._portfolioId, el.dataset['hid']!, el.dataset['lid']!);
         void this._load();
       });
     });

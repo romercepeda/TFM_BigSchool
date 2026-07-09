@@ -118,6 +118,8 @@
   "alerts.error": "No se pudieron cargar las alertas.",
   "alerts.near_crossing.title": "Cerca de cruzar",
   "alerts.gap_pct": "A {pct} del objetivo (precio actual: {price})",
+  "alerts.mark_read": "Marcar como leída",
+  "alerts.read": "Leída",
 
   "screen.portfolios.title": "Carteras",
   "screen.portfolios.create": "Nueva cartera",

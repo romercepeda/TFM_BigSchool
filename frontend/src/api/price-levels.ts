@@ -36,3 +36,6 @@ export const deletePriceLevel = (portfolioId: string, holdingId: string, levelId
     `${basePath(portfolioId, holdingId)}/${levelId}`,
     assetPriceAtEvent !== undefined ? { asset_price_at_event: assetPriceAtEvent } : undefined,
   );
+
+export const markAlertSeen = (portfolioId: string, holdingId: string, levelId: string) =>
+  post<PriceLevel>(`${basePath(portfolioId, holdingId)}/${levelId}/mark-read`);

@@ -151,12 +151,13 @@ async def get_alerts(
     if portfolio is None:
         raise _NOT_FOUND
     near_crossing_pct = get_config().alerts.near_crossing_pct
-    touched, near_crossing = await price_level_service.list_portfolio_alerts(
+    touched, near_crossing, unread_count = await price_level_service.list_portfolio_alerts(
         db, portfolio_id, near_crossing_pct=near_crossing_pct
     )
     return PortfolioAlertsResponse(
         touched=[PortfolioAlertItem(**item) for item in touched],
         near_crossing=[PortfolioAlertItem(**item) for item in near_crossing],
+        unread_count=unread_count,
     )
 
 

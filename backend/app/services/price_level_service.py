@@ -166,6 +166,22 @@ async def edit_price_level(
     return level
 
 
+async def mark_alert_seen(db: AsyncSession, level: PriceLevel) -> PriceLevel:
+    """Acknowledge a touched level's alert (Changeset C12).
+
+    Sets alert_seen_at to now. Does not write a PriceLevelHistoryEntry —
+    reading a notification is a UI-only concern, not an analytically
+    meaningful event (Changeset C12 §2). Raises ValueError if the level
+    is not 'touched' (an armed level has no alert to acknowledge).
+    """
+    if level.status != "touched":
+        raise ValueError("Only a touched level's alert can be marked as read.")
+
+    level.alert_seen_at = datetime.now(UTC)
+    await db.flush()
+    return level
+
+
 async def delete_price_level(
     db: AsyncSession,
     level: PriceLevel,
@@ -255,14 +271,17 @@ async def list_portfolio_alerts(
     portfolio_id: UUID,
     *,
     near_crossing_pct: float,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], int]:
     """Aggregate touched and near-crossing price levels across a portfolio (Spec D06 §6).
 
-    Returns (touched, near_crossing) as dicts shaped for the PortfolioAlertItem schema.
-    'touched' is sorted by touched_at descending (§6, point 1).
-    'near_crossing' holds armed levels within near_crossing_pct of the latest known
-    close, sorted by proximity — smallest gap first (§6, point 2). Armed levels with
-    no known price yet, or too far from the target, are excluded.
+    Returns (touched, near_crossing, unread_count) as dicts shaped for the
+    PortfolioAlertItem schema. 'touched' is sorted by touched_at descending
+    (§6, point 1). 'near_crossing' holds armed levels within near_crossing_pct
+    of the latest known close, sorted by proximity — smallest gap first (§6,
+    point 2). Armed levels with no known price yet, or too far from the
+    target, are excluded. 'unread_count' is the number of touched items whose
+    alert_seen_at is null (Changeset C12) — near_crossing items never count,
+    since they have no read/unread state.
     """
     result = await db.execute(
         select(PriceLevel, Holding.asset_id, Asset.ticker, Asset.name, Asset.quote_currency)
@@ -272,7 +291,7 @@ async def list_portfolio_alerts(
     )
     rows = result.all()
     if not rows:
-        return [], []
+        return [], [], 0
 
     asset_ids = {asset_id for _, asset_id, _, _, _ in rows}
     latest_dates = (
@@ -313,6 +332,7 @@ async def list_portfolio_alerts(
             "touched_at": level.touched_at,
             "touched_at_close_price": level.touched_at_close_price,
             "touched_at_close_date": level.touched_at_close_date,
+            "alert_seen_at": level.alert_seen_at,
             "asset_ticker": ticker,
             "asset_name": name,
             "asset_quote_currency": quote_currency,
@@ -327,8 +347,9 @@ async def list_portfolio_alerts(
 
     touched.sort(key=lambda i: i["touched_at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
     near_crossing.sort(key=lambda i: i["gap_pct"])
+    unread_count = sum(1 for i in touched if i["alert_seen_at"] is None)
 
-    return touched, near_crossing
+    return touched, near_crossing, unread_count
 
 
 # ── Portfolio hard-delete helper ──────────────────────────────────────────────

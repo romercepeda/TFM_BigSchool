@@ -205,6 +205,43 @@ async def delete_price_level(
     await db.commit()
 
 
+# ── Mark alert as read (Changeset C12) ───────────────────────────────────────
+
+
+@router.post(
+    "/{level_id}/mark-read",
+    response_model=PriceLevelResponse,
+    dependencies=[Depends(require_permission("price_level.edit"))],
+)
+async def mark_alert_read(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    level_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PriceLevelResponse:
+    """Acknowledge a touched level's alert (Changeset C12 §4).
+
+    Does not delete the level or write a history entry — only stamps
+    alert_seen_at so the unread badge and marker stop showing for it.
+    Returns 409 if the level is still 'armed' (nothing to acknowledge).
+    """
+    await _require_holding(portfolio_id, holding_id, current_user, db)
+
+    level = await svc.get_price_level(db, level_id, holding_id)
+    if level is None:
+        raise _NOT_FOUND_LEVEL
+
+    try:
+        level = await svc.mark_alert_seen(db, level)
+    except ValueError as exc:
+        raise _conflict(str(exc))
+
+    await db.commit()
+    await db.refresh(level)
+    return PriceLevelResponse.model_validate(level)
+
+
 # ── History (immutable, append-only) ─────────────────────────────────────────
 
 

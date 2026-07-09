@@ -118,6 +118,8 @@
   "alerts.error": "Could not load alerts.",
   "alerts.near_crossing.title": "Close to crossing",
   "alerts.gap_pct": "{pct} from target (current price: {price})",
+  "alerts.mark_read": "Mark as read",
+  "alerts.read": "Read",
 
   "screen.portfolios.title": "Portfolios",
   "screen.portfolios.create": "New portfolio",

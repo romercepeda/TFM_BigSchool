@@ -59,6 +59,9 @@ class PriceLevel(Base):
     touched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     touched_at_close_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     touched_at_close_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Null = unread alert. Set when the user marks a touched level's alert as
+    # read (Changeset C12). Meaningless while status = armed.
+    alert_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     holding: Mapped["Holding"] = relationship(back_populates="price_levels")  # type: ignore[name-defined]
 

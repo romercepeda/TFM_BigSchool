@@ -71,6 +71,8 @@ class PriceLevelResponse(BaseModel):
     touched_at: datetime | None
     touched_at_close_price: Decimal | None
     touched_at_close_date: date | None
+    # Null = unread alert. Only meaningful while status = 'touched' (Changeset C12).
+    alert_seen_at: datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -117,3 +119,6 @@ class PortfolioAlertsResponse(BaseModel):
     """
     touched: list[PortfolioAlertItem]
     near_crossing: list[PortfolioAlertItem]
+    # Count of `touched` items with alert_seen_at is null (Changeset C12).
+    # near_crossing items never contribute — they have no read/unread state.
+    unread_count: int
