@@ -10,6 +10,7 @@ POST /market-data/daily-update           — trigger the daily price + alert job
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.d09_schemas import (
@@ -20,6 +21,8 @@ from app.api.d09_schemas import (
     PricePointResponse,
 )
 from app.auth.dependencies import get_current_user
+from app.db.models.asset import Asset
+from app.db.models.market_data import AssetPriceHistory
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
@@ -27,6 +30,23 @@ from app.services.market_data.service import get_market_data_service
 from app.services.market_data.types import ProviderError
 
 router = APIRouter(prefix="/market-data", tags=["market-data"])
+
+
+async def _last_known_price(db: AsyncSession, ticker: str) -> AssetPriceHistory | None:
+    """Changeset C14 — most recent stored price for a ticker, if any.
+
+    Used to keep showing a usable value when the live provider call fails,
+    instead of the hard "no disponible" error the endpoint raised before.
+    """
+    asset = await db.scalar(select(Asset).where(Asset.ticker == ticker))
+    if asset is None:
+        return None
+    return await db.scalar(
+        select(AssetPriceHistory)
+        .where(AssetPriceHistory.asset_id == asset.id)
+        .order_by(AssetPriceHistory.as_of_date.desc())
+        .limit(1)
+    )
 
 
 def _unavailable(exc: ProviderError) -> HTTPException:
@@ -81,17 +101,34 @@ async def get_asset_price(
     ticker: str,
     exchange: str | None = Query(default=None, description="Market/exchange code, e.g. BME, LSE."),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> PricePointResponse:
-    """Return the most recent available price for a ticker from the active provider."""
+    """Return the current price for a ticker from the active provider.
+
+    Changeset C14: if the live provider call fails, falls back to the most
+    recent price stored in AssetPriceHistory (written by the daily job)
+    instead of failing outright. Only raises 503 when no price has ever
+    been stored for the asset.
+    """
     svc = get_market_data_service()
+    ticker_upper = ticker.upper()
     try:
-        point = await svc.get_current_price(ticker.upper(), exchange.upper() if exchange else None)
+        point = await svc.get_current_price(ticker_upper, exchange.upper() if exchange else None)
     except ProviderError as exc:
-        raise _unavailable(exc)
+        fallback = await _last_known_price(db, ticker_upper)
+        if fallback is None:
+            raise _unavailable(exc)
+        return PricePointResponse(
+            ticker=ticker_upper,
+            as_of_date=fallback.as_of_date,
+            price=fallback.close_price,
+            fetched_at=fallback.fetched_at,
+        )
     return PricePointResponse(
-        ticker=ticker.upper(),
+        ticker=ticker_upper,
         as_of_date=point.as_of_date,
         price=point.price,
+        fetched_at=datetime.now(UTC),
     )
 
 

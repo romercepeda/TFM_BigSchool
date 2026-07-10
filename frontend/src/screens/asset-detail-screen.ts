@@ -9,7 +9,7 @@ import { getAssetPrice } from '../api/market-data.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import type { Holding, Indicator, IndicatorSnapshotHistory } from '../api/types.js';
-import { formatDate, formatNumber } from '../utils/format.js';
+import { formatDate, formatDateTime, formatNumber } from '../utils/format.js';
 
 interface LotForm { date: string; qty: string; price: string; notes: string; }
 
@@ -22,7 +22,7 @@ export class AssetDetailScreen extends BaseComponent {
   private _indicators: Indicator[] = [];
   private _indicatorHistories: IndicatorSnapshotHistory[] = [];
   private _currentPrice: number | null = null;
-  private _priceDate = '';
+  private _priceFetchedAt = '';
   private _priceLoading = true;
   private _loading = true;
   private _error = '';
@@ -92,7 +92,7 @@ export class AssetDetailScreen extends BaseComponent {
     }
     if (priceResult.status === 'fulfilled') {
       this._currentPrice = Number(priceResult.value.price);
-      this._priceDate = priceResult.value.as_of_date;
+      this._priceFetchedAt = priceResult.value.fetched_at;
     }
     this._priceLoading = false;
 
@@ -312,7 +312,7 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-label">${t('screen.asset.current_price')}</div>
           <div class="summary-value">${priceStr}</div>
           <div class="summary-sub">${a.quote_currency}</div>
-          ${this._priceDate ? `<div class="summary-sub">${this._priceDate}</div>` : ''}
+          ${this._priceFetchedAt ? `<div class="summary-sub">${formatDateTime(this._priceFetchedAt)}</div>` : ''}
         </div>
         <div class="summary-card">
           <div class="summary-label">${t('screen.asset.total_invested')}</div>

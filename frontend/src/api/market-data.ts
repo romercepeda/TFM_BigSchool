@@ -13,6 +13,7 @@ export interface PricePoint {
   ticker: string;
   as_of_date: string;
   price: number;
+  fetched_at: string;
 }
 
 export const searchAssets   = (q: string) =>

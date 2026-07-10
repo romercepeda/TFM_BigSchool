@@ -20,6 +20,9 @@ class PricePointResponse(BaseModel):
     ticker: str
     as_of_date: date
     price: Decimal
+    # Changeset C14: execution timestamp — now() for a live fetch, or the
+    # stored AssetPriceHistory row's own fetched_at for a last-known fallback.
+    fetched_at: datetime
 
 
 class FxRateResponse(BaseModel):
