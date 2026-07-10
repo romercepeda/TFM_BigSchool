@@ -206,6 +206,14 @@ export class AssetDetailScreen extends BaseComponent {
 
         .indicator-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
         @media (min-width: 640px) { .indicator-grid { grid-template-columns: repeat(3, 1fr); } }
+        .indicator-group {
+          border: 1px solid var(--color-border); border-radius: var(--radius-md);
+          padding: var(--space-4); background: var(--color-bg-primary);
+        }
+        .indicator-group + .indicator-group { margin-top: var(--space-4); }
+        .indicator-group-title { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold);
+          color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+          margin-bottom: var(--space-3); }
 
         .empty-state { color: var(--color-text-muted); font-size: var(--font-size-sm); padding: var(--space-4); text-align: center;
           border: 1px dashed var(--color-border); border-radius: var(--radius-md); }
@@ -286,6 +294,8 @@ export class AssetDetailScreen extends BaseComponent {
     const plSign = pl !== null && pl >= 0 ? '+' : '';
 
     const anyLotNotes = lots.some((l) => l.notes);
+    const technicalIndicators = this._indicators.filter((ind) => ind.nature === 'technical');
+    const fundamentalIndicators = this._indicators.filter((ind) => ind.nature === 'fundamental');
 
     return `
       <div class="asset-header">
@@ -431,9 +441,22 @@ export class AssetDetailScreen extends BaseComponent {
           ${t('screen.holding.indicators')}
           <span class="section-title-link" id="legend-link">${t('screen.holding.indicators_guide')}</span>
         </div>
-        <div class="indicator-grid" id="indicators-grid">
-          ${this._indicators.map(() => '<pi-indicator-card></pi-indicator-card>').join('')}
-        </div>
+        ${technicalIndicators.length > 0 ? `
+          <div class="indicator-group">
+            <div class="indicator-group-title">${t('screen.holding.indicators_technical')}</div>
+            <div class="indicator-grid" id="indicators-grid-technical">
+              ${technicalIndicators.map(() => '<pi-indicator-card></pi-indicator-card>').join('')}
+            </div>
+          </div>
+        ` : ''}
+        ${fundamentalIndicators.length > 0 ? `
+          <div class="indicator-group">
+            <div class="indicator-group-title">${t('screen.holding.indicators_fundamental')}</div>
+            <div class="indicator-grid" id="indicators-grid-fundamental">
+              ${fundamentalIndicators.map(() => '<pi-indicator-card></pi-indicator-card>').join('')}
+            </div>
+          </div>
+        ` : ''}
       </div>
       ` : ''}
     `;
@@ -726,14 +749,20 @@ export class AssetDetailScreen extends BaseComponent {
   }
 
   private _mountIndicatorCards(): void {
-    const grid = this.shadow.getElementById('indicators-grid');
+    this._mountIndicatorGroup('indicators-grid-technical', 'technical');
+    this._mountIndicatorGroup('indicators-grid-fundamental', 'fundamental');
+  }
+
+  private _mountIndicatorGroup(gridId: string, nature: string): void {
+    const grid = this.shadow.getElementById(gridId);
     if (!grid) return;
+    const indicators = this._indicators.filter((ind) => ind.nature === nature);
     const cards = grid.querySelectorAll('pi-indicator-card') as NodeListOf<HTMLElement & {
       indicator: Indicator;
       snapshots: IndicatorSnapshotHistory['snapshots'];
     }>;
     cards.forEach((card, i) => {
-      const ind = this._indicators[i];
+      const ind = indicators[i];
       if (!ind) return;
       const history = this._indicatorHistories.find((h) => h.indicator.code === ind.code);
       card.indicator = ind;

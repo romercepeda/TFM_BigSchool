@@ -145,6 +145,8 @@
   "screen.holding.sales": "Ventas",
   "screen.holding.indicators": "Indicadores",
   "screen.holding.indicators_guide": "Ver guía de indicadores →",
+  "screen.holding.indicators_technical": "Indicadores Técnicos",
+  "screen.holding.indicators_fundamental": "Indicadores Fundamentales",
   "screen.holding.ai_reports": "Informes IA",
   "screen.holding.price_levels": "Niveles de precio",
   "screen.holding.analysis": "Análisis",

@@ -280,6 +280,13 @@ async def _write_indicator_snapshots(
         else:
             value_text = str(raw_value) if raw_value is not None else None
 
+        if value_numeric is None and value_text is None:
+            # Changeset C15: the AI didn't disclose this metric in this report.
+            # Skip rather than upsert a null — matches run_daily_indicators'
+            # "insufficient data — silently skip" rule, and avoids overwriting
+            # a real value from an earlier report with nothing.
+            continue
+
         stmt = (
             pg_insert(IndicatorSnapshot)
             .values(

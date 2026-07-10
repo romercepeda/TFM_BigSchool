@@ -39,6 +39,13 @@ export class IndicatorCard extends BaseComponent {
     const displayValue = current ? this._displayValue(ind, current) : '—';
     const zone = current?.zone ?? null;
 
+    // Changeset C15: always show which period/date the current value belongs
+    // to — the report period name for AI-derived fundamentals (e.g. "FY 2025"),
+    // or the processing date for scheduled technical indicators.
+    const currentPeriodLabel = current
+      ? current.source_report_name || formatDate(current.as_of_date + 'T12:00:00', { dateStyle: 'medium' })
+      : '';
+
     // Tooltip content
     const tooltipKey = `indicator.${ind.code}.tooltip`;
     const tooltipDesc = t(tooltipKey);
@@ -123,6 +130,7 @@ export class IndicatorCard extends BaseComponent {
           color: var(--color-text-primary);
         }
         .unit  { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+        .period { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
         .signal {
           display: inline-flex; align-items: center; gap: 4px;
           margin-top: var(--space-1);
@@ -165,6 +173,7 @@ export class IndicatorCard extends BaseComponent {
         </div>
         <div class="value">${displayValue}</div>
         ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
+        ${currentPeriodLabel ? `<div class="period">${currentPeriodLabel}</div>` : ''}
         ${zonePill}
         ${historyHtml}
         ${fullTooltip ? `<div class="tip-box" id="tip-box">${fullTooltip}</div>` : ''}

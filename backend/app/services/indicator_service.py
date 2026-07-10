@@ -409,16 +409,27 @@ async def get_indicators_by_scope(db: AsyncSession, scope: str) -> list[Indicato
     return list(result.scalars().all())
 
 
+_HISTORY_LOOKBACK_ROWS = 12  # Changeset C15 — see docstring below.
+
+
 async def get_asset_indicator_history(
     db: AsyncSession,
     asset_id: UUID,
     indicator: Indicator,
 ) -> list[dict]:
-    """Return the most recent 3 snapshots for an asset + indicator, newest-first.
+    """Return the most recent 3 *valued* snapshots for an asset + indicator, newest-first.
 
     Each dict includes the snapshot fields plus an evaluated 'zone'.
     For price_vs_reference indicators, AssetPriceHistory is joined to supply the
     close price needed for zone computation (D05 §4.3).
+
+    Changeset C15: a snapshot with no value in either value_numeric or value_text
+    (e.g. a pre-C15 AI report that didn't disclose this metric) is never surfaced
+    as "current" or in history — it is skipped in favor of the most recent
+    snapshot that actually has a value, mirroring Changeset C14's last-known-price
+    fallback. _HISTORY_LOOKBACK_ROWS over-fetches so there's room to skip past any
+    such stray nulls and still find up to 3 real values; ordinary assets never
+    have enough of them to matter.
     """
     snapshots_result = await db.execute(
         select(IndicatorSnapshot)
@@ -428,9 +439,12 @@ async def get_asset_indicator_history(
             IndicatorSnapshot.subject_id == asset_id,
         )
         .order_by(IndicatorSnapshot.as_of_date.desc())
-        .limit(3)
+        .limit(_HISTORY_LOOKBACK_ROWS)
     )
-    snapshots = list(snapshots_result.scalars().all())
+    snapshots = [
+        s for s in snapshots_result.scalars().all()
+        if s.value_numeric is not None or s.value_text is not None
+    ][:3]
 
     if not snapshots:
         return []
