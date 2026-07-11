@@ -261,6 +261,7 @@
   "analysis.global_signal.neutral": "Neutral",
   "analysis.global_signal.bearish": "Bearish",
   "analysis.report_date": "Report date",
+  "analysis.processed_date": "Processed on",
   "analysis.metrics": "Extracted metrics",
   "analysis.analyst_sentiment": "Sentiment",
   "analysis.confidence_notes": "Confidence notes",

@@ -7,6 +7,7 @@ import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import { ApiError } from '../api/types.js';
 import type { AiReportSummary, AiReportDetail } from '../api/types.js';
+import { formatDate } from '../utils/format.js';
 
 type EditField = 'date' | 'name';
 type FieldStatus = 'saving' | 'saved' | 'error';
@@ -341,6 +342,7 @@ export class AnalysisScreen extends BaseComponent {
         .report-date, .report-name { font-size: var(--font-size-xs); color: var(--color-text-muted);
           margin-bottom: var(--space-1); display: flex; align-items: center; gap: var(--space-1); }
         .report-name { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+        .report-processed { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--space-1); }
         .report-name--missing { color: var(--color-warning); font-style: italic; }
         .warn-icon { color: var(--color-warning); cursor: help; font-size: var(--font-size-xs); }
         .edit-icon-btn { border: none; background: transparent; color: var(--color-text-muted);
@@ -403,6 +405,7 @@ export class AnalysisScreen extends BaseComponent {
                 ${r.global_signal ? `<span class="signal-badge" style="background:${this._signalColor(r.global_signal)}">${this._signalLabel(r.global_signal)}</span>` : ''}
                 <div class="report-meta">
                   ${this._renderDateField(r)}
+                  <div class="report-processed">${t('analysis.processed_date')}: ${formatDate(r.created_at, { dateStyle: 'medium' })}</div>
                   ${this._renderNameField(r)}
                   ${r.executive_summary ? `<div class="summary">${r.executive_summary}</div>` : ''}
                   <div class="provider">${r.provider} · ${r.model_version}${!r.is_own ? ` · <span class="shared-label">${t('analysis.history.entry.shared_label')}</span>` : ''}</div>

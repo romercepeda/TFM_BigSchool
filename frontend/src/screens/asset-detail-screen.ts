@@ -123,16 +123,24 @@ export class AssetDetailScreen extends BaseComponent {
     return `
       <style>
         :host { display: block; }
-        .content { padding: var(--space-6); max-width: var(--max-content-width); margin: 0 auto; }
+        .content { padding: var(--space-4); max-width: var(--max-content-width); margin: 0 auto; }
+        @media (min-width: 640px) { .content { padding: var(--space-6); } }
 
-        .asset-header { margin-bottom: var(--space-6); }
-        .ticker { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); }
-        .asset-name { font-size: var(--font-size-lg); color: var(--color-text-secondary); margin-top: var(--space-1); }
+        .asset-header-row {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-6);
+        }
+        .asset-header { min-width: 0; }
+        .ticker { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); overflow-wrap: anywhere; }
+        .asset-name { font-size: var(--font-size-lg); color: var(--color-text-secondary); margin-top: var(--space-1); overflow-wrap: anywhere; }
         .asset-meta { display: flex; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; }
         .badge {
           display: inline-block; padding: 2px var(--space-2);
           background: var(--color-bg-surface); border: 1px solid var(--color-border);
           border-radius: var(--radius-sm); font-size: var(--font-size-xs); color: var(--color-text-secondary);
+        }
+        @media (max-width: 639px) {
+          .asset-header-row { flex-direction: column; align-items: stretch; }
         }
 
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-6); }
@@ -147,7 +155,8 @@ export class AssetDetailScreen extends BaseComponent {
         .summary-value.negative { color: var(--color-danger); }
         .summary-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
 
-        .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-6); }
+        .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+        @media (max-width: 639px) { .actions { justify-content: flex-start; } }
         .btn { background: var(--color-accent); color: #fff; padding: var(--space-2) var(--space-4);
           border-radius: var(--radius-sm); font-weight: var(--font-weight-medium); }
         .btn:hover { background: var(--color-accent-hover); }
@@ -176,11 +185,17 @@ export class AssetDetailScreen extends BaseComponent {
         .section-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold);
           color: var(--color-text-secondary); margin-bottom: var(--space-3);
           text-transform: uppercase; letter-spacing: 0.05em;
-          display: flex; align-items: center; gap: var(--space-3); }
+          display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
         .section-title-link { font-size: var(--font-size-xs); text-transform: none; letter-spacing: 0;
           color: var(--color-accent); font-weight: normal; cursor: pointer; }
         .section-title-link:hover { text-decoration: underline; }
 
+        .boxed-section {
+          border: 1px solid var(--color-border); border-radius: var(--radius-md);
+          padding: var(--space-4); background: var(--color-bg-primary);
+        }
+
+        .table-wrap { overflow-x: auto; }
         .table { width: 100%; border-collapse: collapse; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
         .table th { background: var(--color-bg-secondary); padding: var(--space-2) var(--space-3);
           font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.05em;
@@ -298,13 +313,28 @@ export class AssetDetailScreen extends BaseComponent {
     const fundamentalIndicators = this._indicators.filter((ind) => ind.nature === 'fundamental');
 
     return `
-      <div class="asset-header">
-        <div class="ticker">${a.ticker}</div>
-        <div class="asset-name">${a.name}</div>
-        <div class="asset-meta">
-          ${a.market ? `<span class="badge">${a.market}</span>` : ''}
-          <span class="badge">${a.asset_type}</span>
-          <span class="badge">${a.quote_currency}</span>
+      <div class="asset-header-row">
+        <div class="asset-header">
+          <div class="ticker">${a.ticker}</div>
+          <div class="asset-name">${a.name}</div>
+          <div class="asset-meta">
+            ${a.market ? `<span class="badge">${a.market}</span>` : ''}
+            <span class="badge">${a.asset_type}</span>
+            <span class="badge">${a.quote_currency}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-outline" id="levels-btn">${t('screen.holding.price_levels')}</button>
+          <button class="btn-outline" id="analysis-btn">${t('screen.holding.analysis')}</button>
+          <button class="btn-outline" id="edit-asset-btn">${t('screen.asset.edit_asset')}</button>
+          <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
+          ${this._confirmDeleteHolding
+            ? `<div class="confirm-row">
+                 <span class="confirm-label">${t('screen.holding.delete.confirm')}</span>
+                 <button class="btn-danger" id="do-delete-holding-btn">${t('common.button.confirm')}</button>
+                 <button class="btn-outline" id="cancel-delete-holding-btn">${t('common.button.cancel')}</button>
+               </div>`
+            : `<button class="btn-danger" id="delete-holding-btn">${t('screen.holding.delete')}</button>`}
         </div>
       </div>
 
@@ -343,21 +373,7 @@ export class AssetDetailScreen extends BaseComponent {
 
       ${this._editingAsset ? this._renderEditAssetForm(a) : ''}
 
-      <div class="actions">
-        <button class="btn-outline" id="levels-btn">${t('screen.holding.price_levels')}</button>
-        <button class="btn-outline" id="analysis-btn">${t('screen.holding.analysis')}</button>
-        <button class="btn-outline" id="edit-asset-btn">${t('screen.asset.edit_asset')}</button>
-        <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
-        ${this._confirmDeleteHolding
-          ? `<div class="confirm-row">
-               <span class="confirm-label">${t('screen.holding.delete.confirm')}</span>
-               <button class="btn-danger" id="do-delete-holding-btn">${t('common.button.confirm')}</button>
-               <button class="btn-outline" id="cancel-delete-holding-btn">${t('common.button.cancel')}</button>
-             </div>`
-          : `<button class="btn-danger" id="delete-holding-btn">${t('screen.holding.delete')}</button>`}
-      </div>
-
-      <div class="section">
+      <div class="section boxed-section">
         <div class="section-title">
           ${t('screen.holding.lots')} · ${lots.length}
           <button class="btn-xs" id="add-lot-btn">${t('screen.holding.add_lot')}</button>
@@ -366,7 +382,7 @@ export class AssetDetailScreen extends BaseComponent {
         ${lots.length === 0 && !this._addingLot
           ? `<div class="empty-state">${t('screen.holding.lots_empty')}</div>`
           : lots.length > 0
-            ? `<table class="table">
+            ? `<div class="table-wrap"><table class="table">
                 <thead><tr>
                   <th>${t('screen.lot.purchase_date')}</th>
                   <th class="num">${t('screen.lot.quantity')}</th>
@@ -409,14 +425,14 @@ export class AssetDetailScreen extends BaseComponent {
                     </tr>`;
                   }).join('')}
                 </tbody>
-              </table>`
+              </table></div>`
             : ''}
       </div>
 
       ${sales.length > 0 ? `
       <div class="section">
         <div class="section-title">${t('screen.holding.sales')} · ${sales.length}</div>
-        <table class="table">
+        <div class="table-wrap"><table class="table">
           <thead><tr>
             <th>${t('screen.sale.sale_date')}</th>
             <th class="num">${t('screen.sale.quantity')}</th>
@@ -431,7 +447,7 @@ export class AssetDetailScreen extends BaseComponent {
               <td class="num">${formatNumber(Number(s.quantity) * Number(s.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>`).join('')}
           </tbody>
-        </table>
+        </table></div>
       </div>
       ` : ''}
 

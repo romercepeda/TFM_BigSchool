@@ -32,12 +32,19 @@ export class HeaderBar extends BaseComponent {
         :host { display: block; }
         header {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 0 var(--space-4); height: var(--header-height);
+          flex-wrap: wrap; row-gap: var(--space-2);
+          padding: var(--space-2) var(--space-4); min-height: var(--header-height);
           background: var(--color-bg-primary); border-bottom: 1px solid var(--color-border);
           box-shadow: var(--elevation-1);
         }
-        .brand { font-weight: var(--font-weight-bold); color: var(--color-accent); font-size: var(--font-size-lg); }
-        .actions { display: flex; align-items: center; gap: var(--space-3); }
+        .brand { font-weight: var(--font-weight-bold); color: var(--color-accent); font-size: var(--font-size-lg); flex-shrink: 0; }
+        .actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); row-gap: var(--space-2); }
+        .user-name { overflow-wrap: anywhere; }
+        @media (max-width: 639px) {
+          .actions button { padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs); }
+          .actions button#settings-btn { padding: var(--space-1) var(--space-2); }
+          .user-name { display: none; }
+        }
 
         /* Badge wrapper — positions the tooltip relative to itself */
         .badge-wrap {
@@ -115,7 +122,7 @@ export class HeaderBar extends BaseComponent {
                 </div>
               </div>
             ` : ''}
-            <span>${user.display_name ?? user.email}</span>
+            <span class="user-name">${user.display_name ?? user.email}</span>
             ${hasPermission('user.list') || hasPermission('role.list')
               ? `<button id="admin-btn">${t('nav.admin')}</button>`
               : ''}
