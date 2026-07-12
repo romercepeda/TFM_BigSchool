@@ -40,6 +40,7 @@ class Holding(Base):
     lots: Mapped[list["Lot"]] = relationship(back_populates="holding", cascade="all, delete-orphan")  # type: ignore[name-defined]
     sales: Mapped[list["Sale"]] = relationship(back_populates="holding", cascade="all, delete-orphan")  # type: ignore[name-defined]
     price_levels: Mapped[list["PriceLevel"]] = relationship(back_populates="holding", cascade="all, delete-orphan")  # type: ignore[name-defined]
+    date_alerts: Mapped[list["DateAlert"]] = relationship(back_populates="holding", cascade="all, delete-orphan")  # type: ignore[name-defined]
 
     def __repr__(self) -> str:
         return f"<Holding id={self.id} portfolio_id={self.portfolio_id} asset_id={self.asset_id}>"

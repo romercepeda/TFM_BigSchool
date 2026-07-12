@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.api.date_alert_schemas import PortfolioDateAlertItem
+
 Direction = Literal["buy", "sell"]
 LevelStatus = Literal["armed", "touched"]
 EventType = Literal["created", "edited", "touched", "removed"]
@@ -111,14 +113,18 @@ class PortfolioAlertItem(PriceLevelResponse):
 
 
 class PortfolioAlertsResponse(BaseModel):
-    """Consolidated alerts for a portfolio (Spec D06 §6).
+    """Consolidated alerts for a portfolio (Spec D06 §6, extended by Changeset C17).
 
     touched: crossed levels, most recently touched first.
     near_crossing: armed levels within the configured proximity threshold,
     closest gap first.
+    date_due: date alerts whose date has arrived, most recently due first.
+    date_upcoming: date alerts within alerts.date_upcoming_days, soonest first.
     """
     touched: list[PortfolioAlertItem]
     near_crossing: list[PortfolioAlertItem]
-    # Count of `touched` items with alert_seen_at is null (Changeset C12).
-    # near_crossing items never contribute — they have no read/unread state.
+    date_due: list[PortfolioDateAlertItem]
+    date_upcoming: list[PortfolioDateAlertItem]
+    # Sum of unread `touched` price levels and unread `date_due` alerts
+    # (Changeset C12, extended by Changeset C17) — one number for the dashboard badge.
     unread_count: int

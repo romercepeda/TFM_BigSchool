@@ -54,7 +54,7 @@ El diseño está pensado como MVP de usuario único, pero con arquitectura prepa
 
 ### Infraestructura
 - Docker + Docker Compose para desarrollo local (backend, worker, db, redis, frontend).
-- Despliegue en **Azure Container Apps** (backend, worker, frontend) + **Azure Database for PostgreSQL Flexible Server** + Redis (Upstash, free tier).
+- Despliegue en **Azure Container Apps** (backend, worker, frontend) + **Azure Database for PostgreSQL Flexible Server** + Redis (Upstash, free tier). Runbook de despliegue/redespliegue a producción: [`specs/changesets/changeset-c09-azure-deployment.md`](specs/changesets/changeset-c09-azure-deployment.md).
 
 ---
 

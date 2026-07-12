@@ -120,6 +120,8 @@
   "alerts.gap_pct": "A {pct} del objetivo (precio actual: {price})",
   "alerts.mark_read": "Marcar como leída",
   "alerts.read": "Leída",
+  "alerts.date.title": "Fechas",
+  "alerts.date_upcoming.title": "Próximas fechas",
 
   "screen.portfolios.title": "Carteras",
   "screen.portfolios.create": "Nueva cartera",
@@ -148,7 +150,7 @@
   "screen.holding.indicators_technical": "Indicadores Técnicos",
   "screen.holding.indicators_fundamental": "Indicadores Fundamentales",
   "screen.holding.ai_reports": "Informes IA",
-  "screen.holding.price_levels": "Niveles de precio",
+  "screen.holding.alerts": "Alertas",
   "screen.holding.analysis": "Análisis",
   "screen.holding.history": "Historial",
   "history.title": "Historial",
@@ -248,6 +250,14 @@
   "set_levels.title": "Niveles de precio",
   "set_levels.existing": "Niveles configurados",
 
+  "screen.date_alert.title": "Alertas de fecha",
+  "screen.date_alert.existing": "Alertas configuradas",
+  "screen.date_alert.date": "Fecha",
+  "screen.date_alert.description": "Descripción",
+  "screen.date_alert.description_placeholder": "Ej: Publicación de resultados Q4",
+  "screen.date_alert.status.pending": "Pendiente",
+  "screen.date_alert.status.due": "Alcanzada",
+
   "analysis.title": "Análisis IA",
   "analysis.history": "Historial de informes",
   "analysis.history.load_error": "No se pudieron cargar los análisis previos.",
@@ -288,7 +298,6 @@
   "analysis.history.entry.date_collision_error": "Ya existe un análisis con esta fecha para este activo. Elige otra fecha o elimina el análisis existente primero.",
   "analysis.history.entry.shared_label": "Análisis de otro usuario",
 
-  "indicator.card.tooltip.name_missing": "Sin nombre — edítalo en Historial de análisis",
   "indicator.history.title": "Histórico",
   "indicator.history.empty": "Sin lecturas anteriores",
   "indicator.history.previous": "Anterior",

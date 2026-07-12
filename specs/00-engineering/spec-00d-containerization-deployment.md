@@ -52,6 +52,8 @@ Using containerized PostgreSQL and Redis in both environments (rather than manag
 - Target environment: Microsoft Azure, using Azure Container Apps (or Azure App Service for Containers) for `frontend`/`backend`, and either a containerized PostgreSQL or Azure Database for PostgreSQL Flexible Server for `db`.
 - CI/CD automation (e.g. GitHub Actions building and pushing images, automatic deployment on merge) is deferred to a future iteration once the manual deployment process is validated and stable. This is recorded here so it is not forgotten, not because it is unimportant.
 
+**Realized by:** the system was first deployed to Azure on 2026-07-07/08. **`specs/changesets/changeset-c09-azure-deployment.md` is the canonical, up-to-date production runbook** — architecture actually deployed, resource names, the exact redeploy commands (§4), and every gotcha found running this in production (§5). Whoever redeploys to production reads that document, not just this one; this spec records the original strategy decision, C09 records how it actually works today.
+
 ---
 
 ## 6. Rationale

@@ -17,6 +17,7 @@ import './components/kpi-strip.js';
 import './components/asset-row.js';
 import './components/indicator-card.js';
 import './components/price-level-form.js';
+import './components/date-alert-form.js';
 import './components/pdf-uploader.js';
 
 import './screens/landing-page.js';

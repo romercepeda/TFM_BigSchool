@@ -28,6 +28,7 @@ from app.api.admin import router as admin_router
 from app.api.ai_reports import router as ai_reports_router
 from app.api.assets import router as assets_router
 from app.api.auth import router as auth_router
+from app.api.date_alerts import router as date_alerts_router
 from app.api.fx_calc import router as fx_calc_router
 from app.api.health import router as health_router
 from app.api.holdings import router as holdings_router
@@ -115,6 +116,7 @@ app.include_router(holdings_router)
 app.include_router(assets_router)
 app.include_router(fx_calc_router)
 app.include_router(price_levels_router)
+app.include_router(date_alerts_router)
 app.include_router(market_data_router)
 app.include_router(indicators_router)
 app.include_router(ai_reports_router)

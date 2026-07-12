@@ -6,10 +6,12 @@ import { getHolding, deleteHolding, addLot, updateLot, deleteLot, updateAsset } 
 import type { AddLotBody } from '../api/holdings.js';
 import { listIndicators, getAssetIndicators } from '../api/indicators.js';
 import { getAssetPrice } from '../api/market-data.js';
+import { listPriceLevels, deletePriceLevel, markAlertSeen } from '../api/price-levels.js';
+import { listDateAlerts, deleteDateAlert, markDateAlertSeen } from '../api/date-alerts.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
-import type { Holding, Indicator, IndicatorSnapshotHistory } from '../api/types.js';
-import { formatDate, formatDateTime, formatNumber } from '../utils/format.js';
+import type { Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert } from '../api/types.js';
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../utils/format.js';
 
 interface LotForm { date: string; qty: string; price: string; notes: string; }
 
@@ -21,6 +23,8 @@ export class AssetDetailScreen extends BaseComponent {
   private _holding: Holding | null = null;
   private _indicators: Indicator[] = [];
   private _indicatorHistories: IndicatorSnapshotHistory[] = [];
+  private _priceLevels: PriceLevel[] = [];
+  private _dateAlerts: DateAlert[] = [];
   private _currentPrice: number | null = null;
   private _priceFetchedAt = '';
   private _priceLoading = true;
@@ -80,9 +84,11 @@ export class AssetDetailScreen extends BaseComponent {
     const ticker = this._holding.asset.ticker;
     const assetId = this._holding.asset.id;
 
-    const [indResult, priceResult] = await Promise.allSettled([
+    const [indResult, priceResult, levelsResult, dateAlertsResult] = await Promise.allSettled([
       Promise.all([listIndicators(), getAssetIndicators(assetId)]),
       getAssetPrice(ticker, this._holding.asset.market),
+      listPriceLevels(this._portfolioId, this._holdingId),
+      listDateAlerts(this._portfolioId, this._holdingId),
     ]);
 
     if (indResult.status === 'fulfilled') {
@@ -94,11 +100,23 @@ export class AssetDetailScreen extends BaseComponent {
       this._currentPrice = Number(priceResult.value.price);
       this._priceFetchedAt = priceResult.value.fetched_at;
     }
+    if (levelsResult.status === 'fulfilled') this._priceLevels = levelsResult.value;
+    if (dateAlertsResult.status === 'fulfilled') this._dateAlerts = dateAlertsResult.value;
     this._priceLoading = false;
 
     this.shadow.innerHTML = this.render();
     this.afterRender();
     this._mountIndicatorCards();
+  }
+
+  private async _reloadAlerts(): Promise<void> {
+    const [levelsResult, dateAlertsResult] = await Promise.allSettled([
+      listPriceLevels(this._portfolioId, this._holdingId),
+      listDateAlerts(this._portfolioId, this._holdingId),
+    ]);
+    if (levelsResult.status === 'fulfilled') this._priceLevels = levelsResult.value;
+    if (dateAlertsResult.status === 'fulfilled') this._dateAlerts = dateAlertsResult.value;
+    this._rerender();
   }
 
   private async _reloadHolding(): Promise<void> {
@@ -195,6 +213,17 @@ export class AssetDetailScreen extends BaseComponent {
           padding: var(--space-4); background: var(--color-bg-primary);
         }
 
+        .alerts-section { margin-bottom: var(--space-6); }
+        .asset-alert { border-left: 4px solid var(--color-warning); padding: var(--space-3) var(--space-4);
+          margin-bottom: var(--space-3); background: var(--color-warning-light); border-radius: var(--radius-sm);
+          display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+        .asset-alert-main { min-width: 0; }
+        .asset-alert-title { font-weight: var(--font-weight-semibold); }
+        .asset-alert-meta { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: 2px; }
+        .asset-alert-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+        .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px;
+          background: var(--color-danger, #d9534f); margin-right: var(--space-2); vertical-align: middle; }
+
         .table-wrap { overflow-x: auto; }
         .table { width: 100%; border-collapse: collapse; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
         .table th { background: var(--color-bg-secondary); padding: var(--space-2) var(--space-3);
@@ -249,6 +278,52 @@ export class AssetDetailScreen extends BaseComponent {
 
   private _fmt(date: string): string {
     return formatDate(date + 'T12:00:00');
+  }
+
+  private _renderAssetAlerts(quoteCurrency: string): string {
+    const touchedLevels = this._priceLevels.filter((l) => l.status === 'touched');
+    const dueAlerts = this._dateAlerts.filter((a) => a.status === 'due');
+    if (touchedLevels.length === 0 && dueAlerts.length === 0) return '';
+
+    return `
+      <div class="alerts-section">
+        <div class="section-title">${t('alerts.title')}</div>
+        ${touchedLevels.map((l) => `
+          <div class="asset-alert">
+            <div class="asset-alert-main">
+              <div class="asset-alert-title">
+                ${l.alert_seen_at === null ? '<span class="unread-dot"></span>' : ''}
+                ${formatCurrency(l.target_price, quoteCurrency)} ${t('screen.price_level.direction.' + l.direction)}
+              </div>
+              ${l.note ? `<div class="asset-alert-meta">${l.note}</div>` : ''}
+              ${l.touched_at ? `<div class="asset-alert-meta">${formatDateTime(l.touched_at)}</div>` : ''}
+            </div>
+            <div class="asset-alert-actions">
+              ${l.alert_seen_at === null
+                ? `<button class="btn-xs" data-mark-level-id="${l.id}">${t('alerts.mark_read')}</button>`
+                : `<span class="asset-alert-meta">${t('alerts.read')}</span>`}
+              <button class="btn-xs-danger" data-dismiss-level-id="${l.id}">${t('alerts.dismiss')}</button>
+            </div>
+          </div>
+        `).join('')}
+        ${dueAlerts.map((al) => `
+          <div class="asset-alert">
+            <div class="asset-alert-main">
+              <div class="asset-alert-title">
+                ${al.alert_seen_at === null ? '<span class="unread-dot"></span>' : ''}
+                ${this._fmt(al.alert_date)} — ${al.description}
+              </div>
+            </div>
+            <div class="asset-alert-actions">
+              ${al.alert_seen_at === null
+                ? `<button class="btn-xs" data-mark-date-alert-id="${al.id}">${t('alerts.mark_read')}</button>`
+                : `<span class="asset-alert-meta">${t('alerts.read')}</span>`}
+              <button class="btn-xs-danger" data-dismiss-date-alert-id="${al.id}">${t('alerts.dismiss')}</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
   }
 
   private _renderEditAssetForm(a: { ticker: string; name: string; market: string | null }): string {
@@ -324,7 +399,7 @@ export class AssetDetailScreen extends BaseComponent {
           </div>
         </div>
         <div class="actions">
-          <button class="btn-outline" id="levels-btn">${t('screen.holding.price_levels')}</button>
+          <button class="btn-outline" id="levels-btn">${t('screen.holding.alerts')}</button>
           <button class="btn-outline" id="analysis-btn">${t('screen.holding.analysis')}</button>
           <button class="btn-outline" id="edit-asset-btn">${t('screen.asset.edit_asset')}</button>
           <button class="btn-outline" id="back-btn">${t('common.button.back')}</button>
@@ -337,6 +412,8 @@ export class AssetDetailScreen extends BaseComponent {
             : `<button class="btn-danger" id="delete-holding-btn">${t('screen.holding.delete')}</button>`}
         </div>
       </div>
+
+      ${this._renderAssetAlerts(a.quote_currency)}
 
       <div class="summary-grid">
         <div class="summary-card">
@@ -551,6 +628,32 @@ export class AssetDetailScreen extends BaseComponent {
       navigate(`/app/portfolios/${pid}`));
     this.shadow.getElementById('legend-link')?.addEventListener('click', () =>
       navigate('/app/indicators/legend'));
+
+    // Embedded Alertas section
+    this.shadow.querySelectorAll<HTMLElement>('[data-mark-level-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await markAlertSeen(pid, hid, btn.dataset['markLevelId']!);
+        void this._reloadAlerts();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-dismiss-level-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await deletePriceLevel(pid, hid, btn.dataset['dismissLevelId']!, this._currentPrice ?? undefined);
+        void this._reloadAlerts();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-mark-date-alert-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await markDateAlertSeen(pid, hid, btn.dataset['markDateAlertId']!);
+        void this._reloadAlerts();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-dismiss-date-alert-id]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await deleteDateAlert(pid, hid, btn.dataset['dismissDateAlertId']!);
+        void this._reloadAlerts();
+      });
+    });
 
     // Delete holding
     this.shadow.getElementById('delete-holding-btn')?.addEventListener('click', () => {

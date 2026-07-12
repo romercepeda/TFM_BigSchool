@@ -61,21 +61,22 @@ export class IndicatorCard extends BaseComponent {
       ? `<div class="signal" data-zone="${zone ?? 'unknown'}">${t('zone.' + (zone ?? 'unknown'))}</div>`
       : '';
 
-    // History: up to 2 previous snapshots. Values sourced from an AI analysis get a
-    // native title= tooltip with the report's period name (C05 §8); values
-    // from the scheduled daily job never show one (there's no "report" behind them).
+    // History: up to 2 previous snapshots. Values sourced from an AI analysis
+    // show the report's period name (e.g. "FY 2024") instead of the snapshot's
+    // as_of_date — same fallback-to-date rule as currentPeriodLabel above, so a
+    // reader sees which analysis a historical value belongs to, not just when
+    // the row happened to be processed.
     const prevSnaps = snaps.slice(1);
     const historyHtml = current
       ? prevSnaps.length > 0
         ? `<div class="history">
             ${prevSnaps.map((s) => {
-              const tooltip = s.source === 'ai_analysis'
-                ? (s.source_report_name || t('indicator.card.tooltip.name_missing'))
-                : '';
-              const titleAttr = tooltip ? ` title="${tooltip}"` : '';
+              const label = s.source === 'ai_analysis' && s.source_report_name
+                ? s.source_report_name
+                : this._shortDate(s.as_of_date);
               return `
-              <div class="hist-item"${titleAttr}>
-                <div class="hist-date">${this._shortDate(s.as_of_date)}</div>
+              <div class="hist-item">
+                <div class="hist-date">${label}</div>
                 <div class="hist-val">${this._displayValue(ind, s)}</div>
               </div>
             `;
@@ -124,6 +125,7 @@ export class IndicatorCard extends BaseComponent {
           box-shadow: var(--elevation-2);
           pointer-events: none;
         }
+        .value-row { display: flex; align-items: baseline; gap: 4px; }
         .value {
           font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
           font-size: var(--font-size-lg); font-weight: var(--font-weight-bold);
@@ -158,7 +160,6 @@ export class IndicatorCard extends BaseComponent {
         }
         .history--empty { font-size: var(--font-size-xs); color: var(--color-text-muted); font-style: italic; }
         .hist-item { display: flex; flex-direction: column; gap: 1px; }
-        .hist-item[title] { cursor: help; }
         .hist-date { font-size: 10px; color: var(--color-text-muted); }
         .hist-val  {
           font-family: var(--font-family-mono); font-variant-numeric: tabular-nums;
@@ -171,8 +172,10 @@ export class IndicatorCard extends BaseComponent {
           <div class="name">${t(ind.name_key)}</div>
           ${fullTooltip ? `<div class="tip-icon" id="tip-icon">?</div>` : ''}
         </div>
-        <div class="value">${displayValue}</div>
-        ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
+        <div class="value-row">
+          <div class="value">${displayValue}</div>
+          ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
+        </div>
         ${currentPeriodLabel ? `<div class="period">${currentPeriodLabel}</div>` : ''}
         ${zonePill}
         ${historyHtml}

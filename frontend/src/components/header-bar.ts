@@ -7,6 +7,7 @@ import { logout } from '../api/auth.js';
 import { clearAuthState } from '../state/auth-state.js';
 import { navigate } from '../router/router.js';
 import { t } from '../i18n/i18n.js';
+import { APP_VERSION } from '../version.js';
 
 export class HeaderBar extends BaseComponent {
   connectedCallback(): void {
@@ -38,6 +39,8 @@ export class HeaderBar extends BaseComponent {
           box-shadow: var(--elevation-1);
         }
         .brand { font-weight: var(--font-weight-bold); color: var(--color-accent); font-size: var(--font-size-lg); flex-shrink: 0; }
+        .version-tag { font-weight: var(--font-weight-normal); font-size: var(--font-size-xs);
+          color: var(--color-text-muted); vertical-align: sub; margin-left: 4px; }
         .actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); row-gap: var(--space-2); }
         .user-name { overflow-wrap: anywhere; }
         @media (max-width: 639px) {
@@ -110,7 +113,7 @@ export class HeaderBar extends BaseComponent {
         .actions button#settings-btn { padding: var(--space-2) var(--space-3); }
       </style>
       <header>
-        <span class="brand">Portfolio IA</span>
+        <span class="brand">Portfolio IA<span class="version-tag">v${APP_VERSION}</span></span>
         ${user ? `
           <div class="actions">
             ${count > 0 ? `

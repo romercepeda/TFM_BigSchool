@@ -246,10 +246,36 @@ export interface PortfolioAlertItem extends PriceLevel {
   gap_pct: number | null;
 }
 
+// ── Date Alerts (Changeset C17) ────────────────────────────────────────────────
+
+export type DateAlertStatus = 'pending' | 'due';
+
+export interface DateAlert {
+  id: string;
+  holding_id: string;
+  alert_date: string;
+  description: string;
+  status: DateAlertStatus;
+  created_at: string;
+  updated_at: string;
+  // Null = unread alert. Only meaningful once status is 'due'.
+  alert_seen_at: string | null;
+}
+
+// Alerts Panel (Changeset C17 §7): a date alert enriched with asset context.
+export interface PortfolioDateAlertItem extends DateAlert {
+  asset_ticker: string;
+  asset_name: string;
+}
+
 export interface PortfolioAlerts {
   touched: PortfolioAlertItem[];
   near_crossing: PortfolioAlertItem[];
-  // Count of touched items with alert_seen_at null (Changeset C12).
+  // Date alerts whose date has arrived, and ones coming up soon (Changeset C17 §7).
+  date_due: PortfolioDateAlertItem[];
+  date_upcoming: PortfolioDateAlertItem[];
+  // Sum of unread touched price levels (Changeset C12) and unread due date
+  // alerts (Changeset C17).
   unread_count: number;
 }
 

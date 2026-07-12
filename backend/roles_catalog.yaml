@@ -78,6 +78,20 @@ permissions:
     name_key: "permission.price_level.delete.name"
     description_key: "permission.price_level.delete.description"
 
+  # ── date_alert (Changeset C17) ──────────────────────────────────────────────
+  - code: date_alert.view
+    name_key: "permission.date_alert.view.name"
+    description_key: "permission.date_alert.view.description"
+  - code: date_alert.create
+    name_key: "permission.date_alert.create.name"
+    description_key: "permission.date_alert.create.description"
+  - code: date_alert.edit
+    name_key: "permission.date_alert.edit.name"
+    description_key: "permission.date_alert.edit.description"
+  - code: date_alert.delete
+    name_key: "permission.date_alert.delete.name"
+    description_key: "permission.date_alert.delete.description"
+
   # ── analysis (Spec D07) ─────────────────────────────────────────────────────
   - code: analysis.upload
     name_key: "permission.analysis.upload.name"
@@ -171,6 +185,10 @@ roles:
       - price_level.create
       - price_level.edit
       - price_level.delete
+      - date_alert.view
+      - date_alert.create
+      - date_alert.edit
+      - date_alert.delete
       - analysis.upload
       - analysis.view
       - analysis.edit
@@ -215,6 +233,10 @@ roles:
       - price_level.create
       - price_level.edit
       - price_level.delete
+      - date_alert.view
+      - date_alert.create
+      - date_alert.edit
+      - date_alert.delete
       - analysis.upload
       - analysis.view
       - analysis.edit

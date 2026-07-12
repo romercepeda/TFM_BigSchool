@@ -2,15 +2,18 @@ import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { getPortfolioAlerts } from '../api/portfolios.js';
 import { deletePriceLevel, markAlertSeen } from '../api/price-levels.js';
+import { deleteDateAlert, markDateAlertSeen } from '../api/date-alerts.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
-import type { PortfolioAlertItem } from '../api/types.js';
-import { formatCurrency, formatDateTime, formatPercent } from '../utils/format.js';
+import type { PortfolioAlertItem, PortfolioDateAlertItem } from '../api/types.js';
+import { formatCurrency, formatDate, formatDateTime, formatPercent } from '../utils/format.js';
 
 export class AlertsScreen extends BaseComponent {
   private _portfolioId = '';
   private _touched: PortfolioAlertItem[] = [];
   private _nearCrossing: PortfolioAlertItem[] = [];
+  private _dateDue: PortfolioDateAlertItem[] = [];
+  private _dateUpcoming: PortfolioDateAlertItem[] = [];
   private _loading = true;
   private _error = '';
 
@@ -27,6 +30,8 @@ export class AlertsScreen extends BaseComponent {
       const data = await getPortfolioAlerts(this._portfolioId);
       this._touched = data.touched;
       this._nearCrossing = data.near_crossing;
+      this._dateDue = data.date_due;
+      this._dateUpcoming = data.date_upcoming;
     } catch (ex) {
       this._error = (ex as Error).message;
     }
@@ -48,7 +53,7 @@ export class AlertsScreen extends BaseComponent {
         .alert-price { font-weight: var(--font-weight-semibold); }
         .alert-asset { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .alert-meta  { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: 2px; }
-        .dismiss-btn { font-size: var(--font-size-sm); color: var(--color-accent); margin-top: var(--space-2); }
+        .dismiss-btn, .dismiss-date-btn { font-size: var(--font-size-sm); color: var(--color-accent); margin-top: var(--space-2); }
         .mark-read-btn { font-size: var(--font-size-sm); color: var(--color-accent); margin-top: var(--space-2); margin-right: var(--space-3); }
         .read-label { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--space-2); margin-right: var(--space-3); }
         .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px;
@@ -69,7 +74,8 @@ export class AlertsScreen extends BaseComponent {
   }
 
   private _renderContent(): string {
-    if (this._touched.length === 0 && this._nearCrossing.length === 0) {
+    if (this._touched.length === 0 && this._nearCrossing.length === 0
+      && this._dateDue.length === 0 && this._dateUpcoming.length === 0) {
       return `<div class="empty">${t('alerts.empty')}</div>`;
     }
     return `
@@ -85,6 +91,19 @@ export class AlertsScreen extends BaseComponent {
           <button class="dismiss-btn" data-hid="${l.holding_id}" data-lid="${l.id}">${t('alerts.dismiss')}</button>
         </div>
       `).join('')}
+      ${this._dateDue.length === 0 ? '' : `
+        <h3>${t('alerts.date.title')}</h3>
+        ${this._dateDue.map((al) => `
+          <div class="alert">
+            <div class="alert-asset">${al.alert_seen_at === null ? '<span class="unread-dot"></span>' : ''}${al.asset_ticker} — ${al.asset_name}</div>
+            <div class="alert-price">${formatDate(al.alert_date + 'T12:00:00')} — ${al.description}</div>
+            ${al.alert_seen_at === null
+              ? `<button class="mark-read-btn" data-hid="${al.holding_id}" data-aid="${al.id}">${t('alerts.mark_read')}</button>`
+              : `<span class="read-label">${t('alerts.read')}</span>`}
+            <button class="dismiss-date-btn" data-hid="${al.holding_id}" data-aid="${al.id}">${t('alerts.dismiss')}</button>
+          </div>
+        `).join('')}
+      `}
       ${this._nearCrossing.length === 0 ? '' : `
         <h3>${t('alerts.near_crossing.title')}</h3>
         ${this._nearCrossing.map((l) => `
@@ -95,6 +114,15 @@ export class AlertsScreen extends BaseComponent {
               pct: formatPercent((l.gap_pct ?? 0) * 100, 1),
               price: formatCurrency(l.current_price ?? 0, l.asset_quote_currency),
             })}</div>
+          </div>
+        `).join('')}
+      `}
+      ${this._dateUpcoming.length === 0 ? '' : `
+        <h3>${t('alerts.date_upcoming.title')}</h3>
+        ${this._dateUpcoming.map((al) => `
+          <div class="alert near" data-pid="${this._portfolioId}" data-hid="${al.holding_id}" data-nav="1">
+            <div class="alert-asset">${al.asset_ticker} — ${al.asset_name}</div>
+            <div class="alert-price">${formatDate(al.alert_date + 'T12:00:00')} — ${al.description}</div>
           </div>
         `).join('')}
       `}
@@ -112,11 +140,27 @@ export class AlertsScreen extends BaseComponent {
         void this._load();
       });
     });
-    this.shadow.querySelectorAll('.mark-read-btn').forEach((btn) => {
+    this.shadow.querySelectorAll('.dismiss-date-btn').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const el = btn as HTMLElement;
+        await deleteDateAlert(this._portfolioId, el.dataset['hid']!, el.dataset['aid']!);
+        void this._load();
+      });
+    });
+    this.shadow.querySelectorAll('.mark-read-btn[data-lid]').forEach((btn) => {
       btn.addEventListener('click', async (ev) => {
         ev.stopPropagation();
         const el = btn as HTMLElement;
         await markAlertSeen(this._portfolioId, el.dataset['hid']!, el.dataset['lid']!);
+        void this._load();
+      });
+    });
+    this.shadow.querySelectorAll('.mark-read-btn[data-aid]').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const el = btn as HTMLElement;
+        await markDateAlertSeen(this._portfolioId, el.dataset['hid']!, el.dataset['aid']!);
         void this._load();
       });
     });

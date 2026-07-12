@@ -39,6 +39,7 @@ indicators:
 
 alerts:
   near_crossing_pct: 0.03
+  date_upcoming_days: 14
 
 ai:
   provider: gemini

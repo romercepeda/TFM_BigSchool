@@ -118,6 +118,9 @@ class IndicatorsConfig(BaseModel):
 
 class AlertsConfig(BaseModel):
     near_crossing_pct: float = 0.03
+    # A date alert appears in the Alerts Panel's "upcoming" list when it falls
+    # within this many days of today (Changeset C17 §6).
+    date_upcoming_days: int = 14
 
 
 class AnthropicAiConfig(BaseModel):

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.d06_schemas import PortfolioAlertItem, PortfolioAlertsResponse
+from app.api.date_alert_schemas import PortfolioDateAlertItem
 from app.api.portfolio_schemas import (
     CreatePortfolioRequest,
     PortfolioResponse,
@@ -30,7 +31,7 @@ from app.config import get_config
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import price_level_service, summary_service
+from app.services import date_alert_service, price_level_service, summary_service
 from app.services.portfolio_service import (
     archive_portfolio,
     create_portfolio,
@@ -144,20 +145,26 @@ async def get_alerts(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PortfolioAlertsResponse:
-    """Return the Alerts Panel for a portfolio (Spec D06 §6): touched price levels
-    across all its holdings, plus armed levels close to crossing.
+    """Return the Alerts Panel for a portfolio: touched price levels across all
+    its holdings plus armed levels close to crossing (Spec D06 §6), and due /
+    upcoming date alerts (Changeset C17 §7). unread_count sums both kinds.
     """
     portfolio = await get_portfolio_by_id(db, portfolio_id, current_user.id)
     if portfolio is None:
         raise _NOT_FOUND
-    near_crossing_pct = get_config().alerts.near_crossing_pct
-    touched, near_crossing, unread_count = await price_level_service.list_portfolio_alerts(
-        db, portfolio_id, near_crossing_pct=near_crossing_pct
+    alerts_config = get_config().alerts
+    touched, near_crossing, price_unread = await price_level_service.list_portfolio_alerts(
+        db, portfolio_id, near_crossing_pct=alerts_config.near_crossing_pct
+    )
+    date_due, date_upcoming, date_unread = await date_alert_service.list_portfolio_date_alerts(
+        db, portfolio_id, upcoming_days=alerts_config.date_upcoming_days
     )
     return PortfolioAlertsResponse(
         touched=[PortfolioAlertItem(**item) for item in touched],
         near_crossing=[PortfolioAlertItem(**item) for item in near_crossing],
-        unread_count=unread_count,
+        date_due=[PortfolioDateAlertItem(**item) for item in date_due],
+        date_upcoming=[PortfolioDateAlertItem(**item) for item in date_upcoming],
+        unread_count=price_unread + date_unread,
     )
 
 
