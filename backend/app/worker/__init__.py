@@ -35,4 +35,12 @@ celery_app.conf.update(
     task_ignore_result=True,  # nothing reads task results — see module docstring
     task_acks_late=True,   # acknowledge only after task completes (safer on crash)
     worker_prefetch_multiplier=1,  # one task at a time per worker process
+    # Reduce Redis command volume for Upstash free tier (500K commands/month).
+    # Default heartbeat is every 2s → ~216K commands/day just from keepalives.
+    # At 120s we drop to ~3K/day; task events add another ~2K.
+    worker_heartbeat=300,                  # heartbeat every 5 min (default 2 s → 150x reduction)
+    broker_heartbeat=0,                    # disable AMQP-style broker heartbeat (not for Redis)
+    worker_send_task_events=False,         # don't publish task-level events to Redis
+    task_send_sent_event=False,            # don't publish "sent" event on enqueue
+    broker_connection_retry_on_startup=True,  # silence Celery 6.0 deprecation warning
 )
