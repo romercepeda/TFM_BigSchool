@@ -5,7 +5,7 @@ import { t } from '../i18n/i18n.js';
 import { getHolding, deleteHolding, addLot, updateLot, deleteLot, updateAsset } from '../api/holdings.js';
 import type { AddLotBody } from '../api/holdings.js';
 import { listIndicators, getAssetIndicators } from '../api/indicators.js';
-import { getAssetPrice } from '../api/market-data.js';
+import { getAssetPrice, refreshAssetPrice } from '../api/market-data.js';
 import { listPriceLevels, deletePriceLevel, markAlertSeen } from '../api/price-levels.js';
 import { listDateAlerts, deleteDateAlert, markDateAlertSeen } from '../api/date-alerts.js';
 import { navigate } from '../router/router.js';
@@ -28,6 +28,7 @@ export class AssetDetailScreen extends BaseComponent {
   private _currentPrice: number | null = null;
   private _priceFetchedAt = '';
   private _priceLoading = true;
+  private _priceRefreshing = false;
   private _loading = true;
   private _error = '';
 
@@ -119,6 +120,24 @@ export class AssetDetailScreen extends BaseComponent {
     this._rerender();
   }
 
+  // On-demand live price re-fetch — the refresh icon on the "Current Price"
+  // card (Changeset C19). Keeps showing the last known price while the
+  // request is in flight; only replaces it once the refresh succeeds.
+  private async _doRefreshPrice(): Promise<void> {
+    if (!this._holding || this._priceRefreshing) return;
+    this._priceRefreshing = true;
+    this._rerender();
+    try {
+      const point = await refreshAssetPrice(this._holding.asset.ticker, this._holding.asset.market);
+      this._currentPrice = Number(point.price);
+      this._priceFetchedAt = point.fetched_at;
+    } catch {
+      // Live provider unavailable — keep showing the previous value as-is.
+    }
+    this._priceRefreshing = false;
+    this._rerender();
+  }
+
   private async _reloadHolding(): Promise<void> {
     try {
       this._holding = await getHolding(this._portfolioId, this._holdingId);
@@ -168,6 +187,14 @@ export class AssetDetailScreen extends BaseComponent {
         }
         .summary-label { font-size: var(--font-size-xs); color: var(--color-text-secondary);
           margin-bottom: var(--space-1); text-transform: uppercase; letter-spacing: 0.05em; }
+        .summary-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+        .summary-label-row .summary-label { margin-bottom: 0; }
+        .refresh-icon-btn { border: none; background: transparent; color: var(--color-text-muted);
+          cursor: pointer; font-size: var(--font-size-sm); line-height: 1; padding: 0 2px; opacity: 0.6; }
+        .refresh-icon-btn:hover:not(:disabled) { opacity: 1; color: var(--color-accent); }
+        .refresh-icon-btn:disabled { cursor: default; }
+        .refresh-icon-btn.spinning { animation: spin 0.8s linear infinite; opacity: 1; color: var(--color-accent); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .summary-value { font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
         .summary-value.positive { color: var(--color-success); }
         .summary-value.negative { color: var(--color-danger); }
@@ -426,7 +453,15 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-sub">${a.quote_currency} / ${t('screen.asset.unit')}</div>
         </div>
         <div class="summary-card">
-          <div class="summary-label">${t('screen.asset.current_price')}</div>
+          <div class="summary-label-row">
+            <div class="summary-label">${t('screen.asset.current_price')}</div>
+            <button
+              class="refresh-icon-btn${this._priceRefreshing ? ' spinning' : ''}"
+              id="refresh-price-btn"
+              title="${t('screen.asset.refresh_price')}"
+              ${this._priceRefreshing ? 'disabled' : ''}
+            >↻</button>
+          </div>
           <div class="summary-value">${priceStr}</div>
           <div class="summary-sub">${a.quote_currency}</div>
           ${this._priceFetchedAt ? `<div class="summary-sub">${formatDateTime(this._priceFetchedAt)}</div>` : ''}
@@ -628,6 +663,8 @@ export class AssetDetailScreen extends BaseComponent {
       navigate(`/app/portfolios/${pid}`));
     this.shadow.getElementById('legend-link')?.addEventListener('click', () =>
       navigate('/app/indicators/legend'));
+    this.shadow.getElementById('refresh-price-btn')?.addEventListener('click', () =>
+      void this._doRefreshPrice());
 
     // Embedded Alertas section
     this.shadow.querySelectorAll<HTMLElement>('[data-mark-level-id]').forEach((btn) => {

@@ -273,7 +273,8 @@ async def get_reports_for_asset(
             "provider": r.provider,
             "model_version": r.model_version,
             "global_signal": r.global_signal,
-            "executive_summary": r.executive_summary,
+            "executive_summary_es": r.executive_summary_es,
+            "executive_summary_en": r.executive_summary_en,
             "created_at": r.created_at,
             "is_own": uploader_id == current_user_id,
         }

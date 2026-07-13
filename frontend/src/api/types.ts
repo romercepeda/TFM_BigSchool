@@ -295,7 +295,10 @@ export interface AiReportSummary {
   provider: string;
   model_version: string;
   global_signal: 'bullish' | 'neutral' | 'bearish' | null;
-  executive_summary: string;
+  // Both languages are always populated by the AI extraction (Changeset C18);
+  // the frontend picks the one matching currentLanguage at display time.
+  executive_summary_es: string;
+  executive_summary_en: string;
   created_at: string;
   // Whether the current user uploaded this analysis — shared history across
   // every holder of the asset (Changeset C13), edit/delete stay uploader-only.

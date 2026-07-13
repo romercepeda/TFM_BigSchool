@@ -217,6 +217,7 @@
   "screen.asset.market_value": "Valor mercado",
   "screen.asset.unrealized_pl": "P&L latente",
   "screen.asset.price_na": "No disponible",
+  "screen.asset.refresh_price": "Actualizar precio",
   "screen.asset.edit_asset": "Editar activo",
   "screen.asset.edit.ticker": "Ticker",
   "screen.asset.edit.market": "Mercado",

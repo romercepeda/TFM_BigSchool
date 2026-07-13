@@ -36,7 +36,24 @@ AI_RESULT = {
         "revenue_growth_yoy": 0.0718,
         "analyst_sentiment": "mixed",
     },
-    "executive_summary": (
+    "executive_summary_es": (
+        "• Los ingresos del Q1 2026 aumentaron un 7,2% interanual hasta 13.600 millones de "
+        "dólares, impulsados por mejores precios de servidor pese a las restricciones de "
+        "volumen por limitaciones en la cadena de suministro\n"
+        "• La compañía reconoció un deterioro de fondo de comercio no monetario de 3.900 "
+        "millones de dólares, principalmente en la unidad Mobileye, debido a mayor "
+        "incertidumbre macroeconómica y competitiva\n"
+        "• Los cargos por reestructuración se dispararon a 4.100 millones de dólares en el Q1 "
+        "2026 frente a 156 millones el año anterior, reflejando la reorganización en curso "
+        "bajo el Plan de Reestructuración 2025\n"
+        "• Los segmentos de Intel Products mostraron mejora de márgenes, con el beneficio "
+        "bruto creciendo un 14% y márgenes operativos en expansión, parcialmente compensado "
+        "por pérdidas de Intel Foundry\n"
+        "• Se identificaron riesgos geopolíticos y de cadena de suministro significativos, "
+        "incluyendo el conflicto en Oriente Medio que amenaza la planta de fabricación en "
+        "Israel y la escasez de componentes críticos"
+    ),
+    "executive_summary_en": (
         "• Q1 2026 revenue increased 7.2% year-over-year to $13.6 billion, driven by higher "
         "server pricing despite volume constraints from supply chain limitations\n"
         "• Company recognized $3.9 billion non-cash goodwill impairment primarily affecting "
@@ -190,7 +207,8 @@ async def main() -> None:
             provider=PROVIDER,
             model_version=MODEL_VERSION,
             extracted_metrics=AI_RESULT["metrics"],
-            executive_summary=AI_RESULT["executive_summary"],
+            executive_summary_es=AI_RESULT["executive_summary_es"],
+            executive_summary_en=AI_RESULT["executive_summary_en"],
             global_signal=AI_RESULT["global_signal"],
             confidence_notes=AI_RESULT["confidence_notes"],
             raw_response={"text": json.dumps(AI_RESULT)},

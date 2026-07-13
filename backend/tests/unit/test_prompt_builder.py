@@ -166,7 +166,8 @@ class TestNewSchemaFields:
     _FULL_OUTPUT = {
         "report_date": "2026-03-31",
         "metrics": _BASE_METRICS,
-        "executive_summary": "• Revenue up 7% YoY\n• Margins expanding",
+        "executive_summary_es": "• Ingresos suben un 7% interanual\n• Márgenes en expansión",
+        "executive_summary_en": "• Revenue up 7% YoY\n• Margins expanding",
         "global_signal": "bullish",
         "confidence_notes": None,
         "calculations_detail": {
@@ -204,7 +205,8 @@ class TestNewSchemaFields:
                 "management_tone": None,
                 "fundamentals_signal": None,
             },
-            "executive_summary": "No data.",
+            "executive_summary_es": "Sin datos.",
+            "executive_summary_en": "No data.",
             "global_signal": None,
             "confidence_notes": None,
             "calculations_detail": None,

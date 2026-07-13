@@ -19,9 +19,18 @@ export interface PricePoint {
 export const searchAssets   = (q: string) =>
   get<AssetSearchResult[]>(`/market-data/assets/search?q=${encodeURIComponent(q)}`);
 
+// Cache-only — reads the last known price (daily job or a prior manual
+// refresh). Does not call the live provider (Changeset C19).
 export const getAssetPrice  = (ticker: string, exchange?: string | null) => {
   const qs = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
   return get<PricePoint>(`/market-data/assets/${encodeURIComponent(ticker)}/price${qs}`);
+};
+
+// Live re-fetch, on demand — the refresh icon on the asset detail screen's
+// "Current Price" card (Changeset C19). Not persisted (D09 §5.3).
+export const refreshAssetPrice = (ticker: string, exchange?: string | null) => {
+  const qs = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
+  return post<PricePoint>(`/market-data/assets/${encodeURIComponent(ticker)}/price/refresh${qs}`);
 };
 
 export const runDailyUpdate = () =>

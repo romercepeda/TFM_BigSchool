@@ -45,3 +45,7 @@ docker-compose.override.yml
 # Logs
 *.log
 logs/
+
+# Playwright manual-verification screenshots (see .claude/skills/verify-playwright)
+verification-screenshots/
+frontend/.playwright-scratch.*

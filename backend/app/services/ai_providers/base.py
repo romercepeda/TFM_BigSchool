@@ -37,7 +37,8 @@ class ExtractionOutput(BaseModel):
     report_date: str | None = None
     report_period_name: str | None = None
     metrics: ExtractedMetrics
-    executive_summary: str
+    executive_summary_es: str
+    executive_summary_en: str
     global_signal: Literal["bullish", "neutral", "bearish"] | None = None
     confidence_notes: str | None = None
     calculations_detail: dict | None = None

@@ -55,7 +55,8 @@ class AnalysisReportSummary(BaseModel):
     provider: str
     model_version: str
     global_signal: str | None
-    executive_summary: str
+    executive_summary_es: str
+    executive_summary_en: str
     created_at: datetime
     is_own: bool
 
@@ -77,7 +78,8 @@ class AnalysisReportDetail(BaseModel):
     provider: str
     model_version: str
     extracted_metrics: dict
-    executive_summary: str
+    executive_summary_es: str
+    executive_summary_en: str
     global_signal: str | None
     confidence_notes: str | None
     created_at: datetime

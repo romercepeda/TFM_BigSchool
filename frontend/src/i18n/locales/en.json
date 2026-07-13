@@ -217,6 +217,7 @@
   "screen.asset.market_value": "Market value",
   "screen.asset.unrealized_pl": "Unrealized P&L",
   "screen.asset.price_na": "Unavailable",
+  "screen.asset.refresh_price": "Refresh price",
   "screen.asset.edit_asset": "Edit asset",
   "screen.asset.edit.ticker": "Ticker",
   "screen.asset.edit.market": "Market",

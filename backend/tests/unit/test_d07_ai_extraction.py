@@ -31,7 +31,8 @@ _VALID_EXTRACTION = {
         "management_tone": "bullish",
         "fundamentals_signal": "mixed",
     },
-    "executive_summary": "• Revenue grew 7% YoY\n• ROE improved to 14%\n• Strong balance sheet",
+    "executive_summary_es": "• Los ingresos crecieron un 7% interanual\n• El ROE mejoró al 14%\n• Balance sólido",
+    "executive_summary_en": "• Revenue grew 7% YoY\n• ROE improved to 14%\n• Strong balance sheet",
     "global_signal": "bullish",
     "confidence_notes": None,
     "calculations_detail": {
@@ -54,7 +55,8 @@ _MINIMAL_VALID_EXTRACTION = {
         "management_tone": None,
         "fundamentals_signal": None,
     },
-    "executive_summary": "No specific metrics found in the document.",
+    "executive_summary_es": "No se encontraron métricas específicas en el documento.",
+    "executive_summary_en": "No specific metrics found in the document.",
     "global_signal": None,
     "confidence_notes": "Insufficient financial data.",
     "calculations_detail": None,
@@ -124,9 +126,15 @@ class TestSchemaValidation:
         assert result.parse_status == "schema_error"
         assert result.succeeded is False
 
-    def test_missing_executive_summary_fails(self):
+    def test_missing_executive_summary_es_fails(self):
         bad = dict(_VALID_EXTRACTION)
-        del bad["executive_summary"]
+        del bad["executive_summary_es"]
+        result = _parse(json.dumps(bad))
+        assert result.parse_status == "schema_error"
+
+    def test_missing_executive_summary_en_fails(self):
+        bad = dict(_VALID_EXTRACTION)
+        del bad["executive_summary_en"]
         result = _parse(json.dumps(bad))
         assert result.parse_status == "schema_error"
 

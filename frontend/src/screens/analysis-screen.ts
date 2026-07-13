@@ -2,6 +2,7 @@ import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
 import '../components/pdf-uploader.js';
 import { t } from '../i18n/i18n.js';
+import { currentLanguage } from '../state/language-state.js';
 import { listReports, getReport, deleteReport, patchAnalysis, getJobs } from '../api/analyses.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
@@ -145,6 +146,13 @@ export class AnalysisScreen extends BaseComponent {
     return '—';
   }
 
+  // Both languages are always stored (Changeset C18); pick the one matching
+  // the currently selected UI language, dynamically — including for reports
+  // generated before this changeset that were backfilled with identical text.
+  private _summaryFor(r: { executive_summary_es: string; executive_summary_en: string }): string {
+    return currentLanguage.value === 'en' ? r.executive_summary_en : r.executive_summary_es;
+  }
+
   private _formatMetric(key: string, value: number | string | null): string {
     if (value === null || value === undefined) return '—';
     if (key === 'roe' || key === 'revenue_growth_yoy') {
@@ -225,7 +233,7 @@ export class AnalysisScreen extends BaseComponent {
             ${r.global_signal ? `<span class="signal-badge" style="background:${this._signalColor(r.global_signal)}">${this._signalLabel(r.global_signal)}</span>` : ''}
             <span class="job-panel__title">${t('analysis.result.title')}</span>
           </div>
-          ${r.executive_summary ? `<div class="job-panel__summary">${r.executive_summary}</div>` : ''}
+          ${this._summaryFor(r) ? `<div class="job-panel__summary">${this._summaryFor(r)}</div>` : ''}
           <div class="job-panel__section-label">${t('analysis.result.indicators_updated')}</div>
           ${this._renderUpdatedIndicators(r.extracted_metrics, r.global_signal)}
           ${r.confidence_notes ? `<div class="job-panel__confidence">${t('analysis.confidence_notes')}: ${r.confidence_notes}</div>` : ''}
@@ -407,7 +415,7 @@ export class AnalysisScreen extends BaseComponent {
                   ${this._renderDateField(r)}
                   <div class="report-processed">${t('analysis.processed_date')}: ${formatDate(r.created_at, { dateStyle: 'medium' })}</div>
                   ${this._renderNameField(r)}
-                  ${r.executive_summary ? `<div class="summary">${r.executive_summary}</div>` : ''}
+                  ${this._summaryFor(r) ? `<div class="summary">${this._summaryFor(r)}</div>` : ''}
                   <div class="provider">${r.provider} · ${r.model_version}${!r.is_own ? ` · <span class="shared-label">${t('analysis.history.entry.shared_label')}</span>` : ''}</div>
                 </div>
               </div>

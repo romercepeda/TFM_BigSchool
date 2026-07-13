@@ -1,7 +1,8 @@
 """D09 — Market & FX Data Integration API endpoints.
 
 GET  /market-data/assets/search?q=       — live provider typeahead (D09 §8)
-GET  /market-data/assets/{ticker}/price  — current price from active provider
+GET  /market-data/assets/{ticker}/price  — last known price, cache-only (Changeset C19)
+POST /market-data/assets/{ticker}/price/refresh — live re-fetch, on demand (Changeset C19)
 GET  /market-data/fx/rate                — current FX rate, persisted to FxRateHistory
 GET  /market-data/fx/supported           — check if a currency pair is supported
 POST /market-data/daily-update           — trigger the daily price + alert job (D09 §6)
@@ -99,16 +100,63 @@ async def search_assets(
 )
 async def get_asset_price(
     ticker: str,
+    exchange: str | None = Query(default=None, description="Unused — kept for URL compatibility."),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PricePointResponse:
+    """Return the last known price for a ticker — cache-only, no live provider call.
+
+    Changeset C19: this used to call the live provider on every request, which
+    meant every asset-detail page view (and every set-levels page view) spent
+    one call against the market-data provider's daily quota. It now only reads
+    AssetPriceHistory (written by the daily job, or by a prior manual refresh —
+    see POST .../price/refresh below). Raises 503 only when no price has ever
+    been stored for the asset (brand-new asset, daily job hasn't run for it yet
+    and nobody has refreshed it manually).
+    """
+    ticker_upper = ticker.upper()
+    fallback = await _last_known_price(db, ticker_upper)
+    if fallback is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Datos no disponibles — aún no se ha obtenido un precio para este activo.",
+                "error_kind": "no_data",
+                "retryable": True,
+            },
+        )
+    return PricePointResponse(
+        ticker=ticker_upper,
+        as_of_date=fallback.as_of_date,
+        price=fallback.close_price,
+        fetched_at=fallback.fetched_at,
+    )
+
+
+@router.post(
+    "/assets/{ticker}/price/refresh",
+    response_model=PricePointResponse,
+    dependencies=[Depends(require_permission("holding.view"))],
+)
+async def refresh_asset_price(
+    ticker: str,
     exchange: str | None = Query(default=None, description="Market/exchange code, e.g. BME, LSE."),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PricePointResponse:
-    """Return the current price for a ticker from the active provider.
+    """On-demand live re-fetch of a single asset's current price (Changeset C19).
 
-    Changeset C14: if the live provider call fails, falls back to the most
-    recent price stored in AssetPriceHistory (written by the daily job)
-    instead of failing outright. Only raises 503 when no price has ever
-    been stored for the asset.
+    This is the only path left that calls the live provider outside the daily
+    job — triggered explicitly by the user via the refresh icon on the asset
+    detail screen's "Current Price" card, never automatically. Per D09 §5.3,
+    the result is NOT written to AssetPriceHistory (that table is
+    append-only/immutable per trading day, owned by the daily job); this is a
+    transient value shown to the user with its own fetch timestamp, same as
+    the live branch that used to run on every page load.
+
+    Falls back to the last known stored price if the live call fails —
+    identical fallback semantics to Changeset C14, just moved behind an
+    explicit user action instead of running unconditionally.
     """
     svc = get_market_data_service()
     ticker_upper = ticker.upper()

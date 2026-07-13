@@ -3,7 +3,7 @@
   "title": "AIExtractionOutput",
   "description": "Structured output from the AI financial report analysis (Spec D07 §4.2)",
   "type": "object",
-  "required": ["asset_match", "report_date", "metrics", "executive_summary", "global_signal"],
+  "required": ["asset_match", "report_date", "metrics", "executive_summary_es", "executive_summary_en", "global_signal"],
   "additionalProperties": false,
   "properties": {
     "asset_match": {
@@ -76,9 +76,13 @@
         }
       }
     },
-    "executive_summary": {
+    "executive_summary_es": {
       "type": "string",
-      "description": "3-5 bullet-point summary of the report's key findings"
+      "description": "3-5 bullet-point summary of the report's key findings, in Spanish"
+    },
+    "executive_summary_en": {
+      "type": "string",
+      "description": "3-5 bullet-point summary of the report's key findings, in English"
     },
     "global_signal": {
       "description": "Overall investment signal derived from the report",

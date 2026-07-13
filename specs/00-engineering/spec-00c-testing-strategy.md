@@ -45,7 +45,7 @@ Coverage is measured with `pytest-cov` and reported as part of the CI pipeline (
 
 ## 5. What is explicitly out of scope for v1
 
-- End-to-end browser automation testing (e.g. Playwright/Cypress) — deferred to a later iteration once the UI stabilizes.
+- An automated, CI-run end-to-end browser test suite (e.g. Playwright/Cypress as a checked-in `*.spec.ts` suite gating merges) — deferred to a later iteration once the UI stabilizes. This is distinct from Section 7's AI-driven manual verification, which is in scope and mandatory today.
 - Load/performance testing — deferred until the system has real concurrent usage to model.
 - Mutation testing — not required for the MVP.
 
@@ -54,3 +54,13 @@ Coverage is measured with `pytest-cov` and reported as part of the CI pipeline (
 ## 6. Rationale
 
 A flat coverage percentage across the whole codebase is a weak signal: it can be satisfied by testing trivial getters while leaving critical financial math unverified. This spec instead ties the 80% target specifically to business logic, and treats thinner layers (routers, frontend rendering) with lighter, scenario-based testing. This approach is defensible in an academic evaluation because it demonstrates testing effort is risk-driven, not just metric-driven.
+
+---
+
+## 7. AI-assisted manual verification with Playwright (Changeset C18)
+
+Every non-trivial change — including backend-only changes that surface in the UI — is driven and screenshotted with Playwright before being considered done, using an AI coding session (not a checked-in automated test suite; see Section 5's distinction). This replaced ad-hoc, session-specific verification approaches (manually crafted JWTs, guessed credentials, one-off scripts) with one documented, repeatable procedure.
+
+The full how-to — starting services, the login flow and its in-memory-auth-state gotcha, route shapes, the standing `playwright@verify.com` verification account and how to reprovision it, shadow-DOM selector behavior, and the screenshot folder convention — lives in **`.claude/skills/verify-playwright/SKILL.md`**, not duplicated here, so it stays a single source of truth that a session actually reads before acting (a spec is consulted for *what/why*; the skill is consulted for *how*, same split as `scripts/db.ps1` vs. Spec 00a's migration discipline).
+
+Screenshots are saved under `verification-screenshots/<changeset-or-spec-slug>/`, gitignored — they are working evidence for the session and for Romer's review, not repo content to commit.

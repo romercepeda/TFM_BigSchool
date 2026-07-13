@@ -139,7 +139,9 @@ When a re-fetch produces a different value, a warning is logged with both values
 
 ### 5.4 Current prices: not persisted
 
-Current (intraday or most-recent) prices are **not** persisted in their own dedicated table. They are fetched fresh by the daily job (Section 6) and stored as the latest entry of `AssetPriceHistory` for the trading day they cover. Outside the daily job, current prices are not re-fetched on demand in v1 — see Section 8.
+Current (intraday or most-recent) prices are **not** persisted in their own dedicated table. They are fetched fresh by the daily job (Section 6) and stored as the latest entry of `AssetPriceHistory` for the trading day they cover.
+
+Outside the daily job, current prices are fetched live in exactly one place: an explicit, user-triggered refresh action on the asset detail screen (Changeset C19 — the refresh icon on the "Current Price" card, `POST /market-data/assets/{ticker}/price/refresh`). That result is transient and, per §5.3, is never written back into `AssetPriceHistory`. Every other read of "current price" (the asset detail screen's automatic load, the define-levels form's price pre-fill) is cache-only — it reads the last value the daily job (or a prior manual refresh) produced, and does not call the live provider. This was corrected in Changeset C19 after the original v1 implementation of `GET .../price` called the live provider on every request, contradicting this section's original intent.
 
 ---
 
