@@ -29,9 +29,17 @@ target_metadata = Base.metadata
 
 
 def _get_sync_url() -> str:
-    """Derive a synchronous psycopg2 URL from the asyncpg DATABASE_URL."""
+    """Derive a synchronous psycopg2 URL from the asyncpg DATABASE_URL.
+
+    asyncpg uses ?ssl=true; psycopg2 uses ?sslmode=require.
+    Both params are driver-specific and not interchangeable.
+    """
+    import re
     url = os.environ["DATABASE_URL"]
-    return url.replace("+asyncpg", "+psycopg2")
+    url = url.replace("+asyncpg", "+psycopg2")
+    # Replace asyncpg-style ssl=true with psycopg2-style sslmode=require.
+    url = re.sub(r"([?&])ssl=true", r"\1sslmode=require", url)
+    return url
 
 
 def run_migrations_offline() -> None:
