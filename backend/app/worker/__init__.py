@@ -48,4 +48,14 @@ celery_app.conf.update(
     worker_send_task_events=False,         # don't publish task-level events to Redis
     task_send_sent_event=False,            # don't publish "sent" event on enqueue
     broker_connection_retry_on_startup=True,  # silence Celery 6.0 deprecation warning
+    broker_transport_options={
+        # BLPOP default timeout is 5 s → 17K cycles/day × 2 cmds = 34K cmds/day.
+        # At 300 s BLPOP still returns immediately when a task arrives; it only
+        # waits up to 300 s when the queue is empty. 288 cycles/day × 2 = 576/day.
+        # socket_keepalive keeps the TCP connection alive through NAT/Upstash idle
+        # timeouts so the full 300 s block actually works without reconnects.
+        'socket_timeout': 300,
+        'socket_connect_timeout': 10,
+        'socket_keepalive': True,
+    },
 )
