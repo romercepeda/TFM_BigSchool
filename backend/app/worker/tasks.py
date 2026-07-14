@@ -24,8 +24,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.worker import celery_app
-
 logger = logging.getLogger(__name__)
 
 _RETRY_DELAYS = [60, 300, 900]  # seconds: after 0th, 1st, 2nd failure
@@ -332,20 +330,26 @@ async def _set_job_failed(job_id: str, error_msg: str) -> None:
 # ── Celery task ───────────────────────────────────────────────────────────────
 
 
-@celery_app.task(bind=True, max_retries=2, name="app.worker.tasks.analyze_report_task")
-def analyze_report_task(self, job_id: str) -> None:
-    """Process one queued AnalysisJob. Retries up to 3 total attempts."""
-    try:
-        asyncio.run(_run_analysis(job_id))
-    except NonRetryableError as exc:
-        asyncio.run(_set_job_failed(job_id, str(exc)))
-    except Exception as exc:
-        if self.request.retries < self.max_retries:
-            countdown = _RETRY_DELAYS[self.request.retries]
-            logger.warning(
-                "Job %s attempt %d failed (%s) — retrying in %ds.",
-                job_id, self.request.retries + 1, type(exc).__name__, countdown,
-            )
-            raise self.retry(exc=exc, countdown=countdown) from exc
-        # Max retries exhausted
-        asyncio.run(_set_job_failed(job_id, str(exc)))
+async def run_analysis_background(job_id: str) -> None:
+    """FastAPI BackgroundTask entry point — replaces the Celery task.
+
+    Runs _run_analysis with the same 3-attempt / backoff policy as the old
+    Celery task, but entirely within the FastAPI process (no Redis, no worker).
+    """
+    for attempt in range(3):
+        try:
+            await _run_analysis(job_id)
+            return
+        except NonRetryableError as exc:
+            await _set_job_failed(job_id, str(exc))
+            return
+        except Exception as exc:
+            if attempt < 2:
+                delay = _RETRY_DELAYS[attempt]
+                logger.warning(
+                    "Job %s attempt %d failed (%s) — retrying in %ds.",
+                    job_id, attempt + 1, type(exc).__name__, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                await _set_job_failed(job_id, str(exc))

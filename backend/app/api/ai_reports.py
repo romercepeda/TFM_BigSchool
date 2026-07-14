@@ -16,7 +16,7 @@ Endpoints:
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.d07_schemas import (
@@ -98,6 +98,7 @@ async def upload_report(
     portfolio_id: UUID,
     holding_id: UUID,
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UploadReportResponse:
@@ -127,6 +128,9 @@ async def upload_report(
         filename=file.filename or "upload.pdf",
         mime_type="application/pdf",
     )
+
+    from app.worker.tasks import run_analysis_background
+    background_tasks.add_task(run_analysis_background, str(job.id))
 
     return UploadReportResponse(
         job_id=job.id,
