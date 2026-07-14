@@ -32,13 +32,18 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    task_ignore_result=True,  # nothing reads task results — see module docstring
-    task_acks_late=True,   # acknowledge only after task completes (safer on crash)
+    task_ignore_result=True,     # nothing reads task results — see module docstring
+    task_acks_late=False,        # ack on receipt, not on completion — avoids restore_visible
     worker_prefetch_multiplier=1,  # one task at a time per worker process
-    # Reduce Redis command volume for Upstash free tier (500K commands/month).
-    # Default heartbeat is every 2s → ~216K commands/day just from keepalives.
-    # At 120s we drop to ~3K/day; task events add another ~2K.
-    worker_heartbeat=300,                  # heartbeat every 5 min (default 2 s → 150x reduction)
+    # Upstash free tier: 500K commands/month. These settings keep idle consumption
+    # to ~2K commands/day (~60K/month).
+    #
+    # With task_acks_late=True Celery runs restore_visible on every event-loop tick
+    # (~1/s) to detect stale unacked tasks → ~3 Redis cmds/s = 259K cmds/day just
+    # while idle. Switching to task_acks_late=False eliminates that entirely.
+    # Trade-off: if the worker crashes mid-task the task is lost (not re-queued),
+    # but for this TFM the user can simply re-request the analysis.
+    worker_heartbeat=300,                  # heartbeat every 5 min (150x less than default 2 s)
     broker_heartbeat=0,                    # disable AMQP-style broker heartbeat (not for Redis)
     worker_send_task_events=False,         # don't publish task-level events to Redis
     task_send_sent_event=False,            # don't publish "sent" event on enqueue
