@@ -37,8 +37,9 @@ def _get_sync_url() -> str:
     import re
     url = os.environ["DATABASE_URL"]
     url = url.replace("+asyncpg", "+psycopg2")
-    # Replace asyncpg-style ssl=true with psycopg2-style sslmode=require.
-    url = re.sub(r"([?&])ssl=true", r"\1sslmode=require", url)
+    # Replace asyncpg ssl=<any> with psycopg2 sslmode=require.
+    # asyncpg accepts ssl=true|require|prefer; psycopg2 uses sslmode=require.
+    url = re.sub(r"([?&])ssl=[^&]*", r"\1sslmode=require", url)
     return url
 
 
