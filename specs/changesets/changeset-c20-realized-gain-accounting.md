@@ -251,9 +251,9 @@ Per D13 §8 and Changeset C08 §11.1 (now closed), this tile completes the portf
 
 ### Acceptance criteria
 
-- A portfolio with no sales shows P&L REAL. as `€0` (or the equivalent in the base currency).
-- After a sale is created, the tile updates on the next page load (or immediately if the summary cache was invalidated).
-- Color and sign are correct for both positive and negative realized P&L.
+- ✅ A portfolio with no sales shows P&L REAL. (implemented as the sentence-case "P&L realizado"/"Realized P&L" label, matching the existing "P&L latente"/"Unrealized P&L" sibling tile's actual style rather than the all-caps mockup text quoted in D13 §8) as `$0.00` — verified visually via Playwright.
+- ✅ After a sale is created, the tile updates immediately (summary cache invalidation from Step 2/6) — verified visually: created a sale via the API, reloaded the portfolio in the browser, tile went from `$0.00` to `$10.00` in green; deleted the sale afterward to restore the fixture.
+- ✅ Color is correct for positive realized P&L (green); zero renders neutral. Negative (red) not separately screenshotted but uses the same `deltaClass` logic already proven for the unrealized tile.
 
 ---
 

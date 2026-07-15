@@ -106,6 +106,7 @@
   "portfolio_header.total_value": "Total value",
   "portfolio_header.invested": "Invested",
   "portfolio_header.unrealized_pnl": "Unrealized P&L",
+  "portfolio_header.realized_pnl": "Realized P&L",
   "portfolio_header.trend_30d": "30 days",
   "portfolio_header.loading_error": "Could not load summary",
   "portfolio_header.retry": "Retry",

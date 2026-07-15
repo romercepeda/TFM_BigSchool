@@ -106,6 +106,7 @@
   "portfolio_header.total_value": "Valor total",
   "portfolio_header.invested": "Invertido",
   "portfolio_header.unrealized_pnl": "P&L latente",
+  "portfolio_header.realized_pnl": "P&L realizado",
   "portfolio_header.trend_30d": "30 días",
   "portfolio_header.loading_error": "No se pudo cargar el resumen",
   "portfolio_header.retry": "Reintentar",

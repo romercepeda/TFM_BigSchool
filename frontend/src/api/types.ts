@@ -105,6 +105,8 @@ export interface PortfolioSummary {
   total_invested: string;
   unrealized_pnl: string;
   unrealized_pnl_pct: string;
+  realized_pnl: string;
+  realized_pnl_pct: string;
   trend_30d: TrendPoint[];
   computed_at: string;
   base_currency: string;
