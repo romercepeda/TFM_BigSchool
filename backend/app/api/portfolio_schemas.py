@@ -58,14 +58,21 @@ class TrendPoint(BaseModel):
 
 
 class PortfolioSummary(BaseModel):
-    """PortfolioHeader payload (Changeset C08 §3) — Valor Total, Invertido,
-    P&L Latente, and the 30-day trend. All monetary fields are in the
-    portfolio's base_currency.
+    """PortfolioHeader payload (Changeset C08 §3, extended by D13 §8) —
+    Valor Total, Invertido, P&L Latente, P&L Real, and the 30-day trend. All
+    monetary fields are in the portfolio's base_currency.
+
+    unrealized_pnl only ever reflected currently-held units (D13 §8 makes this
+    explicit rather than changing behavior). realized_pnl is the sum of
+    realized_gain_base across every sale in the portfolio; Total P&L =
+    unrealized_pnl + realized_pnl (D13 §2).
     """
     total_value: Decimal
     total_invested: Decimal
     unrealized_pnl: Decimal
     unrealized_pnl_pct: Decimal
+    realized_pnl: Decimal
+    realized_pnl_pct: Decimal
     trend_30d: list[TrendPoint]
     computed_at: datetime
     base_currency: str

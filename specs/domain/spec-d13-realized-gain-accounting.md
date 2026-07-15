@@ -264,8 +264,8 @@ Exposed as: `DELETE /sales/{sale_id}`. Guarded by `Depends(require_permission("s
 
 The `PortfolioSummary` introduced in Changeset C08 §3 gains two new fields:
 
-- **`realized_pnl`** (Decimal, in base currency): sum of `realized_gain_base` across all sales in the portfolio.
-- **`realized_pnl_pct`** (Decimal): `realized_pnl / total_invested_ever`, where `total_invested_ever` is the sum of `unit_price × quantity` across every lot ever created for holdings in the portfolio (regardless of consumption).
+- **`realized_pnl`** (Decimal, in base currency): sum of `realized_gain_base` across all sales in the portfolio, **as of the portfolio's "today"**. A sale dated after today is excluded from the sum until its date arrives — otherwise its units would count as both still-held (unrealized) and already-sold (realized) on the same day. Mirrors the existing rule that a future-dated lot doesn't yet reduce or contribute to today's totals either (Changeset C08 §4).
+- **`realized_pnl_pct`** (Decimal): `realized_pnl / total_invested_ever`, where `total_invested_ever` is the sum of `unit_price × quantity × fx_rate_at_purchase` (each lot converted to base currency via its own purchase-time rate) across every lot ever created for holdings in the portfolio (regardless of consumption). **Correction applied during Changeset C20 §6 implementation:** the original text summed `unit_price × quantity` without `fx_rate_at_purchase`, which would mix currencies as the denominator for a base-currency numerator across a multi-currency portfolio.
 
 The existing `unrealized_pnl` field is **narrowed** semantically: it now excludes any units that have been sold. In practice this was already implicit (unrealized was always about remaining units), but this spec makes it explicit.
 

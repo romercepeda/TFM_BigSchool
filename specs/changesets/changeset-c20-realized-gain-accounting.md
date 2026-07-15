@@ -194,17 +194,26 @@ Extend the summary computation:
 - Add `realized_pnl_pct` — `realized_pnl / total_invested_ever` where `total_invested_ever` is the sum of `unit_price * quantity * fx_rate_at_purchase` across every lot ever created (including fully consumed ones).
 - Narrow `unrealized_pnl` semantically: it now explicitly excludes any consumed units. The formula becomes `sum over active lots of (current_price * remaining_units * fx_current - unit_price * remaining_units * fx_rate_at_purchase)`.
 
-Also add cache invalidation triggers per D13 §8.1: `sale created`, `sale deleted`, `sale reason updated` (only the third does NOT invalidate — reason has no financial impact).
+Also add cache invalidation triggers per D13 §8.1: `sale created`, `sale deleted`, `sale reason updated` (only the third does NOT invalidate — reason has no financial impact). **Already satisfied** — Step 2 built `update_reason`'s endpoint without an invalidate call from the start, and `create_sale`/`delete_sale` already invalidated from D03. No change needed here.
+
+**Correction found during implementation:** D13 §8's literal text for `total_invested_ever` ("the sum of `unit_price × quantity`") omits `fx_rate_at_purchase`, which would leave a quote-currency figure as the denominator for a base-currency numerator — nonsensical for a multi-currency portfolio. This changeset's own formula above (`unit_price * quantity * fx_rate_at_purchase`) is correct and is what got implemented; D13 §8 should be read with that correction.
+
+**Bug found and fixed during manual verification:** a sale dated after "today" was being counted in `realized_pnl` immediately, while its consumed units still counted as held on the unrealized side (their consumption is date-gated by `_quantity_remaining_at`, same as it already was for lots) — silently double-counting the same position as both held and sold. Fixed by excluding sales with `sale_date > today` from the realized-P&L sum, mirroring the existing future-dated-lot exclusion. Caught by creating a real sale via the API dated one day ahead of the dev container's clock and observing `realized_pnl` update before the fix, then correctly stay at 0 after it — not something the original acceptance criteria below anticipated, so a dedicated unit test (`test_realized_pnl_excludes_future_dated_sales`) was added to lock it in.
 
 ### Where in code
 
-- **`backend/app/portfolios/summary_service.py`** — extend `get_summary` and the underlying queries.
-- **`backend/app/portfolios/schemas.py`** — extend `PortfolioSummary` Pydantic model.
-- **`backend/app/sales/service.py`** — call `summary_cache.invalidate(portfolio_id)` in `create_sale` and `delete_sale`.
-- **Unit tests** for the new fields, verifying:
+**Implementation note:** per this project's actual module layout (not the `app/portfolios/` package assumed above):
+
+- **`backend/app/services/summary_service.py`** — `HoldingSnapshot` gains a `sales: tuple[tuple[date, Decimal | None], ...]` field (sale_date paired with `realized_gain_base`, needed for the future-date exclusion above); new pure `_compute_realized_totals()`; `_fetch_holding_snapshots` eager-loads `Holding.sales`.
+- **`backend/app/api/portfolio_schemas.py`** — `PortfolioSummary` gains `realized_pnl`/`realized_pnl_pct`.
+- **`backend/app/api/holdings.py`** — cache invalidation already in place (see above); no new code.
+- **Unit tests** (`backend/tests/unit/test_summary_service.py`), verifying:
   - Portfolio with only unrealized: `realized_pnl = 0`.
-  - Portfolio with only sold assets: `unrealized_pnl = 0`, `realized_pnl` matches manual calculation.
-  - Mixed portfolio: both correctly computed and non-overlapping.
+  - Portfolio with only sold assets: `unrealized_pnl = 0`, `realized_pnl` matches manual calculation (D13 §3.1 worked example, reused here).
+  - Mixed portfolio, mixed currency: both correctly computed and non-overlapping.
+  - A sale with unknown gain (`None`) is excluded, not treated as zero.
+  - A future-dated sale is excluded until its date arrives (see bug note above).
+  - A fully-consumed lot still counts in full towards `total_invested_ever`; a lot with unresolved FX is excluded from it.
 
 ### Why
 
@@ -212,9 +221,9 @@ Per D13 §8, realized P&L is now first-class data for portfolio aggregates. With
 
 ### Acceptance criteria
 
-- Existing tests for `PortfolioSummary` continue to pass with the new fields defaulted to zero when no sales exist.
-- The new fields appear in `GET /portfolios/{id}/summary` responses.
-- Cache invalidation triggers work correctly (verifiable by observing a `create_sale` call causes the next `get_summary` to re-query the DB).
+- ✅ Existing tests for `PortfolioSummary` continue to pass with the new fields defaulted to zero when no sales exist.
+- ✅ The new fields appear in `GET /portfolios/{id}/summary` responses — verified manually against the dev DB (create sale → `realized_pnl` updates immediately; delete sale → reverts).
+- ✅ Cache invalidation triggers work correctly — verified manually: creating a sale changed the very next `GET .../summary` response without waiting for TTL expiry.
 
 ---
 

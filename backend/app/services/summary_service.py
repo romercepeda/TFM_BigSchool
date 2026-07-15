@@ -1,10 +1,11 @@
-"""Portfolio summary service — Changeset C08.
+"""Portfolio summary service — Changeset C08, extended by Spec D13 §8 / Changeset C20 §6.
 
-Computes the portfolioHeader values (Valor Total, Invertido, P&L Latente, and
-the 30-day trend) from data already persisted by Spec D09 (AssetPriceHistory,
-FxRateHistory) and the existing FX engine (Spec D04). No new tables, no new
-provider calls: "today" reuses the same last-known-price/last-known-fx-rate
-lookup as every other day in the 30-day window, rather than a live fetch.
+Computes the portfolioHeader values (Valor Total, Invertido, P&L Latente, P&L
+Real, and the 30-day trend) from data already persisted by Spec D09
+(AssetPriceHistory, FxRateHistory), the existing FX engine (Spec D04), and
+each holding's Sale rows (Spec D13). No new tables, no new provider calls:
+"today" reuses the same last-known-price/last-known-fx-rate lookup as every
+other day in the 30-day window, rather than a live fetch.
 
 Split in two layers, matching this project's testing convention (Spec 00c —
 DB-touching paths are verified manually; automated tests cover pure logic):
@@ -74,6 +75,16 @@ class HoldingSnapshot:
     asset_id: UUID
     quote_currency: str
     lots: tuple[LotSnapshot, ...]
+    # One entry per sale on this holding: (sale_date, realized_gain_base).
+    # None means that sale's realized_gain_base couldn't be computed
+    # (unresolved FX at creation, or a pre-D13 sale the backfill migration
+    # couldn't reconstruct) — excluded from the aggregate rather than treated
+    # as zero. A future-dated sale (sale_date > today) is also excluded until
+    # its date arrives, matching how _quantity_remaining_at treats a
+    # future-dated consumption as not-yet-happened for the unrealized side —
+    # otherwise the same units would count as both still-held (unrealized)
+    # and already-sold (realized) on the same day.
+    sales: tuple[tuple[date, Decimal | None], ...] = ()
 
 
 # ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -237,6 +248,39 @@ def _compute_current_totals(
     )
 
 
+def _compute_realized_totals(holdings: list[HoldingSnapshot], today: date) -> tuple[Decimal, Decimal]:
+    """Changeset C20 §6 / Spec D13 §8 — realized_pnl, realized_pnl_pct.
+
+    realized_pnl sums every sale's realized_gain_base across the portfolio's
+    holdings, excluding: sales whose gain couldn't be computed (same "no
+    invented values" principle as the trend/current-totals computations
+    above), and sales dated after `today` — a future-dated sale hasn't
+    happened yet, so counting its gain now while its units still count as
+    held (unrealized) would double-count the same position.
+
+    total_invested_ever (the denominator) is the base-currency cost of every
+    lot ever created, consumed or not, regardless of date — each lot's own
+    fx_rate_at_purchase is used, same as cost-basis elsewhere; a lot with
+    unresolved FX is excluded. This corrects D13 §8's literal text (a
+    quote-currency sum, which would mix currencies across holdings quoted
+    differently) to match Changeset C20 §6's formula, which already converts
+    to base currency.
+    """
+    realized_pnl = _ZERO
+    total_invested_ever = _ZERO
+
+    for holding in holdings:
+        for sale_date, gain in holding.sales:
+            if gain is not None and sale_date <= today:
+                realized_pnl += gain
+        for lot in holding.lots:
+            if lot.fx_rate_at_purchase is not None:
+                total_invested_ever += lot.quantity * lot.unit_price * lot.fx_rate_at_purchase
+
+    realized_pnl_pct = (realized_pnl / total_invested_ever) if total_invested_ever > _ZERO else _ZERO
+    return _round(realized_pnl), _round(realized_pnl_pct, _Q_RETURN)
+
+
 def compute_summary(
     holdings: list[HoldingSnapshot],
     prices: dict[UUID, _Series],
@@ -250,12 +294,16 @@ def compute_summary(
     `today` and `now` are passed in by the caller (mirrors fx_engine's "no
     clock" rule) so this function is fully deterministic and unit-testable.
     """
+    realized_pnl, realized_pnl_pct = _compute_realized_totals(holdings, today)
+
     if not holdings:
         return PortfolioSummary(
             total_value=_ZERO,
             total_invested=_ZERO,
             unrealized_pnl=_ZERO,
             unrealized_pnl_pct=_ZERO,
+            realized_pnl=realized_pnl,
+            realized_pnl_pct=realized_pnl_pct,
             trend_30d=[],
             computed_at=now,
             base_currency=base_currency,
@@ -274,6 +322,8 @@ def compute_summary(
         total_invested=total_invested,
         unrealized_pnl=unrealized_pnl,
         unrealized_pnl_pct=unrealized_pnl_pct,
+        realized_pnl=realized_pnl,
+        realized_pnl_pct=realized_pnl_pct,
         trend_30d=trend_30d,
         computed_at=now,
         base_currency=base_currency,
@@ -292,6 +342,7 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
             selectinload(Holding.lots)
             .selectinload(Lot.sale_consumptions)
             .selectinload(SaleLotConsumption.sale),
+            selectinload(Holding.sales),  # D13 §8 — realized_pnl aggregate
         )
     )
     holdings = result.scalars().all()
@@ -320,6 +371,7 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
                 asset_id=holding.asset_id,
                 quote_currency=holding.asset.quote_currency,
                 lots=lots,
+                sales=tuple((s.sale_date, s.realized_gain_base) for s in holding.sales),
             )
         )
     return snapshots
