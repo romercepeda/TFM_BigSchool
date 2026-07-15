@@ -5,9 +5,10 @@ gain fields (cost_basis_*, realized_gain_*) are computed once at sale creation
 and never recomputed (D13 §4.1, §11) — sales are immutable except for `reason`
 (stored in the pre-existing `notes` column — see D13 §4.1 implementation note).
 
-compute_fifo() is a pure function (no I/O) so create_sale() and the future
-preview endpoint (Changeset C20 §3) share the exact algorithm — no
-client-/endpoint-side FIFO drift (D13 §5.3). This mirrors the
+compute_fifo() and compute_sale_preview() are pure functions (no I/O) shared
+by create_sale() and the preview endpoint (Changeset C20 §3, D13 §7.1) — no
+client-/endpoint-side FIFO drift (D13 §5.3). compute_fifo_preview() is the
+thin async wrapper that fetches lots and delegates to them; this mirrors the
 pure-computation/thin-DB-fetch split already used in fx_engine.py and
 summary_service.py (Spec 00c testing convention).
 
@@ -21,6 +22,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.models.lot import Lot
 from app.db.models.sale import Sale, SaleLotConsumption
@@ -37,10 +39,10 @@ class InsufficientUnitsError(ValueError):
     """Raised when a sale requests more units than the holding has available.
 
     Subclasses ValueError so the existing `except ValueError` -> HTTP 400
-    handling in the API layer keeps working unchanged; callers that need to
-    tell this apart from other validation errors (e.g. a future preview
-    endpoint that reports it as a soft `insufficient_units: true` rather than
-    an HTTP error) can catch it specifically.
+    handling in the API layer keeps working unchanged. Only raised by
+    create_sale — the preview path (compute_fifo_preview) reports the same
+    condition as a soft `FifoResult.insufficient` flag instead, since D13
+    §7.1 wants HTTP 200 with `insufficient_units: true`, not an error.
     """
 
     def __init__(self, units_available: Decimal, units_requested: Decimal):
@@ -128,6 +130,49 @@ def compute_fifo(lots: list[Lot], quantity: Decimal) -> FifoResult:
     )
 
 
+@dataclass(frozen=True)
+class SalePreview:
+    """Full read-only preview of what a sale would produce (Spec D13 §7.1) —
+    the exact figures create_sale() would persist, computed the same way."""
+    fifo: FifoResult
+    sale_proceeds_quote: Decimal
+    realized_gain_quote: Decimal | None
+    # None if fifo.cost_basis_base is None (a consumed lot's FX is missing) or
+    # fx_rate_at_sale itself is unresolved (manual_pending).
+    sale_proceeds_base: Decimal | None
+    realized_gain_base: Decimal | None
+
+
+def compute_sale_preview(
+    fifo: FifoResult, quantity: Decimal, unit_price: Decimal, fx_rate_at_sale: Decimal | None,
+) -> SalePreview:
+    """Pure: derive sale proceeds and realized gain from an already-computed
+    FifoResult (D13 §3's `realized_gain = (quantity * price) - cost_basis`).
+    """
+    if fifo.insufficient:
+        return SalePreview(
+            fifo=fifo, sale_proceeds_quote=_round(quantity * unit_price),
+            realized_gain_quote=None, sale_proceeds_base=None, realized_gain_base=None,
+        )
+
+    proceeds_quote = _round(quantity * unit_price)
+    realized_gain_quote = _round(proceeds_quote - fifo.cost_basis_quote)
+
+    proceeds_base = None
+    realized_gain_base = None
+    if fifo.cost_basis_base is not None and fx_rate_at_sale is not None:
+        proceeds_base = _round(quantity * unit_price * fx_rate_at_sale)
+        realized_gain_base = _round(proceeds_base - fifo.cost_basis_base)
+
+    return SalePreview(
+        fifo=fifo,
+        sale_proceeds_quote=proceeds_quote,
+        realized_gain_quote=realized_gain_quote,
+        sale_proceeds_base=proceeds_base,
+        realized_gain_base=realized_gain_base,
+    )
+
+
 # ── Thin DB-fetching layer ────────────────────────────────────────────────────
 
 
@@ -141,6 +186,24 @@ async def _fetch_active_lots(db: AsyncSession, holding_id: UUID) -> list[Lot]:
         .order_by(Lot.purchase_date.asc(), Lot.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+async def compute_fifo_preview(
+    db: AsyncSession,
+    holding_id: UUID,
+    *,
+    quantity: Decimal,
+    unit_price: Decimal,
+    fx_rate_at_sale: Decimal | None,
+) -> SalePreview:
+    """Read-only FIFO + realized-gain preview — fetches lots and delegates to
+    the pure layer above. Shared by the preview endpoint (Changeset C20 §3)
+    and create_sale (C20 §2) so the two can never drift (D13 §5.3). Makes no
+    writes of its own; safe to call whether or not the sale is ever created.
+    """
+    lots = await _fetch_active_lots(db, holding_id)
+    fifo = compute_fifo(lots, quantity)
+    return compute_sale_preview(fifo, quantity, unit_price, fx_rate_at_sale)
 
 
 async def _revert_consumptions(db: AsyncSession, sale_id: UUID) -> None:
@@ -187,21 +250,15 @@ async def create_sale(
             "fx_rate_at_sale is required unless fx_rate_origin is 'manual_pending'."
         )
 
-    lots = await _fetch_active_lots(db, holding_id)
-    fifo = compute_fifo(lots, quantity)
-    if fifo.insufficient:
-        raise InsufficientUnitsError(fifo.units_available, quantity)
+    preview = await compute_fifo_preview(
+        db, holding_id, quantity=quantity, unit_price=unit_price, fx_rate_at_sale=fx_rate_at_sale,
+    )
+    if preview.fifo.insufficient:
+        raise InsufficientUnitsError(preview.fifo.units_available, quantity)
 
-    proceeds_quote = _round(quantity * unit_price)
-    realized_gain_quote = _round(proceeds_quote - fifo.cost_basis_quote)
-
-    cost_basis_base = fifo.cost_basis_base
-    realized_gain_base: Decimal | None = None
-    if cost_basis_base is not None and fx_rate_at_sale is not None:
-        proceeds_base = _round(quantity * unit_price * fx_rate_at_sale)
-        realized_gain_base = _round(proceeds_base - cost_basis_base)
-    else:
-        cost_basis_base = None  # keep the two base-currency fields in lockstep
+    # cost_basis_base is only meaningful in step with realized_gain_base —
+    # compute_sale_preview already ties the two to the same None-ness.
+    cost_basis_base = preview.fifo.cost_basis_base if preview.realized_gain_base is not None else None
 
     sale = Sale(
         holding_id=holding_id,
@@ -211,16 +268,18 @@ async def create_sale(
         fx_rate_at_sale=fx_rate_at_sale,
         fx_rate_origin=fx_rate_origin,
         notes=notes,
-        cost_basis_quote=fifo.cost_basis_quote,
+        cost_basis_quote=preview.fifo.cost_basis_quote,
         cost_basis_base=cost_basis_base,
-        realized_gain_quote=realized_gain_quote,
-        realized_gain_base=realized_gain_base,
+        realized_gain_quote=preview.realized_gain_quote,
+        realized_gain_base=preview.realized_gain_base,
     )
     db.add(sale)
     await db.flush()  # assigns sale.id needed for the SaleLotConsumption rows
 
-    lots_by_id = {lot.id: lot for lot in lots}
-    for c in fifo.consumptions:
+    consumed_lot_ids = [c.lot_id for c in preview.fifo.consumptions]
+    result = await db.execute(select(Lot).where(Lot.id.in_(consumed_lot_ids)))
+    lots_by_id = {lot.id: lot for lot in result.scalars().all()}
+    for c in preview.fifo.consumptions:
         db.add(SaleLotConsumption(
             sale_id=sale.id,
             lot_id=c.lot_id,
@@ -255,3 +314,14 @@ async def get_sale(db: AsyncSession, sale_id: UUID, holding_id: UUID) -> Sale | 
         select(Sale).where(Sale.id == sale_id, Sale.holding_id == holding_id)
     )
     return result.scalar_one_or_none()
+
+
+async def list_sales_for_holding(db: AsyncSession, holding_id: UUID) -> list[Sale]:
+    """All sales for a holding with their FIFO breakdown, newest first (D13 §7.3)."""
+    result = await db.execute(
+        select(Sale)
+        .where(Sale.holding_id == holding_id)
+        .order_by(Sale.sale_date.desc())
+        .options(selectinload(Sale.lot_consumptions))
+    )
+    return list(result.scalars().all())

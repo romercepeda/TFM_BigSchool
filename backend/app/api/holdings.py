@@ -12,6 +12,8 @@ Endpoints:
     POST   /portfolios/{pid}/holdings/{hid}/lots            — add another lot
     PATCH  /portfolios/{pid}/holdings/{hid}/lots/{lid}      — edit lot
     DELETE /portfolios/{pid}/holdings/{hid}/lots/{lid}      — delete lot (blocks if consumed)
+    GET    /portfolios/{pid}/holdings/{hid}/sales           — list sales for a holding (D13 §7.3)
+    POST   /portfolios/{pid}/holdings/{hid}/sales/preview   — read-only FIFO preview (D13 §7.1)
     POST   /portfolios/{pid}/holdings/{hid}/sales           — register sale (FIFO, realized gain)
     PATCH  /portfolios/{pid}/holdings/{hid}/sales/{sid}     — edit sale reason only (D13 §11)
     DELETE /portfolios/{pid}/holdings/{hid}/sales/{sid}     — delete sale (restores FIFO)
@@ -27,11 +29,13 @@ from app.api.d03_schemas import (
     HoldingAggregates,
     HoldingDetailResponse,
     HoldingSummaryResponse,
+    LotConsumptionPreview,
     LotIn,
     LotPatch,
     LotResponse,
     SaleIn,
     SalePatch,
+    SalePreviewOut,
     SaleResponse,
 )
 from app.auth.dependencies import get_current_user
@@ -406,6 +410,89 @@ async def delete_lot(
 # ── Sale endpoints ────────────────────────────────────────────────────────────
 
 
+@router.get(
+    "/{holding_id}/sales",
+    response_model=list[SaleResponse],
+    dependencies=[Depends(require_permission("sale.view"))],
+)
+async def list_sales(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SaleResponse]:
+    """All sales for a holding with their FIFO breakdown, newest first (D13 §7.3)."""
+    await _require_portfolio(portfolio_id, current_user, db)
+    holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
+    if holding is None:
+        raise _NOT_FOUND_HOLDING
+
+    sales = await sale_service.list_sales_for_holding(db, holding_id)
+    return [SaleResponse.model_validate(s) for s in sales]
+
+
+@router.post(
+    "/{holding_id}/sales/preview",
+    response_model=SalePreviewOut,
+    dependencies=[Depends(require_permission("sale.create"))],
+)
+async def preview_sale(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    body: SaleIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SalePreviewOut:
+    """Read-only FIFO + realized-gain preview (D13 §7.1, §5.3) — the exact
+    figures create_sale would persist for this input, without writing
+    anything. Guarded by sale.create (not a separate permission) since
+    previewing is part of the create flow, not an independent capability.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
+    holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
+    if holding is None:
+        raise _NOT_FOUND_HOLDING
+
+    fx_rate, fx_origin = await _resolve_fx_rate(
+        db,
+        quote_currency=holding.asset.quote_currency,
+        base_currency=portfolio.base_currency,
+        on_date=body.sale_date,
+        requested_origin=body.fx_rate_origin,
+        provided_rate=body.fx_rate_at_sale,
+    )
+
+    preview = await sale_service.compute_fifo_preview(
+        db, holding_id,
+        quantity=body.quantity, unit_price=body.unit_price, fx_rate_at_sale=fx_rate,
+    )
+
+    return SalePreviewOut(
+        insufficient_units=preview.fifo.insufficient,
+        units_available=preview.fifo.units_available,
+        lot_consumptions=[
+            LotConsumptionPreview(
+                lot_id=c.lot_id,
+                purchase_date=c.purchase_date,
+                units_consumed=c.units_consumed,
+                unit_price=c.unit_price,
+                cost_contribution=c.cost_contribution,
+            )
+            for c in preview.fifo.consumptions
+        ],
+        cost_basis_quote=preview.fifo.cost_basis_quote,
+        sale_proceeds_quote=preview.sale_proceeds_quote,
+        realized_gain_quote=preview.realized_gain_quote,
+        quote_currency=holding.asset.quote_currency,
+        cost_basis_base=preview.fifo.cost_basis_base if preview.realized_gain_base is not None else None,
+        sale_proceeds_base=preview.sale_proceeds_base,
+        realized_gain_base=preview.realized_gain_base,
+        base_currency=portfolio.base_currency,
+        fx_rate_at_sale=fx_rate,
+        fx_rate_origin=fx_origin,
+    )
+
+
 @router.post(
     "/{holding_id}/sales",
     response_model=SaleResponse,
@@ -452,9 +539,7 @@ async def create_sale(
 
     await db.commit()
     summary_cache.invalidate(portfolio_id)
-    await db.refresh(sale)
     # Reload with lot_consumptions eager-loaded.
-    sale_detail = await sale_service.get_sale(db, sale.id, holding_id)
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from app.db.models.sale import Sale as SaleModel

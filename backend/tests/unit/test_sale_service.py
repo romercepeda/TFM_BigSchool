@@ -1,12 +1,15 @@
-"""Unit tests for the FIFO cost-basis computation — Spec D13 §3/§4.2, Changeset C20 §2.
+"""Unit tests for the FIFO + realized-gain computation — Spec D13 §3/§4.2/§7.1,
+Changeset C20 §2/§3.
 
 Coverage target: 90%+ (Spec 00c — this is critical business logic; errors here
 directly produce incorrect tax-relevant figures). Per this project's
 established convention (see test_summary_service.py, test_fx_engine.py),
-DB-touching paths (create_sale, update_reason, delete_sale) are verified
-manually against the dev database (Spec 00c §2, §7) rather than covered here;
-every scenario below drives compute_fifo() directly with hand-built Lot
-instances (never added to a session, so this stays pure/no-I/O).
+DB-touching paths (create_sale, update_reason, delete_sale,
+compute_fifo_preview's lot fetch) are verified manually against the dev
+database (Spec 00c §2, §7) rather than covered here; every scenario below
+drives compute_fifo()/compute_sale_preview() directly — pure, no I/O. Lot
+instances are hand-built and never added to a session, so this stays free of
+any database dependency.
 """
 
 from datetime import date
@@ -14,7 +17,11 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from app.db.models.lot import Lot
-from app.services.sale_service import InsufficientUnitsError, compute_fifo
+from app.services.sale_service import (
+    InsufficientUnitsError,
+    compute_fifo,
+    compute_sale_preview,
+)
 
 D = Decimal
 HOLDING_ID = uuid4()
@@ -170,3 +177,65 @@ def test_cost_basis_rounds_half_even_to_eight_decimal_places() -> None:
     # digit 0 is even), so ROUND_HALF_EVEN rounds down to 31.00000000.
     assert result.cost_basis_quote == D("31.00000000")
     assert result.cost_basis_quote.as_tuple().exponent == -8
+
+
+# ─── compute_sale_preview (Spec D13 §7.1, §3) ─────────────────────────────────
+
+
+def test_preview_worked_example_matches_spec_d13() -> None:
+    """D13 §3.1: 35 units @ €20 against L1(30@10)/L2(20@15) -> proceeds 700,
+    cost basis 375, realized gain +325."""
+    l1 = _lot(purchase_date=date(2025, 3, 15), qty="30", price="10", fx=None)
+    l2 = _lot(purchase_date=date(2025, 8, 22), qty="20", price="15", fx=None)
+    fifo = compute_fifo([l1, l2], D("35"))
+
+    preview = compute_sale_preview(fifo, D("35"), D("20"), fx_rate_at_sale=None)
+
+    assert preview.sale_proceeds_quote == D("700.00000000")
+    assert preview.realized_gain_quote == D("325.00000000")
+    assert preview.sale_proceeds_base is None  # no fx_rate_at_sale provided
+    assert preview.realized_gain_base is None
+
+
+def test_preview_reports_a_loss_as_a_negative_realized_gain() -> None:
+    l1 = _lot(purchase_date=date(2025, 1, 1), qty="10", price="50", fx=None)
+    fifo = compute_fifo([l1], D("10"))
+
+    preview = compute_sale_preview(fifo, D("10"), D("40"), fx_rate_at_sale=None)
+
+    assert preview.sale_proceeds_quote == D("400.00000000")
+    assert preview.realized_gain_quote == D("-100.00000000")
+
+
+def test_preview_computes_base_currency_when_fx_available() -> None:
+    l1 = _lot(purchase_date=date(2025, 1, 1), qty="10", price="100", fx="0.90")
+    fifo = compute_fifo([l1], D("10"))
+
+    preview = compute_sale_preview(fifo, D("10"), D("120"), fx_rate_at_sale=D("0.92"))
+
+    assert preview.sale_proceeds_base == D("1104.00000000")  # 10*120*0.92
+    assert preview.realized_gain_base == D("204.00000000")  # 1104 - (10*100*0.90)
+
+
+def test_preview_insufficient_units_reports_no_gain_figures() -> None:
+    l1 = _lot(purchase_date=date(2025, 1, 1), qty="5", price="10", fx=None)
+    fifo = compute_fifo([l1], D("999"))
+
+    preview = compute_sale_preview(fifo, D("999"), D("20"), fx_rate_at_sale=D("1"))
+
+    assert preview.fifo.insufficient is True
+    assert preview.realized_gain_quote is None
+    assert preview.sale_proceeds_base is None
+    assert preview.realized_gain_base is None
+
+
+def test_preview_leaves_base_none_when_a_consumed_lot_has_no_fx_rate() -> None:
+    l1 = _lot(purchase_date=date(2025, 1, 1), qty="10", price="100", fx=None)
+    fifo = compute_fifo([l1], D("10"))
+
+    preview = compute_sale_preview(fifo, D("10"), D("120"), fx_rate_at_sale=D("0.92"))
+
+    assert preview.sale_proceeds_quote == D("1200.00000000")
+    assert preview.realized_gain_quote == D("200.00000000")
+    assert preview.sale_proceeds_base is None
+    assert preview.realized_gain_base is None

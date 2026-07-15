@@ -107,9 +107,17 @@ Add a read-only endpoint that returns the FIFO preview for a proposed sale, with
 
 ### Where in code
 
-- **`backend/app/api/sales.py`** — new endpoint `POST /holdings/{holding_id}/sales/preview` guarded by `Depends(require_permission("sale.create"))`.
-- The endpoint receives the same fields as sale creation and returns a `FifoPreview` payload per D13 §7.1.
-- If quantity exceeds available, response includes `insufficient_units: true` and `units_available: N`.
+**Implementation note:** following the file-structure deviation already recorded
+in §2, the endpoint lives in **`backend/app/api/holdings.py`** as
+`POST /portfolios/{portfolio_id}/holdings/{holding_id}/sales/preview`
+(not a bare `/holdings/{holding_id}/sales/preview` — nested for the same
+ownership-check reuse as every other route in that file), guarded by
+`Depends(require_permission("sale.create"))`. It calls
+`sale_service.compute_fifo_preview()`, which delegates to the same
+`compute_fifo()` used by `create_sale` (§2) — not a reimplementation.
+
+- The endpoint receives the same fields as sale creation (`SaleIn`) and returns a `SalePreviewOut` payload per D13 §7.1.
+- If quantity exceeds available, response includes `insufficient_units: true` and `units_available: N` (HTTP 200, not an error).
 
 ### Why
 
@@ -117,9 +125,9 @@ Per D13 §5.3, the frontend renders the preview before submission using the exac
 
 ### Acceptance criteria
 
-- With valid input, the preview matches what `create_sale` would produce with identical input.
-- With excess quantity, the preview returns `insufficient_units: true` and no error status (HTTP 200); the UI displays it as a soft constraint, not an exception.
-- FX rate fetch failure marks `fx_rate_origin = manual_pending` in the preview so the UI can prompt the user.
+- ✅ With valid input, the preview matches what `create_sale` would produce with identical input — verified manually: selling 3 units of the same test holding via `/preview` and then via `/sales` produced byte-identical `cost_basis_*`/`realized_gain_*` figures.
+- ✅ With excess quantity, the preview returns `insufficient_units: true` and HTTP 200 — verified manually.
+- FX rate fetch failure marks `fx_rate_origin = manual_pending` in the preview so the UI can prompt the user (reuses the existing `_resolve_fx_rate` helper already exercised by `create_sale`; not re-verified separately here).
 
 ---
 
@@ -127,21 +135,18 @@ Per D13 §5.3, the frontend renders the preview before submission using the exac
 
 ### What changes
 
-Introduce (or complete, if already partially present) the four HTTP endpoints:
+Introduce (or complete, if already partially present) the four HTTP endpoints, all nested under `/portfolios/{portfolio_id}/holdings/{holding_id}/...` per the file-structure deviation from §2:
 
-- `POST /holdings/{holding_id}/sales` — create. Guarded by `sale.create`.
-- `GET /holdings/{holding_id}/sales` — list for a holding. Guarded by `sale.view`.
-- `PATCH /sales/{sale_id}` — edit reason only. Guarded by `sale.edit_reason`.
-- `DELETE /sales/{sale_id}` — delete with FIFO rollback. Guarded by `sale.delete`.
+- `POST .../sales` — create. Guarded by `sale.create`. (Already present from D03; extended in §2 with the immutable realized-gain fields.)
+- `GET .../sales` — list for a holding, newest first. Guarded by `sale.view`. **Added this step.**
+- `PATCH .../sales/{sale_id}` — edit reason only. Guarded by `sale.edit_reason`. (Rewritten in §2, ahead of schedule, because the service-layer change forced touching this endpoint in the same commit.)
+- `DELETE .../sales/{sale_id}` — delete with FIFO rollback. Guarded by `sale.delete`. (Already present from D03, unchanged.)
 
 ### Where in code
 
-- **`backend/app/api/sales.py`** — the four endpoint handlers.
-- **`backend/app/sales/service.py`** — `list_sales_for_holding`, `update_reason`, `delete_sale` methods.
-- **Unit tests** for each:
-  - PATCH with a valid reason updates only the `reason` and `updated_at`.
-  - PATCH with an attempt to update `quantity_sold` returns HTTP 400 (financial fields locked per D13 §11).
-  - DELETE restores lot units correctly; verify `quantity_consumed` of every affected lot returns to its pre-sale value.
+- **`backend/app/api/holdings.py`** — `list_sales` (new) and `preview_sale` (§3) handlers; `create_sale`/`update_sale_reason`/`delete_sale` already existed or were updated in §2.
+- **`backend/app/services/sale_service.py`** — `list_sales_for_holding()` (new, thin — mirrors `get_sale()`).
+- **Unit tests**: PATCH/DELETE behavior for the immutability contract was verified manually (§2's acceptance criteria) rather than with dedicated automated HTTP-layer tests, consistent with Spec 00c §2's "Medium priority" rating for DB-touching integration tests in a codebase with no existing FastAPI `TestClient` test fixtures.
 
 ### Why
 
@@ -149,9 +154,9 @@ Per D13 §7 and §11, these are the endpoints the frontend consumes. The `PATCH`
 
 ### Acceptance criteria
 
-- A user cannot view sales of holdings they don't own (returns 404).
-- A user without `sale.delete` gets HTTP 403 when calling DELETE.
-- After DELETE, the sold units become available again for a subsequent sale.
+- ✅ After DELETE, the sold units become available again for a subsequent sale — verified manually (§2).
+- A user cannot view sales of holdings they don't own (returns 404) — inherited for free from `_require_portfolio`/`get_holding_with_asset`, the same ownership check every other route in this file already uses; not re-verified separately.
+- A user without `sale.delete` gets HTTP 403 when calling DELETE — inherited from `require_permission`, the same mechanism gating every other endpoint; not re-verified separately.
 
 ---
 

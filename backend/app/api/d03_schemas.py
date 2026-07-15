@@ -130,6 +130,37 @@ class SaleResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class LotConsumptionPreview(BaseModel):
+    """One lot's contribution to a proposed sale (Spec D13 §7.1)."""
+    lot_id: UUID
+    purchase_date: date
+    units_consumed: Decimal
+    unit_price: Decimal
+    cost_contribution: Decimal
+
+
+class SalePreviewOut(BaseModel):
+    """Read-only FIFO + realized-gain preview for a proposed sale (D13 §7.1,
+    §5.3) — no sale is created; the frontend shows these exact figures before
+    the user confirms.
+    """
+    insufficient_units: bool
+    units_available: Decimal
+    lot_consumptions: list[LotConsumptionPreview]
+    cost_basis_quote: Decimal
+    sale_proceeds_quote: Decimal
+    realized_gain_quote: Decimal | None
+    quote_currency: str
+    # None whenever a consumed lot's fx_rate_at_purchase or fx_rate_at_sale
+    # itself is unresolved (manual_pending) — see SaleService.compute_sale_preview.
+    cost_basis_base: Decimal | None
+    sale_proceeds_base: Decimal | None
+    realized_gain_base: Decimal | None
+    base_currency: str
+    fx_rate_at_sale: Decimal | None
+    fx_rate_origin: str
+
+
 # ── Holding schemas ───────────────────────────────────────────────────────────
 
 
