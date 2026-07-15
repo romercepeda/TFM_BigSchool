@@ -53,13 +53,18 @@ permissions:
     name_key: "permission.lot.delete.name"
     description_key: "permission.lot.delete.description"
 
-  # ── sale (Spec D03) ─────────────────────────────────────────────────────────
+  # ── sale (Spec D03, extended by Spec D13 §12) ───────────────────────────────
   - code: sale.create
     name_key: "permission.sale.create.name"
     description_key: "permission.sale.create.description"
-  - code: sale.edit
-    name_key: "permission.sale.edit.name"
-    description_key: "permission.sale.edit.description"
+  - code: sale.view
+    name_key: "permission.sale.view.name"
+    description_key: "permission.sale.view.description"
+  # Renamed from sale.edit (D03) — sales are immutable except for `reason`
+  # since Spec D13 §11, so the permission now names what it actually gates.
+  - code: sale.edit_reason
+    name_key: "permission.sale.edit_reason.name"
+    description_key: "permission.sale.edit_reason.description"
   - code: sale.delete
     name_key: "permission.sale.delete.name"
     description_key: "permission.sale.delete.description"
@@ -179,7 +184,8 @@ roles:
       - lot.edit
       - lot.delete
       - sale.create
-      - sale.edit
+      - sale.view
+      - sale.edit_reason
       - sale.delete
       - price_level.view
       - price_level.create
@@ -227,7 +233,8 @@ roles:
       - lot.edit
       - lot.delete
       - sale.create
-      - sale.edit
+      - sale.view
+      - sale.edit_reason
       - sale.delete
       - price_level.view
       - price_level.create

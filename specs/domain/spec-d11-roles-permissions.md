@@ -119,7 +119,7 @@ Permissions are named `<domain>.<action>` where `<domain>` matches the domain sp
 | `portfolio` | `portfolio.list`, `portfolio.create`, `portfolio.rename`, `portfolio.archive`, `portfolio.restore`, `portfolio.delete_permanent` | D02 |
 | `holding` | `holding.view`, `holding.add_asset`, `holding.delete` | D03 |
 | `lot` | `lot.create`, `lot.edit`, `lot.delete` | D03 |
-| `sale` | `sale.create`, `sale.edit`, `sale.delete` | D03 |
+| `sale` | `sale.create`, `sale.view`, `sale.edit_reason`, `sale.delete` | D03, extended by D13 §12 |
 | `price_level` | `price_level.view`, `price_level.create`, `price_level.edit`, `price_level.delete` | D06 |
 | `analysis` | `analysis.upload`, `analysis.view`, `analysis.edit`, `analysis.delete` | D07 (edit: C05) |
 | `settings` | `settings.view_own`, `settings.edit_own` | (across specs) |

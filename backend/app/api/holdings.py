@@ -1,4 +1,4 @@
-"""Holdings, Lots, and Sales API endpoints — Spec D03.
+"""Holdings, Lots, and Sales API endpoints — Spec D03, sales extended by Spec D13.
 
 All routes are nested under /portfolios/{portfolio_id}/ to enforce portfolio ownership.
 Authorization: every handler verifies the portfolio belongs to the current user before
@@ -12,8 +12,8 @@ Endpoints:
     POST   /portfolios/{pid}/holdings/{hid}/lots            — add another lot
     PATCH  /portfolios/{pid}/holdings/{hid}/lots/{lid}      — edit lot
     DELETE /portfolios/{pid}/holdings/{hid}/lots/{lid}      — delete lot (blocks if consumed)
-    POST   /portfolios/{pid}/holdings/{hid}/sales           — register sale (FIFO)
-    PATCH  /portfolios/{pid}/holdings/{hid}/sales/{sid}     — edit sale
+    POST   /portfolios/{pid}/holdings/{hid}/sales           — register sale (FIFO, realized gain)
+    PATCH  /portfolios/{pid}/holdings/{hid}/sales/{sid}     — edit sale reason only (D13 §11)
     DELETE /portfolios/{pid}/holdings/{hid}/sales/{sid}     — delete sale (restores FIFO)
 """
 
@@ -470,9 +470,9 @@ async def create_sale(
 @router.patch(
     "/{holding_id}/sales/{sale_id}",
     response_model=SaleResponse,
-    dependencies=[Depends(require_permission("sale.edit"))],
+    dependencies=[Depends(require_permission("sale.edit_reason"))],
 )
-async def edit_sale(
+async def update_sale_reason(
     portfolio_id: UUID,
     holding_id: UUID,
     sale_id: UUID,
@@ -480,7 +480,11 @@ async def edit_sale(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SaleResponse:
-    """Edit a sale. If quantity changes, FIFO is recomputed. Returns 400 if insufficient position."""
+    """Edit a sale's reason. Every other field is immutable (Spec D13 §11).
+
+    Does not invalidate the portfolio summary cache — a reason edit has no
+    financial impact (D13 §8.1).
+    """
     await _require_portfolio(portfolio_id, current_user, db)
     holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
     if holding is None:
@@ -490,21 +494,8 @@ async def edit_sale(
     if sale is None:
         raise _NOT_FOUND_SALE
 
-    try:
-        sale = await sale_service.edit_sale(
-            db, sale,
-            sale_date=body.sale_date,
-            quantity=body.quantity,
-            unit_price=body.unit_price,
-            fx_rate_at_sale=body.fx_rate_at_sale,
-            fx_rate_origin=body.fx_rate_origin,
-            notes=body.notes,
-        )
-    except ValueError as exc:
-        raise _bad_request(str(exc))
-
+    sale = await sale_service.update_reason(db, sale, body.notes)
     await db.commit()
-    summary_cache.invalidate(portfolio_id)
 
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload

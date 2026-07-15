@@ -97,12 +97,8 @@ class SaleIn(BaseModel):
 
 
 class SalePatch(BaseModel):
-    """All fields optional for PATCH."""
-    sale_date: date | None = None
-    quantity: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    unit_price: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    fx_rate_at_sale: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    fx_rate_origin: FxRateOrigin | None = None
+    """Sales are immutable except for the reason (D13 §11) — every other
+    field (quantity, price, date, FX) is locked once a sale is created."""
     notes: str | None = Field(default=None, max_length=500)
 
 

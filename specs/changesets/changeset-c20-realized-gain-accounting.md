@@ -66,9 +66,21 @@ Implement (or reimplement) the FIFO consumption algorithm inside `SaleService.cr
 
 ### Where in code
 
-- **`backend/app/sales/service.py`** — the service class.
-- **`backend/app/sales/errors.py`** — declare `InsufficientUnitsError` if not already present.
-- **Unit tests** in `backend/tests/sales/test_fifo.py`:
+**Implementation note:** the codebase does not have an `app/sales/` package — Sale
+logic lives in `backend/app/services/sale_service.py` (mirrors `lot_service.py`,
+`summary_service.py`), and its endpoints in `backend/app/api/holdings.py`
+(mirrors the existing Holding/Lot routes, all nested under
+`/portfolios/{portfolio_id}/holdings/{holding_id}/...` to reuse the existing
+ownership check — this changeset follows that structure instead of introducing
+a parallel `app/sales/` package or bare `/sales/{id}` routes).
+
+- **`backend/app/services/sale_service.py`** — pure `compute_fifo()` +
+  `FifoResult`/`LotConsumption` dataclasses (no I/O — same
+  pure-computation/thin-DB-fetch split as `fx_engine.py` and
+  `summary_service.py`), plus `InsufficientUnitsError` (subclasses
+  `ValueError` so the existing `except ValueError` → HTTP 400 handling in
+  `holdings.py` needs no change) and the rewritten `create_sale()`.
+- **Unit tests** in `backend/tests/services/test_sale_service.py`:
   - Sell exactly the units of the first lot → one consumption row, first lot fully consumed, second lot untouched.
   - Sell across two lots → two consumption rows, correct proportions.
   - Sell more than available → raises `InsufficientUnitsError`, no rows written.
