@@ -88,7 +88,7 @@ The `Sale` entity was declared in Spec D03 §3.4. This section defines its **rea
 | `unit_sale_price` | NUMERIC | Sale price per unit, in the asset's quote currency. Unchanged. |
 | `fx_rate_at_sale` | NUMERIC | Rate between quote currency and portfolio base currency on `sale_date`, per D09 §7. Unchanged. |
 | `fx_rate_origin` | enum | `auto` \| `manual` \| `corrected` \| `manual_pending`. Same semantics as Lot per D03 §3.3 (with the addition from Changeset C04 for `manual_pending`). Unchanged. |
-| `reason` | text, nullable | **New field**: a brief note explaining why the sale was made. Free-form, max 500 characters. Optional. |
+| `reason` | text, nullable | A brief note explaining why the sale was made. Free-form, max 500 characters (enforced at the API layer). Optional. **Implementation note:** the `Sale` entity from D03 §3.4 already has a `notes` column serving this exact purpose (free-form optional text on a sale). C20 §1 reuses that column as `reason` rather than adding a redundant new one — no DB rename, no functional difference, just documenting that `notes` *is* `reason`. |
 | `cost_basis_quote` | NUMERIC | **New field**: sum of the cost basis of consumed lots, in quote currency. Computed at sale time from `SaleLotConsumption`. Immutable after write. |
 | `cost_basis_base` | NUMERIC | **New field**: same as above but converted to portfolio base currency using each lot's `fx_rate_at_purchase`. Enables the "true" realized gain in base currency, respecting each lot's original FX rate. |
 | `realized_gain_quote` | NUMERIC | **New field**: `(quantity_sold × unit_sale_price) − cost_basis_quote`. In quote currency. Immutable. |

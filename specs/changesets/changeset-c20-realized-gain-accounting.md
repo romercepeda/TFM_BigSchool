@@ -19,15 +19,16 @@ The changes are structured in ten steps ordered from lowest to highest user impa
 
 ### What changes
 
-Add five new columns to the `sales` table:
+Add four new columns to the `sales` table:
 
-- `reason` — TEXT, nullable, max 500 characters (enforced at application layer).
 - `cost_basis_quote` — NUMERIC, nullable initially, populated at sale creation.
 - `cost_basis_base` — NUMERIC, nullable initially.
 - `realized_gain_quote` — NUMERIC, nullable initially.
 - `realized_gain_base` — NUMERIC, nullable initially.
 
-The new fields are nullable in the database (to accommodate the migration of existing sales — see below) but always populated for new sales created after C20 is applied.
+**Deviation from the original D13 §4.1 text, applied during implementation:** D13 originally described `reason` as a new column. The codebase already has a `Sale.notes` column (TEXT, nullable) serving the identical purpose — optional free-form text on a sale — inherited from Spec D03 §3.4. Rather than add a second, redundant free-text column, `notes` is reused as `reason` (same column, no rename, no migration needed for it). Application-layer validation adds the 500-character cap on `notes`/`reason` that D13 requires. `quantity` and `unit_price` are likewise kept as-is (not renamed to `quantity_sold`/`unit_sale_price`) to preserve the naming symmetry with `Lot.quantity`/`Lot.unit_price` that the rest of the codebase (`lot_service.py`, `summary_service.py`) already relies on.
+
+The four numeric fields are nullable in the database (to accommodate the migration of existing sales — see below) but always populated for new sales created after C20 is applied.
 
 ### Where in code
 

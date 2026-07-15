@@ -1,6 +1,8 @@
-"""Sale and SaleLotConsumption ORM models — Spec D03 §3.4 and §3.5.
+"""Sale and SaleLotConsumption ORM models — Spec D03 §3.4/§3.5, extended by Spec D13 §4.1.
 
-Sale: a single sale event within a Holding.
+Sale: a single sale event within a Holding. The four realized-gain columns
+(cost_basis_*, realized_gain_*) are populated once at creation by SaleService
+and never recomputed (D13 §4.1, §11) — `notes` doubles as D13's "reason" field.
 SaleLotConsumption: the FIFO junction — records exactly which lots each sale consumed
 and how many units were taken from each. Source of truth for realized-gain accounting.
 """
@@ -33,7 +35,15 @@ class Sale(Base):
     fx_rate_origin: Mapped[str] = mapped_column(
         _FX_ORIGIN_ENUM, nullable=False, server_default="manual"
     )
+    # Doubles as D13 §4.1's "reason" field — max 500 chars enforced at the API layer.
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Realized-gain fields (Spec D13 §4.1). Populated once at sale creation by
+    # SaleService and never recomputed — nullable only to accommodate sales
+    # created before D13 (backfilled by migration; NULL if backfill was impossible).
+    cost_basis_quote: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    cost_basis_base: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    realized_gain_quote: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
+    realized_gain_base: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

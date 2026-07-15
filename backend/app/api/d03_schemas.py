@@ -92,7 +92,8 @@ class SaleIn(BaseModel):
     unit_price: Decimal = Field(gt=0, decimal_places=8)
     fx_rate_at_sale: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     fx_rate_origin: FxRateOrigin = "manual"
-    notes: str | None = None
+    # D13 §4.1 "reason" field — max 500 characters.
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class SalePatch(BaseModel):
@@ -102,7 +103,7 @@ class SalePatch(BaseModel):
     unit_price: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     fx_rate_at_sale: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     fx_rate_origin: FxRateOrigin | None = None
-    notes: str | None = None
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class SaleLotConsumptionResponse(BaseModel):
@@ -120,6 +121,12 @@ class SaleResponse(BaseModel):
     fx_rate_at_sale: Decimal | None
     fx_rate_origin: str
     notes: str | None
+    # Realized-gain fields (Spec D13 §4.1). None only for pre-D13 sales that
+    # could not be backfilled (no SaleLotConsumption history).
+    cost_basis_quote: Decimal | None
+    cost_basis_base: Decimal | None
+    realized_gain_quote: Decimal | None
+    realized_gain_base: Decimal | None
     created_at: datetime
     updated_at: datetime
     lot_consumptions: list[SaleLotConsumptionResponse]
