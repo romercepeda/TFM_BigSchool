@@ -338,25 +338,27 @@ Per D13 §6.1, the user needs a chronological view of their sales with drilldown
 
 For assets with `active_units = 0` (all sold), the row shows: `Sold · Realized P&L +/-€Y ▲/▼` (no invested amount to show).
 
-### Where in code
+### Where in code — backend part (this step)
 
-- **Backend:**
-  - `backend/app/api/portfolios.py` — add `GET /portfolios/summaries`.
-  - `backend/app/api/portfolios.py` — add `GET /portfolios/{portfolio_id}/holdings/summary`.
-- **Frontend:**
-  - `frontend/src/screens/portfolios-screen.ts` — render the summary line per row.
-  - `frontend/src/screens/dashboard-screen.ts` — extend the asset row rendering.
-  - `frontend/src/api/portfolios.ts` — add the two client functions.
+- **`backend/app/api/portfolios.py`** — `GET /portfolios/summaries`, registered *before* `GET /{portfolio_id}` (a literal `/summaries` segment would otherwise be swallowed as an attempted `portfolio_id` UUID and 422 before reaching the handler).
+- **`backend/app/api/holdings.py`** — `GET /portfolios/{portfolio_id}/holdings/summary`, registered before `GET /{holding_id}` for the same reason.
+- **`backend/app/services/summary_service.py`**:
+  - `HoldingPnl` + pure `_compute_holding_pnl()`/`compute_holding_summaries()` — per-holding row (units, invested, unrealized/realized/total P&L), reusing `_quantity_remaining_at`, `_last_known`, and `fx_engine.calculate_holding` the same way `_compute_current_totals` does, but returning one row per holding instead of a portfolio-wide sum. Deliberately a separate function from `_compute_current_totals` rather than a shared one — the two round at different points (per-row vs. once at the portfolio total), so sharing would risk perturbing the aggregate's existing, tested output.
+  - `get_holding_summaries()` — thin, reuses the exact same fetchers as `get_summary()` (`_fetch_holding_snapshots`, `_fetch_price_series`, `_fetch_fx_series`).
+  - `get_portfolio_list_summaries()` — loops `get_summary()` per portfolio (benefiting from its existing 5-minute cache) rather than a bespoke cross-portfolio SQL aggregate; `assets_count` is the one piece genuinely fetched in a single dedicated query (`_fetch_active_holdings_count`) across every portfolio at once, since it isn't part of `PortfolioSummary`. **Interpretation of "one query, no N+1" (see acceptance criteria):** read as "one HTTP round trip, no per-portfolio/per-holding *request*" rather than "exactly one SQL statement total" — a fully single-query cross-portfolio aggregate would require rearchitecting the pure/thin split that the rest of this service (and its test coverage) relies on, for a benefit that doesn't matter at this app's personal-portfolio scale (a handful of portfolios per user).
+- **`backend/app/api/portfolio_schemas.py`** — `PortfolioListSummary`. **`backend/app/api/d03_schemas.py`** — `HoldingPnlResponse` (kept with the other holding schemas, not a new `portfolios/schemas.py` file).
+- Frontend consumption (client functions, screen rendering) is Step 11, not this step.
 
 ### Why
 
 Per D13 §9 and §10, surface the P&L information where the user is already looking, without requiring drilldown.
 
-### Acceptance criteria
+### Acceptance criteria (backend part)
 
-- Portfolios list shows the summary line for each portfolio, with correct color-coding.
-- Sold-out assets appear at the bottom of the dashboard (still ordered by original criterion) with the "Sold" summary format.
-- The endpoints return in one HTTP round-trip; no per-portfolio or per-holding N+1 pattern.
+- ✅ Portfolios list data available via one call — verified manually: `GET /portfolios/summaries` returned all 3 of the dev account's portfolios (assets_count, total_invested, unrealized_pnl, realized_pnl, total_pnl, total_pnl_pct) in a single response.
+- ✅ Sold-out holdings report the "Sold" shape — verified manually: sold out the dev account's entire INTC position, `GET .../holdings/summary` showed `active_units: 0`, `invested: 0`, `unrealized_pnl: 0`, `realized_pnl: 50`; `GET /portfolios/summaries`'s `assets_count` for that portfolio dropped to 0 in the same request. Sale deleted afterward to restore the fixture.
+- ✅ Both endpoints answer in one HTTP round-trip each (see backend-part interpretation note above) — no per-portfolio or per-holding *request* from the frontend once Step 11 wires them up.
+- The dashboard's actual sort order (sold-out assets at the bottom) is a Step 11 frontend concern, not addressed here.
 
 ---
 

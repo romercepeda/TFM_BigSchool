@@ -76,3 +76,24 @@ class PortfolioSummary(BaseModel):
     trend_30d: list[TrendPoint]
     computed_at: datetime
     base_currency: str
+
+
+class PortfolioListSummary(BaseModel):
+    """One row for the Portfolios listing screen (Spec D13 §9) — assets
+    count, currently-invested amount, and combined P&L (unrealized +
+    realized), one per portfolio the user owns. total_pnl_pct is against
+    total_invested (currently-invested capital), matching unrealized_pnl_pct's
+    denominator — not total_invested_ever (D13 §8's realized_pnl_pct
+    denominator), which would understate the return once a portfolio is
+    mostly cashed out.
+    """
+    id: UUID
+    name: str
+    base_currency: str
+    status: str
+    assets_count: int
+    total_invested: Decimal
+    unrealized_pnl: Decimal
+    realized_pnl: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal

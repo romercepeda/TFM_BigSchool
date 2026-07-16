@@ -17,6 +17,7 @@ from app.services.summary_service import (
     HoldingSnapshot,
     LotSnapshot,
     _quantity_remaining_at,
+    compute_holding_summaries,
     compute_summary,
 )
 
@@ -416,3 +417,114 @@ def test_total_invested_ever_excludes_lot_with_unresolved_fx() -> None:
     # total_invested_ever would be 0 (only lot has no fx_rate_at_purchase) -> pct falls back to 0.
     assert result.realized_pnl == D("40.00000000")
     assert result.realized_pnl_pct == D("0.0000")
+
+
+# ─── compute_holding_summaries — per-holding P&L rows (D13 §10, C20 §8) ──────
+
+
+def test_holding_summary_active_position_matches_manual_calculation() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1"),
+    ])
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)
+
+    assert row.holding_id == HOLDING_A
+    assert row.active_units == D("10.00000000")
+    assert row.invested == D("1000.00000000")
+    assert row.unrealized_pnl == D("100.00000000")
+    assert row.realized_pnl == D("0.00000000")
+    assert row.total_pnl == D("100.00000000")
+    assert row.total_pnl_pct == D("0.1000")
+
+
+def test_holding_summary_sold_out_shows_only_realized_pnl() -> None:
+    """D13 §10: active_units == 0 -> invested/unrealized read as zero, only
+    realized_pnl carries the "Sold" row's figure."""
+    d = TODAY - timedelta(days=10)
+    holding = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1",
+              consumptions=((d, D("10")),))],
+        sales=((d, D("40")),),
+    )
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)
+
+    assert row.active_units == D("0.00000000")
+    assert row.invested == D("0.00000000")
+    assert row.unrealized_pnl == D("0.00000000")
+    assert row.realized_pnl == D("40.00000000")
+    assert row.total_pnl == D("40.00000000")
+    assert row.total_pnl_pct == D("0.0000")  # invested is 0 — pct doesn't apply, not divided
+
+
+def test_holding_summary_never_priced_reads_invested_and_unrealized_as_zero() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1"),
+    ])
+
+    [row] = compute_holding_summaries([holding], {}, {}, "EUR", TODAY)
+
+    assert row.invested == D("0.00000000")
+    assert row.unrealized_pnl == D("0.00000000")
+
+
+def test_holding_summary_cross_currency_matches_manual_calculation() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "USD", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="0.90"),
+    ])
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+    fx_rates = {("USD", "EUR"): _flat_series("0.92", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, fx_rates, "EUR", TODAY)
+
+    assert row.invested == D("900.00000000")
+    assert row.unrealized_pnl == D("112.00000000")
+
+
+def test_holding_summary_fx_unavailable_reads_invested_and_unrealized_as_zero() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "USD", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="0.90"),
+    ])
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)  # no USD/EUR series
+
+    assert row.invested == D("0.00000000")
+    assert row.unrealized_pnl == D("0.00000000")
+
+
+def test_holding_summary_excludes_future_dated_sale() -> None:
+    holding = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1")],
+        sales=((TODAY + timedelta(days=1), D("999")),),
+    )
+    prices = {ASSET_A: _flat_series("100", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)
+
+    assert row.realized_pnl == D("0.00000000")
+
+
+def test_holding_summaries_return_one_row_per_holding_not_aggregated() -> None:
+    holding_a = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(LOT_A, purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1"),
+    ])
+    holding_b = _holding(HOLDING_B, ASSET_B, "EUR", [
+        _lot(LOT_B, purchase_date=TODAY - timedelta(days=45), qty="5", p_buy="50", fx_buy="1"),
+    ])
+    prices = {
+        ASSET_A: _flat_series("100", TODAY - timedelta(days=60), TODAY),
+        ASSET_B: _flat_series("60", TODAY - timedelta(days=60), TODAY),
+    }
+
+    rows = compute_holding_summaries([holding_a, holding_b], prices, {}, "EUR", TODAY)
+
+    assert [r.holding_id for r in rows] == [HOLDING_A, HOLDING_B]
+    assert rows[0].invested == D("1000.00000000")
+    assert rows[1].invested == D("250.00000000")
+    assert rows[1].unrealized_pnl == D("50.00000000")  # (60-50)*5

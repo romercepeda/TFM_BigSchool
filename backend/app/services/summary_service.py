@@ -23,11 +23,11 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.portfolio_schemas import PortfolioSummary, TrendPoint
+from app.api.portfolio_schemas import PortfolioListSummary, PortfolioSummary, TrendPoint
 from app.db.models.holding import Holding
 from app.db.models.lot import Lot
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
@@ -35,6 +35,7 @@ from app.db.models.portfolio import Portfolio
 from app.db.models.sale import SaleLotConsumption
 from app.services import fx_engine, summary_cache
 from app.services.fx_engine import LotCalcInput
+from app.services.portfolio_service import list_portfolios as list_portfolios_query
 
 _Q_MONETARY = Decimal("0.00000001")  # 8 dp, matches fx_engine's monetary precision (D04)
 _Q_RETURN = Decimal("0.0001")        # 4 dp, matches fx_engine's return precision (D04)
@@ -281,6 +282,109 @@ def _compute_realized_totals(holdings: list[HoldingSnapshot], today: date) -> tu
     return _round(realized_pnl), _round(realized_pnl_pct, _Q_RETURN)
 
 
+# ── Per-holding P&L breakdown (Spec D13 §10, Changeset C20 §8) ───────────────
+
+
+@dataclass(frozen=True)
+class HoldingPnl:
+    """One holding's row for the portfolio dashboard's asset list (D13 §10).
+
+    Unknowable current-market figures (no price/fx ever recorded for this
+    holding) default to zero rather than None — every holding still needs a
+    row, so "excluded from the aggregate" (as in _compute_current_totals)
+    becomes "zero contribution" here. The frontend distinguishes "sold out"
+    (active_units == 0) from "no market data yet" the same way either way:
+    invested/unrealized_pnl read as zero.
+    """
+    holding_id: UUID
+    active_units: Decimal
+    invested: Decimal
+    unrealized_pnl: Decimal
+    realized_pnl: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal
+
+
+def _compute_holding_pnl(
+    holding: HoldingSnapshot,
+    price_index: dict[UUID, _SeriesIndex],
+    fx_index: dict[tuple[str, str], _SeriesIndex],
+    base_currency: str,
+    today: date,
+) -> HoldingPnl:
+    active_units = sum((_quantity_remaining_at(lot, today) for lot in holding.lots), _ZERO)
+
+    realized_pnl = _ZERO
+    for sale_date, gain in holding.sales:
+        if gain is not None and sale_date <= today:
+            realized_pnl += gain
+
+    invested = _ZERO
+    unrealized_pnl = _ZERO
+
+    price_result = _last_known(price_index.get(holding.asset_id), today)
+    if price_result is not None:
+        current_price, _price_date = price_result
+
+        fx_rate: Decimal | None = Decimal("1")
+        if holding.quote_currency != base_currency:
+            fx_result = _last_known(fx_index.get((holding.quote_currency, base_currency)), today)
+            fx_rate = fx_result[0] if fx_result is not None else None
+
+        if fx_rate is not None:
+            lot_inputs = [
+                LotCalcInput(
+                    lot_id=lot.lot_id,
+                    quantity_remaining=_quantity_remaining_at(lot, today),
+                    unit_price_at_purchase=lot.unit_price,
+                    fx_rate_at_purchase=lot.fx_rate_at_purchase,
+                    current_unit_price=current_price,
+                    fx_rate_current=fx_rate,
+                )
+                for lot in holding.lots
+            ]
+            calc = fx_engine.calculate_holding(lot_inputs)
+            if calc.total_cost_base is not None:
+                invested = calc.total_cost_base
+            if calc.total_value_base is not None:
+                unrealized_pnl = calc.total_value_base - invested
+
+    total_pnl = unrealized_pnl + realized_pnl
+    total_pnl_pct = (total_pnl / invested) if invested > _ZERO else _ZERO
+
+    return HoldingPnl(
+        holding_id=holding.holding_id,
+        active_units=_round(active_units),
+        invested=_round(invested),
+        unrealized_pnl=_round(unrealized_pnl),
+        realized_pnl=_round(realized_pnl),
+        total_pnl=_round(total_pnl),
+        total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
+    )
+
+
+def compute_holding_summaries(
+    holdings: list[HoldingSnapshot],
+    prices: dict[UUID, _Series],
+    fx_rates: dict[tuple[str, str], _Series],
+    base_currency: str,
+    today: date,
+) -> list[HoldingPnl]:
+    """Pure entry point for the per-holding dashboard rows (D13 §10) — one
+    row per holding, not aggregated. Deliberately not shared code with
+    _compute_current_totals (the portfolio-level aggregate): the two round
+    at different points (per-holding here vs. once at the portfolio sum
+    there), so sharing would either change the aggregate's existing,
+    already-tested rounding or complicate this simpler per-row path.
+    """
+    price_index = {asset_id: _build_index(series) for asset_id, series in prices.items()}
+    fx_index = {pair: _build_index(series) for pair, series in fx_rates.items()}
+    return [
+        _compute_holding_pnl(holding, price_index, fx_index, base_currency, today)
+        for holding in holdings
+    ]
+
+
 def compute_summary(
     holdings: list[HoldingSnapshot],
     prices: dict[UUID, _Series],
@@ -456,3 +560,101 @@ async def get_summary(db: AsyncSession, portfolio: Portfolio, user_id: UUID) -> 
 
     summary_cache.store(portfolio.id, user_id, summary)
     return summary
+
+
+async def get_holding_summaries(db: AsyncSession, portfolio: Portfolio) -> list[HoldingPnl]:
+    """Per-holding dashboard rows for a portfolio (Spec D13 §10, Changeset C20 §8).
+
+    Reuses the exact same thin fetchers as get_summary() (one query each for
+    holdings/lots, prices, FX) — not cached separately from the portfolio
+    summary cache, since this is a distinct read shape or from it, but cheap
+    enough (same query pattern) that a personal-portfolio's holding count
+    doesn't warrant its own cache layer.
+    """
+    today = date.today()
+    holdings = await _fetch_holding_snapshots(db, portfolio.id)
+    if not holdings:
+        return []
+
+    asset_ids = {h.asset_id for h in holdings}
+    pairs = {
+        (h.quote_currency, portfolio.base_currency)
+        for h in holdings
+        if h.quote_currency != portfolio.base_currency
+    }
+    prices = await _fetch_price_series(db, asset_ids, today)
+    fx_rates = await _fetch_fx_series(db, pairs, today)
+
+    return compute_holding_summaries(holdings, prices, fx_rates, portfolio.base_currency, today)
+
+
+async def _fetch_active_holdings_count(
+    db: AsyncSession, portfolio_ids: list[UUID]
+) -> dict[UUID, int]:
+    """Number of distinct holdings with active_units > 0, per portfolio (D13 §9).
+
+    A direct SQL aggregate over the live quantity_consumed column — assets_count
+    is inherently a "right now" figure (unlike the date-reconstructed trend/
+    current-totals above), so no as-of-date lot-history logic is needed here.
+    One query for every portfolio in `portfolio_ids`, not one per portfolio.
+    """
+    if not portfolio_ids:
+        return {}
+    result = await db.execute(
+        select(
+            Holding.portfolio_id,
+            Holding.id,
+            func.sum(Lot.quantity - Lot.quantity_consumed),
+        )
+        .join(Lot, Lot.holding_id == Holding.id)
+        .where(Holding.portfolio_id.in_(portfolio_ids))
+        .group_by(Holding.portfolio_id, Holding.id)
+    )
+    counts: dict[UUID, int] = {}
+    for portfolio_id, _holding_id, remaining in result.all():
+        if remaining is not None and remaining > _ZERO:
+            counts[portfolio_id] = counts.get(portfolio_id, 0) + 1
+    return counts
+
+
+async def get_portfolio_list_summaries(
+    db: AsyncSession, user_id: UUID, *, include_archived: bool = False
+) -> list[PortfolioListSummary]:
+    """One lightweight summary per portfolio the user owns (Spec D13 §9), in a
+    single round trip for the Portfolios listing screen.
+
+    Reuses get_summary() per portfolio (so it benefits from the same 5-minute
+    cache as the portfolio header) rather than a bespoke cross-portfolio SQL
+    aggregate — at personal-portfolio scale (a handful of portfolios per
+    user), N calls to an already-cached, already-tested computation is a
+    better trade than a parallel aggregate query path that would need its
+    own testing and could drift from get_summary()'s figures. assets_count is
+    the one piece fetched in a single dedicated query across all portfolios,
+    since it isn't part of PortfolioSummary at all.
+    """
+    portfolios = await list_portfolios_query(db, user_id, include_archived=include_archived)
+    if not portfolios:
+        return []
+
+    active_counts = await _fetch_active_holdings_count(db, [p.id for p in portfolios])
+
+    results = []
+    for portfolio in portfolios:
+        summary = await get_summary(db, portfolio, user_id)
+        total_pnl = summary.unrealized_pnl + summary.realized_pnl
+        total_pnl_pct = (
+            (total_pnl / summary.total_invested) if summary.total_invested > _ZERO else _ZERO
+        )
+        results.append(PortfolioListSummary(
+            id=portfolio.id,
+            name=portfolio.name,
+            base_currency=portfolio.base_currency,
+            status=portfolio.status,
+            assets_count=active_counts.get(portfolio.id, 0),
+            total_invested=summary.total_invested,
+            unrealized_pnl=summary.unrealized_pnl,
+            realized_pnl=summary.realized_pnl,
+            total_pnl=_round(total_pnl),
+            total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
+        ))
+    return results

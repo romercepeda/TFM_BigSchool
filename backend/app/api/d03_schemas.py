@@ -202,3 +202,19 @@ class HoldingDetailResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class HoldingPnlResponse(BaseModel):
+    """One row for the portfolio dashboard's asset list (Spec D13 §10) — units
+    held, currently-invested cost basis, and combined P&L for this specific
+    holding. active_units == 0 signals a fully-sold holding: the frontend
+    renders "Sold · Realized P&L" and ignores invested/total_pnl_pct for it
+    (both read as zero in that case, per summary_service.compute_holding_summaries).
+    """
+    holding_id: UUID
+    active_units: Decimal
+    invested: Decimal
+    unrealized_pnl: Decimal
+    realized_pnl: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal

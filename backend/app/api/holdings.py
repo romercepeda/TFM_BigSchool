@@ -7,6 +7,7 @@ accessing any child entity. Users cannot reach holdings in portfolios they do no
 Endpoints:
     GET    /portfolios/{pid}/holdings                       — list holdings with aggregates
     POST   /portfolios/{pid}/holdings                       — add asset + first lot (atomic)
+    GET    /portfolios/{pid}/holdings/summary               — per-holding P&L rows, one round trip (D13 §10)
     GET    /portfolios/{pid}/holdings/{hid}                 — detail: asset, lots, sales
     DELETE /portfolios/{pid}/holdings/{hid}                 — delete holding + all child records
     POST   /portfolios/{pid}/holdings/{hid}/lots            — add another lot
@@ -28,6 +29,7 @@ from app.api.d03_schemas import (
     CreateHoldingRequest,
     HoldingAggregates,
     HoldingDetailResponse,
+    HoldingPnlResponse,
     HoldingSummaryResponse,
     LotConsumptionPreview,
     LotIn,
@@ -43,7 +45,7 @@ from app.db.models.holding import Holding
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import asset_service, lot_service, sale_service, summary_cache
+from app.services import asset_service, lot_service, sale_service, summary_cache, summary_service
 from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
 
@@ -228,6 +230,26 @@ async def add_holding(
         created_at=detail.created_at,
         updated_at=detail.updated_at,
     )
+
+
+@router.get(
+    "/summary",
+    response_model=list[HoldingPnlResponse],
+    dependencies=[Depends(require_permission("holding.view"))],
+)
+async def list_holding_summaries(
+    portfolio_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[HoldingPnlResponse]:
+    """One P&L row per holding in the portfolio, in a single round trip
+    (Spec D13 §10) — the dashboard's asset list doesn't fire one request per
+    holding. Must be registered before GET /{holding_id}: otherwise FastAPI
+    would try to parse "summary" as a holding_id UUID and 422 first.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
+    rows = await summary_service.get_holding_summaries(db, portfolio)
+    return [HoldingPnlResponse(**vars(row)) for row in rows]
 
 
 @router.get(
