@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models.asset import Asset
 from app.db.models.holding import Holding
 from app.db.models.lot import Lot
-from app.db.models.sale import Sale
+from app.db.models.sale import Sale, SaleLotConsumption
 
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
@@ -60,14 +60,21 @@ async def list_holdings(db: AsyncSession, portfolio_id: UUID) -> list[Holding]:
 async def get_holding_detail(
     db: AsyncSession, holding_id: UUID, portfolio_id: UUID
 ) -> Holding | None:
-    """Return a holding with asset, lots, and sales eagerly loaded."""
+    """Return a holding with asset, lots, and sales eagerly loaded.
+
+    Each sale's consumptions also eager-load their Lot (D13 §6.1's FIFO
+    breakdown reads purchase_date/unit_price/cost_contribution off
+    SaleLotConsumption via properties that reach into .lot — see that model).
+    """
     result = await db.execute(
         select(Holding)
         .where(Holding.id == holding_id, Holding.portfolio_id == portfolio_id)
         .options(
             selectinload(Holding.asset),
             selectinload(Holding.lots),
-            selectinload(Holding.sales).selectinload(Sale.lot_consumptions),
+            selectinload(Holding.sales)
+            .selectinload(Sale.lot_consumptions)
+            .selectinload(SaleLotConsumption.lot),
         )
     )
     return result.scalar_one_or_none()

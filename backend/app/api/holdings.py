@@ -23,7 +23,9 @@ Endpoints:
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.d03_schemas import (
     CreateHoldingRequest,
@@ -42,6 +44,7 @@ from app.api.d03_schemas import (
 )
 from app.auth.dependencies import get_current_user
 from app.db.models.holding import Holding
+from app.db.models.sale import Sale, SaleLotConsumption
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
@@ -561,14 +564,11 @@ async def create_sale(
 
     await db.commit()
     summary_cache.invalidate(portfolio_id)
-    # Reload with lot_consumptions eager-loaded.
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models.sale import Sale as SaleModel
+    # Reload with the FIFO breakdown eager-loaded (D13 §6.1).
     result = await db.execute(
-        select(SaleModel)
-        .where(SaleModel.id == sale.id)
-        .options(selectinload(SaleModel.lot_consumptions))
+        select(Sale)
+        .where(Sale.id == sale.id)
+        .options(selectinload(Sale.lot_consumptions).selectinload(SaleLotConsumption.lot))
     )
     sale = result.scalar_one()
     return SaleResponse.model_validate(sale)
@@ -604,13 +604,10 @@ async def update_sale_reason(
     sale = await sale_service.update_reason(db, sale, body.notes)
     await db.commit()
 
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models.sale import Sale as SaleModel
     result = await db.execute(
-        select(SaleModel)
-        .where(SaleModel.id == sale.id)
-        .options(selectinload(SaleModel.lot_consumptions))
+        select(Sale)
+        .where(Sale.id == sale.id)
+        .options(selectinload(Sale.lot_consumptions).selectinload(SaleLotConsumption.lot))
     )
     sale = result.scalar_one()
     return SaleResponse.model_validate(sale)

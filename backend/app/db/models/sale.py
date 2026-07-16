@@ -79,6 +79,24 @@ class SaleLotConsumption(Base):
     sale: Mapped["Sale"] = relationship(back_populates="lot_consumptions")
     lot: Mapped["Lot"] = relationship(back_populates="sale_consumptions")
 
+    # D13 §6.1's FIFO breakdown ("which lots were consumed, at what cost")
+    # needs these, but they live on the consumed Lot, not on this junction
+    # row. Exposed as properties so SaleLotConsumptionResponse.model_validate
+    # (from_attributes) picks them up transparently everywhere a Sale is
+    # serialized — the only requirement is that .lot is eager-loaded
+    # (a lazy load here would raise in an async context).
+    @property
+    def purchase_date(self) -> date:
+        return self.lot.purchase_date
+
+    @property
+    def unit_price(self) -> Decimal:
+        return self.lot.unit_price
+
+    @property
+    def cost_contribution(self) -> Decimal:
+        return self.quantity_consumed * self.lot.unit_price
+
     def __repr__(self) -> str:
         return (
             f"<SaleLotConsumption sale={self.sale_id} lot={self.lot_id} "

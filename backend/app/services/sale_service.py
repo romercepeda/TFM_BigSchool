@@ -317,11 +317,16 @@ async def get_sale(db: AsyncSession, sale_id: UUID, holding_id: UUID) -> Sale | 
 
 
 async def list_sales_for_holding(db: AsyncSession, holding_id: UUID) -> list[Sale]:
-    """All sales for a holding with their FIFO breakdown, newest first (D13 §7.3)."""
+    """All sales for a holding with their FIFO breakdown, newest first (D13 §7.3).
+
+    Eager-loads each consumption's Lot too (not just SaleLotConsumption) —
+    the API layer's FIFO breakdown (D13 §6.1) needs each lot's purchase_date/
+    unit_price, which live on Lot, not on the consumption row itself.
+    """
     result = await db.execute(
         select(Sale)
         .where(Sale.holding_id == holding_id)
         .order_by(Sale.sale_date.desc())
-        .options(selectinload(Sale.lot_consumptions))
+        .options(selectinload(Sale.lot_consumptions).selectinload(SaleLotConsumption.lot))
     )
     return list(result.scalars().all())

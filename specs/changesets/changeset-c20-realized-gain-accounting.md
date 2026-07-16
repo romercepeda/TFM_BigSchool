@@ -275,10 +275,18 @@ Behavior:
 
 ### Where in code
 
-- **`frontend/src/components/sell-modal.ts`** — new component `pi-sell-modal`.
-- **`frontend/src/screens/asset-detail-screen.ts`** — mount the Vender button and wire the modal.
-- **`frontend/src/api/sales.ts`** — client functions for the four endpoints.
-- **`frontend/src/i18n/locales/es.json` and `en.json`** — add UI strings per §11 below.
+**Implementation note:** this project has no modal-overlay pattern anywhere in
+the frontend — every existing form (add/edit lot, edit asset) is an inline
+section toggled by a boolean component field, using raw `innerHTML =`
+re-renders rather than a component framework. `pi-sell-modal` follows suit as
+an inline section, not a new `pi-sell-modal` component or overlay, for
+consistency with the rest of `asset-detail-screen.ts`.
+
+- **`frontend/src/screens/asset-detail-screen.ts`** — the "Vender" button (reusing the existing, previously-unwired `screen.holding.add_sale` i18n key) and the inline sell form + preview, in the same file as every other holding action.
+- **`frontend/src/api/sales.ts`** — new file: `previewSale`, `createSale`, `updateSaleReason`, `deleteSale`. `listSales` stays in `api/holdings.ts` (already used by the pre-existing, unrelated `history-screen.ts`) rather than being duplicated.
+- Removed `AddSaleBody`/`addSale`/old `deleteSale` from `api/holdings.ts` — a stale, never-wired `lot_id`-based shape from before FIFO auto-selected lots; dead code, not a working alternate path.
+- The preview's debounced input handling updates only a `#sell-preview-container` div and the submit button's `disabled` attribute directly via DOM, instead of a full component re-render on every keystroke — a full re-render would replace the input elements and steal focus mid-typing (this project's raw-`innerHTML` rendering has no keyed-diffing).
+- **`frontend/src/i18n/locales/es.json` and `en.json`** — new keys under the existing `screen.sale.*` namespace (not a new flat `sales.*` namespace as §11 originally sketched — kept consistent with this project's actual `screen.<entity>.<key>` i18n convention).
 
 ### Why
 
@@ -286,11 +294,11 @@ Per D13 §5, this is the primary entry point for recording sales. The FIFO previ
 
 ### Acceptance criteria
 
-- The Vender button is visible on any asset that has `active_units > 0`.
-- Attempting to open on an asset with 0 active units either hides the button or shows a message "No hay unidades disponibles para vender."
-- The preview updates as the user types, with the debounce feeling smooth.
-- Submitting creates the sale and the history reflects it immediately.
-- Errors from the backend are displayed inline near the offending field or at the top of the modal.
+- ✅ The Vender button is visible on any asset that has `active_units > 0` — verified visually.
+- ✅ 0 active units shows the message "No hay unidades disponibles para vender." instead of the button — implemented; not separately screenshotted (straightforward conditional).
+- ✅ The preview updates as the user types (debounced) — verified visually: filled quantity/price, the FIFO breakdown + cost basis + proceeds + realized gain (green) appeared without losing input focus; also verified the oversell case shows "Insufficient units. Available: N" with the submit button disabled.
+- ✅ Submitting creates the sale and the history reflects it immediately — verified visually.
+- Errors from the backend are displayed inline at the top of the form (not per-field — no per-field validation errors are currently returned by the backend to route to a specific field).
 
 ---
 
@@ -307,8 +315,14 @@ Below the existing "Historial" content on the asset detail screen, add a new sec
 
 ### Where in code
 
-- **`frontend/src/components/sales-history.ts`** — new component `pi-sales-history`.
-- **`frontend/src/screens/asset-detail-screen.ts`** — mount below the existing history.
+**Implementation note:** same inline-section pattern as §8 — no new
+`pi-sales-history` component; the table lives directly in
+`asset-detail-screen.ts`'s existing render method, replacing the old
+minimal 4-column sales table from D03.
+
+- **`frontend/src/screens/asset-detail-screen.ts`** — sales table + expand/collapse row + delete-confirm row + inline reason editor.
+- **Backend enrichment required and added in this step:** the FIFO breakdown ("which lots were consumed, in what proportion, **at what cost**" — D13 §6.1) needs each consumption's `purchase_date`/`unit_price`, which live on the consumed `Lot`, not on `SaleLotConsumption`. Added as properties on the `SaleLotConsumption` model (`purchase_date`, `unit_price`, `cost_contribution`) that reach into `.lot`, so `SaleLotConsumptionResponse.model_validate(...)` picks them up transparently everywhere a `Sale` is serialized (the existing `GET .../holdings/{id}` detail endpoint included) without having to hand-build every response. Required eager-loading `SaleLotConsumption.lot` alongside `Sale.lot_consumptions` in `lot_service.get_holding_detail`, `sale_service.list_sales_for_holding`, and the two reload queries in `create_sale`/`update_sale_reason`.
+- The holding's base currency (needed for the base-currency realized-gain column) is fetched via a new `getPortfolio()` call alongside the holding — the asset detail screen didn't have it before.
 
 ### Why
 
@@ -316,9 +330,9 @@ Per D13 §6.1, the user needs a chronological view of their sales with drilldown
 
 ### Acceptance criteria
 
-- Sales are sorted by `sale_date` DESC.
-- Deleting a sale restores the sold units so the Vender button becomes usable again for those units.
-- Editing the reason updates the row immediately and persists across page reloads.
+- ✅ Sales are sorted by `sale_date` DESC — implemented client-side (small per-holding lists; no need for a dedicated sorted endpoint beyond the existing one).
+- ✅ Deleting a sale restores the sold units so the Vender button becomes usable again — verified visually end-to-end: sold 2 units, deleted the sale, `QUANTITY HELD` and `TOTAL INVESTED` both reverted to their pre-sale values and the sales table returned to its empty state.
+- ✅ Editing the reason updates the row immediately — verified visually: changed "Toma de beneficios" → "Rebalance" via the inline editor, reflected instantly in both the row and the expanded detail, with `quantity_sold`/`unit_sale_price`/`realized_gain` unchanged (immutability holds).
 
 ---
 

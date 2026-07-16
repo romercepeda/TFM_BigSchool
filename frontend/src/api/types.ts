@@ -143,9 +143,15 @@ export interface Holding {
   updated_at: string;
 }
 
+// D13 §6.1's FIFO breakdown ("which lots were consumed, at what cost") — the
+// last three fields come from the consumed Lot via backend properties (see
+// SaleLotConsumption model), not stored on this junction row itself.
 export interface LotConsumption {
   lot_id: string;
   quantity_consumed: number;
+  purchase_date: string;
+  unit_price: string;
+  cost_contribution: string;
 }
 
 export interface Lot {
@@ -169,9 +175,41 @@ export interface Sale {
   fx_rate_at_sale: number | null;
   fx_rate_origin: string;
   notes: string | null;
+  // Realized-gain fields (Spec D13 §4.1). null only for a pre-D13 sale that
+  // couldn't be backfilled (no SaleLotConsumption history).
+  cost_basis_quote: number | null;
+  cost_basis_base: number | null;
+  realized_gain_quote: number | null;
+  realized_gain_base: number | null;
   created_at: string;
   updated_at: string;
   lot_consumptions: LotConsumption[];
+}
+
+// D13 §7.1 preview payload — Decimal fields arrive as strings (see the
+// PortfolioSummary note above); parse with Number() before formatting.
+export interface LotConsumptionPreview {
+  lot_id: string;
+  purchase_date: string;
+  units_consumed: string;
+  unit_price: string;
+  cost_contribution: string;
+}
+
+export interface SalePreview {
+  insufficient_units: boolean;
+  units_available: string;
+  lot_consumptions: LotConsumptionPreview[];
+  cost_basis_quote: string;
+  sale_proceeds_quote: string;
+  realized_gain_quote: string | null;
+  quote_currency: string;
+  cost_basis_base: string | null;
+  sale_proceeds_base: string | null;
+  realized_gain_base: string | null;
+  base_currency: string;
+  fx_rate_at_sale: string | null;
+  fx_rate_origin: string;
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────

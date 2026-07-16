@@ -103,8 +103,18 @@ class SalePatch(BaseModel):
 
 
 class SaleLotConsumptionResponse(BaseModel):
+    """FIFO breakdown row for a persisted sale (D13 §6.1: "which lots were
+    consumed, in what proportion, at what cost"). purchase_date/unit_price/
+    cost_contribution are properties on the SaleLotConsumption model that
+    reach into the consumed Lot — see that model's docstring. Requires
+    SaleLotConsumption.lot to be eager-loaded wherever a Sale is fetched for
+    serialization.
+    """
     lot_id: UUID
     quantity_consumed: Decimal
+    purchase_date: date
+    unit_price: Decimal
+    cost_contribution: Decimal
 
     model_config = {"from_attributes": True}
 
