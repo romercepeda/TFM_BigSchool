@@ -4,16 +4,17 @@ import '../components/portfolio-header.js';
 import '../components/kpi-strip.js';
 import '../components/asset-row.js';
 import { t } from '../i18n/i18n.js';
-import { getPortfolio, updatePortfolio, archivePortfolio, getPortfolioAlerts } from '../api/portfolios.js';
+import { getPortfolio, updatePortfolio, archivePortfolio, getPortfolioAlerts, getHoldingSummaries } from '../api/portfolios.js';
 import { listHoldings } from '../api/holdings.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
-import type { Holding, Portfolio } from '../api/types.js';
+import type { Holding, Portfolio, HoldingPnl } from '../api/types.js';
 
 export class DashboardScreen extends BaseComponent {
   private _portfolioId = '';
   private _portfolio: Portfolio | null = null;
   private _holdings: Holding[] = [];
+  private _pnlByHoldingId = new Map<string, HoldingPnl>();
   private _unreadAlertsCount = 0;
   private _loading = true;
   private _error = '';
@@ -33,14 +34,16 @@ export class DashboardScreen extends BaseComponent {
     this._confirmArchive = false;
     this.shadow.innerHTML = this.render();
     try {
-      const [portfolio, holdings, alerts] = await Promise.all([
+      const [portfolio, holdings, alerts, pnlRows] = await Promise.all([
         getPortfolio(this._portfolioId),
         listHoldings(this._portfolioId),
         getPortfolioAlerts(this._portfolioId),
+        getHoldingSummaries(this._portfolioId),
       ]);
       this._portfolio = portfolio;
       this._holdings = holdings;
       this._unreadAlertsCount = alerts.unread_count;
+      this._pnlByHoldingId = new Map(pnlRows.map((r) => [r.holding_id, r]));
     } catch (ex) {
       this._error = (ex as Error).message;
     }
@@ -70,12 +73,17 @@ export class DashboardScreen extends BaseComponent {
     const rows = list.querySelectorAll('pi-asset-row') as NodeListOf<HTMLElement & {
       holding: Holding;
       portfolioId: string;
+      pnl: HoldingPnl;
+      baseCurrency: string;
     }>;
     rows.forEach((row, i) => {
       const h = this._holdings[i];
       if (!h) return;
       row.holding = h;
       row.portfolioId = this._portfolioId;
+      row.baseCurrency = this._portfolio?.base_currency ?? '';
+      const pnl = this._pnlByHoldingId.get(h.id);
+      if (pnl) row.pnl = pnl;
     });
   }
 

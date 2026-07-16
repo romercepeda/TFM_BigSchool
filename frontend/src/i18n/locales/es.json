@@ -96,6 +96,8 @@
   "screen.dashboard.alerts": "Alertas",
   "screen.dashboard.holdings": "Posiciones",
   "screen.dashboard.units": "unidades",
+  "screen.dashboard.sold": "Vendido",
+  "screen.dashboard.realized_pnl_row": "P&L realizado {amount}",
 
   "kpi.invested": "Invertido",
   "kpi.current_value": "Valor actual",
@@ -129,6 +131,9 @@
   "screen.portfolios.empty": "No tienes carteras. Crea una para empezar.",
   "screen.portfolios.archived": "Ver archivadas",
   "screen.portfolios.hide_archived": "Ocultar archivadas",
+  "screen.portfolios.assets_count": "{count} activos",
+  "screen.portfolios.invested": "Invertido {amount}",
+  "screen.portfolios.no_investment": "Sin inversión aún",
 
   "create_portfolio.title": "Nueva cartera",
   "create_portfolio.name": "Nombre",

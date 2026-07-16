@@ -1,12 +1,14 @@
 import { BaseComponent } from '../components/common/base-component.js';
 import '../components/header-bar.js';
 import { t } from '../i18n/i18n.js';
-import { listPortfolios, updatePortfolio, archivePortfolio, restorePortfolio, deletePortfolio } from '../api/portfolios.js';
+import { listPortfolios, updatePortfolio, archivePortfolio, restorePortfolio, deletePortfolio, getPortfolioSummaries } from '../api/portfolios.js';
 import { navigate } from '../router/router.js';
-import type { Portfolio } from '../api/types.js';
+import type { Portfolio, PortfolioListSummary } from '../api/types.js';
+import { formatCurrency, formatPercent } from '../utils/format.js';
 
 export class PortfoliosScreen extends BaseComponent {
   private _portfolios: Portfolio[] = [];
+  private _summaries = new Map<string, PortfolioListSummary>();
   private _loading = true;
   private _showArchived = false;
   private _renameId: string | null = null;
@@ -25,13 +27,41 @@ export class PortfoliosScreen extends BaseComponent {
     this._error = '';
     this.shadow.innerHTML = this.render();
     try {
-      this._portfolios = await listPortfolios(this._showArchived);
+      const [portfolios, summaries] = await Promise.all([
+        listPortfolios(this._showArchived),
+        getPortfolioSummaries(this._showArchived),
+      ]);
+      this._portfolios = portfolios;
+      this._summaries = new Map(summaries.map((s) => [s.id, s]));
     } catch (ex) {
       this._error = (ex as Error).message;
     }
     this._loading = false;
     this.shadow.innerHTML = this.render();
     this.afterRender();
+  }
+
+  // D13 §9: "N assets · Invested €X" + "P&L +€Y (+Z%) ▲/▼", or
+  // "0 assets · No investment yet" when nothing has ever been invested.
+  private _renderSummaryLine(portfolioId: string): string {
+    const s = this._summaries.get(portfolioId);
+    if (!s) return '';
+    if (s.assets_count === 0) {
+      return `<div class="meta">${t('screen.portfolios.assets_count', { count: 0 })} · ${t('screen.portfolios.no_investment')}</div>`;
+    }
+    const totalPnl = Number(s.total_pnl);
+    const pnlClass = totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : '';
+    const sign = totalPnl >= 0 ? '+' : '';
+    const arrow = totalPnl > 0 ? '▲' : totalPnl < 0 ? '▼' : '';
+    return `
+      <div class="meta">
+        ${t('screen.portfolios.assets_count', { count: s.assets_count })} ·
+        ${t('screen.portfolios.invested', { amount: formatCurrency(Number(s.total_invested), s.base_currency) })}
+      </div>
+      <div class="meta ${pnlClass}">
+        ${sign}${formatCurrency(totalPnl, s.base_currency)} (${sign}${formatPercent(Number(s.total_pnl_pct) * 100)}) ${arrow}
+      </div>
+    `;
   }
 
   private _rerender(): void {
@@ -77,6 +107,8 @@ export class PortfoliosScreen extends BaseComponent {
         .card-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
         .name { font-weight: var(--font-weight-semibold); flex: 1; min-width: 0; }
         .meta { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: 4px; }
+        .meta.positive { color: var(--color-success); }
+        .meta.negative { color: var(--color-danger); }
         .card-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-top: var(--space-2); }
         .confirm-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); }
         .confirm-label { color: var(--color-text-secondary); }
@@ -146,6 +178,7 @@ export class PortfoliosScreen extends BaseComponent {
           </div>
         </div>
         <div class="meta">${p.base_currency} · ${p.status}</div>
+        ${this._renderSummaryLine(p.id)}
       </div>
     `;
   }
@@ -158,6 +191,7 @@ export class PortfoliosScreen extends BaseComponent {
           <div class="name">${p.name}</div>
         </div>
         <div class="meta">${p.base_currency} · ${p.status}</div>
+        ${this._renderSummaryLine(p.id)}
         <div class="card-actions">
           <button class="btn-ghost" data-restore="${p.id}">${t('screen.portfolio.restore')}</button>
           ${isConfirmingDelete

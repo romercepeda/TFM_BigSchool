@@ -96,6 +96,8 @@
   "screen.dashboard.alerts": "Alerts",
   "screen.dashboard.holdings": "Holdings",
   "screen.dashboard.units": "units",
+  "screen.dashboard.sold": "Sold",
+  "screen.dashboard.realized_pnl_row": "Realized P&L {amount}",
 
   "kpi.invested": "Invested",
   "kpi.current_value": "Current value",
@@ -129,6 +131,9 @@
   "screen.portfolios.empty": "You have no portfolios. Create one to get started.",
   "screen.portfolios.archived": "Show archived",
   "screen.portfolios.hide_archived": "Hide archived",
+  "screen.portfolios.assets_count": "{count} assets",
+  "screen.portfolios.invested": "Invested {amount}",
+  "screen.portfolios.no_investment": "No investment yet",
 
   "create_portfolio.title": "New portfolio",
   "create_portfolio.name": "Name",

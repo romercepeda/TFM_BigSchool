@@ -112,6 +112,32 @@ export interface PortfolioSummary {
   base_currency: string;
 }
 
+// Portfolios-list summary row (Spec D13 §9) — one per portfolio, fetched in
+// a single call so the list screen doesn't fire one request per portfolio.
+export interface PortfolioListSummary {
+  id: string;
+  name: string;
+  base_currency: string;
+  status: string;
+  assets_count: number;
+  total_invested: string;
+  unrealized_pnl: string;
+  realized_pnl: string;
+  total_pnl: string;
+  total_pnl_pct: string;
+}
+
+// Per-holding dashboard row (Spec D13 §10).
+export interface HoldingPnl {
+  holding_id: string;
+  active_units: string;
+  invested: string;
+  unrealized_pnl: string;
+  realized_pnl: string;
+  total_pnl: string;
+  total_pnl_pct: string;
+}
+
 // ── Holdings ──────────────────────────────────────────────────────────────────
 
 export interface HoldingAsset {

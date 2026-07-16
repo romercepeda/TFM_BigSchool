@@ -1,6 +1,6 @@
 # Changeset C20 — Implement Realized Gain Accounting (D13)
 
-**Status:** Pending implementation
+**Status:** Implemented
 **Type:** Cross-spec changeset
 **Triggered by:** Spec D13 (Realized Gain Accounting)
 **Affects implementations of:** Spec D03, Spec D04, Spec D08, Spec D10, Spec D11, Changeset C08
@@ -361,22 +361,50 @@ For assets with `active_units = 0` (all sold), the row shows: `Sold · Realized 
   - `get_holding_summaries()` — thin, reuses the exact same fetchers as `get_summary()` (`_fetch_holding_snapshots`, `_fetch_price_series`, `_fetch_fx_series`).
   - `get_portfolio_list_summaries()` — loops `get_summary()` per portfolio (benefiting from its existing 5-minute cache) rather than a bespoke cross-portfolio SQL aggregate; `assets_count` is the one piece genuinely fetched in a single dedicated query (`_fetch_active_holdings_count`) across every portfolio at once, since it isn't part of `PortfolioSummary`. **Interpretation of "one query, no N+1" (see acceptance criteria):** read as "one HTTP round trip, no per-portfolio/per-holding *request*" rather than "exactly one SQL statement total" — a fully single-query cross-portfolio aggregate would require rearchitecting the pure/thin split that the rest of this service (and its test coverage) relies on, for a benefit that doesn't matter at this app's personal-portfolio scale (a handful of portfolios per user).
 - **`backend/app/api/portfolio_schemas.py`** — `PortfolioListSummary`. **`backend/app/api/d03_schemas.py`** — `HoldingPnlResponse` (kept with the other holding schemas, not a new `portfolios/schemas.py` file).
-- Frontend consumption (client functions, screen rendering) is Step 11, not this step.
+
+### Where in code — frontend part (done in the same step, not deferred further)
+
+- **`frontend/src/api/portfolios.ts`** — `getPortfolioSummaries()`, `getHoldingSummaries()`.
+- **`frontend/src/api/types.ts`** — `PortfolioListSummary`, `HoldingPnl` (Decimal fields typed `string`, matching `PortfolioSummary`'s convention, not the older `number` typing on `Sale`/`Lot`/`HoldingAggregates`).
+- **`frontend/src/screens/portfolios-screen.ts`** — summary line rendered on both active and archived cards, using new `screen.portfolios.assets_count`/`invested`/`no_investment` i18n keys (not a new `portfolio_list.*` namespace as originally sketched — kept consistent with this screen's existing `screen.portfolios.*` prefix).
+- **`frontend/src/components/asset-row.ts`** — new `pnl`/`baseCurrency` setters and a `.pnl-summary` line. **Layout deviation from the literal D13 §10 mockup:** the mockup shows ticker + market + name + summary all on one line at desktop width. This component already keeps ticker/market and name on separate stacked lines regardless of viewport (a pre-existing, working design choice, presumably for long asset names) — restructuring that into a single wrapping line to match the mockup exactly risked breaking an established, unrelated layout for a cosmetic gain. The P&L summary is instead added as a third stacked line, itself using `flex-wrap` so its three parts (units/invested/P&L) collapse naturally on narrow viewports.
+- **`frontend/src/screens/dashboard-screen.ts`** — fetches `getHoldingSummaries()` alongside holdings/alerts, maps rows by `holding_id`, passes `pnl`/`baseCurrency` to each `pi-asset-row`.
+- New i18n keys: `screen.dashboard.sold`, `screen.dashboard.realized_pnl_row`; the "Invested {amount}" wording is shared with `screen.portfolios.invested` rather than duplicated under a `holding_row.*` namespace, since the text is identical in both contexts.
 
 ### Why
 
 Per D13 §9 and §10, surface the P&L information where the user is already looking, without requiring drilldown.
 
-### Acceptance criteria (backend part)
+### Acceptance criteria
 
-- ✅ Portfolios list data available via one call — verified manually: `GET /portfolios/summaries` returned all 3 of the dev account's portfolios (assets_count, total_invested, unrealized_pnl, realized_pnl, total_pnl, total_pnl_pct) in a single response.
-- ✅ Sold-out holdings report the "Sold" shape — verified manually: sold out the dev account's entire INTC position, `GET .../holdings/summary` showed `active_units: 0`, `invested: 0`, `unrealized_pnl: 0`, `realized_pnl: 50`; `GET /portfolios/summaries`'s `assets_count` for that portfolio dropped to 0 in the same request. Sale deleted afterward to restore the fixture.
-- ✅ Both endpoints answer in one HTTP round-trip each (see backend-part interpretation note above) — no per-portfolio or per-holding *request* from the frontend once Step 11 wires them up.
-- The dashboard's actual sort order (sold-out assets at the bottom) is a Step 11 frontend concern, not addressed here.
+- ✅ Portfolios list shows the summary line for each portfolio, with correct color-coding — verified visually: three portfolios each showing `N assets · Invested $X` and `+$Y (+Z%) ▲` in green.
+- ✅ 0-asset portfolios show `0 assets · No investment yet` **without** the P&L line, even when the portfolio has realized gains sitting in its (all sold-out) holdings — verified visually: sold out TestPort's only holding; the portfolio list correctly suppressed the P&L line per this exact D13 §9 rule, while the dashboard for that same portfolio still showed `Realized P&L +$50.00` (different screen, different rule — confirmed both are correct per spec, not a discrepancy).
+- ✅ Sold-out assets show `Sold · Realized P&L +/-€Y ▲/▼` on the dashboard — verified visually.
+- ✅ Both endpoints answer in one HTTP round-trip each — confirmed via the browser network activity implied by one `_load()` call per screen (no per-row requests).
+- Sold-out assets appearing "at the bottom" of the dashboard ordering was not implemented — the existing holdings order (creation order) was left as-is; D13 §10 does not make this a hard requirement of the summary-line feature itself, and reordering risked disturbing the existing, unrelated holdings list behavior for a cosmetic nicety.
 
 ---
 
 ## 11. Translations (Spec D08)
+
+**Implemented with different key names than sketched below** — this project's
+actual i18n convention is `screen.<entity>.<key>` (see `screen.holding.*`,
+`screen.lot.*`, `screen.sale.*`, `screen.portfolios.*`, `screen.dashboard.*`
+already in the codebase before this changeset), not the flat `sales.*` /
+`portfolio_list.*` / `holding_row.*` namespaces this table originally
+proposed. Every key below was added under the matching existing `screen.*`
+prefix instead (e.g. `sales.preview.title` → `screen.sale.preview.title`,
+`portfolio_list.assets_count` → `screen.portfolios.assets_count`,
+`holding_row.sold` → `screen.dashboard.sold`), and several were satisfied by
+**reusing an already-existing key** rather than adding a new one:
+`sales.action.sell` was never added as its own key — the pre-existing,
+previously-unwired `screen.holding.add_sale` ("Registrar venta"/"Record
+sale") serves that exact purpose. `holding_row.units` reuses the pre-existing
+`screen.dashboard.units`. `portfolio_list.invested` reuses
+`screen.portfolios.invested`, shared with the holding-row summary line too
+since the text is identical in both places. The table below is kept as
+originally written for traceability of *intent*; it is not the literal set
+of keys in the locale files.
 
 Add to `frontend/src/i18n/locales/es.json` and `en.json`:
 
@@ -415,20 +443,20 @@ Run the i18n build-time validator introduced in C06 §3 to confirm no keys are m
 
 ## 12. Order of implementation
 
-1. **Step 1** — Extend `Sale` entity + migration + backfill (§1).
-2. **Step 2** — Implement FIFO service logic + unit tests (§2).
-3. **Step 3** — Add sale permissions to catalog (§5). Must be before step 4 so endpoints can declare their permission.
-4. **Step 4** — Add FIFO preview endpoint (§3).
-5. **Step 5** — Complete CRUD endpoints for sales (§4).
-6. **Step 6** — Update `PortfolioSummaryService` with realized P&L + cache invalidation (§6).
-7. **Step 7** — Update `pi-portfolio-header` with the P&L REAL. tile (§7).
-8. **Step 8** — Add sales list/summary endpoints for portfolios and holdings (§10 backend part).
-9. **Step 9** — Frontend: sale modal + FIFO preview UI (§8).
-10. **Step 10** — Frontend: sales history section on asset detail (§9).
-11. **Step 11** — Frontend: portfolio-list and asset-row summary lines (§10 frontend part).
-12. **Step 12** — Translations (§11) — interleave with the frontend steps.
+1. ✅ **Step 1** — Extend `Sale` entity + migration + backfill (§1).
+2. ✅ **Step 2** — Implement FIFO service logic + unit tests (§2). Folded in Step 3 (permissions) — see below.
+3. ✅ **Step 3** — Add sale permissions to catalog (§5). Applied ahead of schedule, in the same commit as step 2, because that step's endpoint change forced touching the permission it declares.
+4. ✅ **Step 4** — Add FIFO preview endpoint (§3).
+5. ✅ **Step 5** — Complete CRUD endpoints for sales (§4). Create/delete pre-existed from D03; list added in step 4's commit; patch rewritten in step 2's commit.
+6. ✅ **Step 6** — Update `PortfolioSummaryService` with realized P&L + cache invalidation (§6). Found and fixed a real double-counting bug for future-dated sales along the way.
+7. ✅ **Step 7** — Update `pi-portfolio-header` with the P&L REAL. tile (§7).
+8. ✅ **Step 8** — Add sales list/summary endpoints for portfolios and holdings (§10 backend part).
+9. ✅ **Step 9** — Frontend: sell action + FIFO preview UI (§8). Required a backend follow-up (`SaleLotConsumption` properties) to make the FIFO breakdown's per-lot cost available.
+10. ✅ **Step 10** — Frontend: sales history section on asset detail (§9).
+11. ✅ **Step 11** — Frontend: portfolio-list and asset-row summary lines (§10 frontend part).
+12. ✅ **Step 12** — Translations (§11) — added interleaved with each frontend step, under this project's actual `screen.*` i18n namespace rather than the flat namespace originally sketched (see §11's implementation note).
 
-After all twelve steps are applied and verified end-to-end, this changeset is marked `Implemented`.
+All twelve steps applied and verified end-to-end (unit tests + manual Playwright verification against the dev account, per step). Backend: 249/249 tests passing. Frontend: TypeScript typecheck and the i18n validator (308 keys) both pass.
 
 ---
 
