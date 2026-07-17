@@ -224,6 +224,8 @@
   "screen.asset.current_price": "Precio actual",
   "screen.asset.market_value": "Valor mercado",
   "screen.asset.unrealized_pl": "P&L latente",
+  "screen.asset.total_gain": "Ganancia total",
+  "screen.asset.total_gain.includes_dividends": "incluye {amount} de dividendos",
   "screen.asset.price_na": "No disponible",
   "screen.asset.refresh_price": "Actualizar precio",
   "screen.asset.edit_asset": "Editar activo",

@@ -224,6 +224,8 @@
   "screen.asset.current_price": "Current price",
   "screen.asset.market_value": "Market value",
   "screen.asset.unrealized_pl": "Unrealized P&L",
+  "screen.asset.total_gain": "Total gain",
+  "screen.asset.total_gain.includes_dividends": "includes {amount} in dividends",
   "screen.asset.price_na": "Unavailable",
   "screen.asset.refresh_price": "Refresh price",
   "screen.asset.edit_asset": "Edit asset",

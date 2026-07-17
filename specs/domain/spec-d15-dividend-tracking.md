@@ -125,6 +125,8 @@ dividend_coverage_years = avg_purchase_price_base / annualized_dividend_per_shar
 
 Computed on demand, never persisted or snapshotted (same treatment as `unrealized_pnl` — it changes whenever `avg_purchase_price_base`, the schedule, or the FX rate changes; no historical value of it is meaningful). Exposed as a new nullable field on the holding-detail response and on `HoldingPnl` (§7), but rendered prominently only on the asset detail screen (Screen 6) next to the existing "AVG Cost" figure — deliberately **not** added to the compact portfolio-list / dashboard row summaries (D13 §9/§10), to avoid cluttering list rows with a secondary metric; those rows already carry three numbers (units, invested, P&L).
 
+**Added in Changeset C23**, user feedback: the asset detail screen's own "Unrealized P&L" tile is price-only (client-side, from the live current price) and had no combined figure of its own — recording a dividend payment there had no visible effect on that same page, even though the portfolio header (C22) and dashboard rows (C21) already reflected it elsewhere. A "Total gain" tile was added next to it: `unrealized_pl + dividends collected on this holding` (quote currency, computed client-side from data already on the page — no new endpoint).
+
 ---
 
 ## 5. Recording flow — declaring/editing the dividend schedule

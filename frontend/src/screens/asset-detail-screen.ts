@@ -512,6 +512,21 @@ export class AssetDetailScreen extends BaseComponent {
     const plClass = pl === null ? '' : pl >= 0 ? 'positive' : 'negative';
     const plSign = pl !== null && pl >= 0 ? '+' : '';
 
+    // Total gain including dividends collected on this holding (D15 follow-up:
+    // "Unrealized P&L" above is deliberately price-only, same as the
+    // portfolio header's "P&L Latente" — this tile is the combined figure
+    // the user actually wants to see at a glance on the asset page).
+    // gross_amount_quote (not _base) matches the currency every other figure
+    // on this screen is already shown in (the asset's quote_currency).
+    const today = new Date().toISOString().slice(0, 10);
+    const dividendTotalQuote = this._dividendPayments
+      .filter((p) => p.payment_date <= today)
+      .reduce((sum, p) => sum + Number(p.gross_amount_quote), 0);
+    const totalGain = pl !== null ? pl + dividendTotalQuote : null;
+    const totalGainPct = totalGain !== null && costBasis > 0 ? (totalGain / costBasis) * 100 : null;
+    const totalGainClass = totalGain === null ? '' : totalGain >= 0 ? 'positive' : 'negative';
+    const totalGainSign = totalGain !== null && totalGain >= 0 ? '+' : '';
+
     const anyLotNotes = lots.some((l) => l.notes);
     const technicalIndicators = this._indicators.filter((ind) => ind.nature === 'technical');
     const fundamentalIndicators = this._indicators.filter((ind) => ind.nature === 'fundamental');
@@ -594,6 +609,14 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-label">${t('screen.asset.unrealized_pl')}</div>
           <div class="summary-value ${plClass}">${pl !== null ? `${plSign}${formatNumber(pl, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</div>
           ${plPct !== null ? `<div class="summary-sub">${plSign}${formatNumber(plPct, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</div>` : ''}
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">${t('screen.asset.total_gain')}</div>
+          <div class="summary-value ${totalGainClass}">${totalGain !== null ? `${totalGainSign}${formatNumber(totalGain, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</div>
+          ${totalGainPct !== null ? `<div class="summary-sub">${totalGainSign}${formatNumber(totalGainPct, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</div>` : ''}
+          ${dividendTotalQuote > 0
+            ? `<div class="summary-sub">${t('screen.asset.total_gain.includes_dividends', { amount: formatCurrency(dividendTotalQuote, a.quote_currency) })}</div>`
+            : ''}
         </div>
       </div>
 
