@@ -135,6 +135,51 @@ class MarketDataService:
             return point
         return await self._market.get_current_price(_provider_symbol(ticker, market, self._provider_name))
 
+    async def refresh_and_store_current_price(
+        self, db: AsyncSession, ticker: str, market: str | None = None
+    ) -> PricePoint:
+        """On-demand live refresh that persists as today's AssetPriceHistory row.
+
+        Used by POST .../price/refresh — the manual refresh used to return a
+        transient value that was never written to AssetPriceHistory, so the
+        old price reappeared as soon as the user left and re-entered the
+        asset detail screen. A same-day manual refresh is allowed to correct
+        today's stored row (unlike the daily job's ON CONFLICT DO NOTHING —
+        D09 §5.3 keeps history immutable *across* days, not within the same
+        day), since it represents a newer, explicit observation than whatever
+        the daily job or a previous refresh wrote for today.
+        """
+        if self._market_cascade is not None:
+            point, provider_name = await self._market_cascade.get_current_price(ticker, market)
+        else:
+            provider_name = self._provider_name
+            point = await self._market.get_current_price(
+                _provider_symbol(ticker, market, self._provider_name)
+            )
+
+        asset = await db.scalar(select(Asset).where(Asset.ticker == ticker))
+        if asset is not None:
+            ins = pg_insert(AssetPriceHistory).values(
+                asset_id=asset.id,
+                as_of_date=point.as_of_date,
+                close_price=point.price,
+                volume=None,
+                provider=provider_name,
+                fetched_at=datetime.now(UTC),
+            )
+            stmt = ins.on_conflict_do_update(
+                constraint="uq_asset_price_date",
+                set_={
+                    "close_price": ins.excluded.close_price,
+                    "provider": ins.excluded.provider,
+                    "fetched_at": ins.excluded.fetched_at,
+                },
+            )
+            await db.execute(stmt)
+            await db.commit()
+
+        return point
+
     # ── FX pair support check ──────────────────────────────────────────────────
 
     async def is_fx_pair_supported(self, quote: str, base: str) -> bool:

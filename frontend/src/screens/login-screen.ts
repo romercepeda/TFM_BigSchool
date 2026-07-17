@@ -2,9 +2,7 @@ import { BaseComponent } from '../components/common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { login, register, guestLogin } from '../api/auth.js';
 import { setAuthState, currentUser } from '../state/auth-state.js';
-import { currentLanguage } from '../state/language-state.js';
 import { navigate, consumeRedirectAfterLogin } from '../router/router.js';
-import { listPortfolios } from '../api/portfolios.js';
 import { ApiError } from '../api/types.js';
 import { required, email as validateEmail, minLength, first } from '../utils/validation.js';
 import type { LoginResponse } from '../api/types.js';
@@ -65,7 +63,6 @@ export class LoginScreen extends BaseComponent {
           color: var(--color-text-secondary); text-decoration: none;
         }
         .home-link:hover { color: var(--color-text-primary); }
-        .lang select { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px; }
       </style>
       <div class="card">
         <div class="top-row">
@@ -73,10 +70,6 @@ export class LoginScreen extends BaseComponent {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             ${t('login.back_to_home')}
           </a>
-          <select id="lang-select">
-            <option value="es" ${currentLanguage.value === 'es' ? 'selected' : ''}>ES</option>
-            <option value="en" ${currentLanguage.value === 'en' ? 'selected' : ''}>EN</option>
-          </select>
         </div>
         <h1>${isRegister ? t('register.title') : t('login.title')}</h1>
         <div class="field">
@@ -123,9 +116,6 @@ export class LoginScreen extends BaseComponent {
     this.shadow.getElementById('home-link')?.addEventListener('click', (e) => {
       e.preventDefault();
       navigate('/');
-    });
-    this.shadow.getElementById('lang-select')?.addEventListener('change', (e) => {
-      currentLanguage.value = (e.target as HTMLSelectElement).value;
     });
     this.shadow.getElementById('submit-btn')?.addEventListener('click', () => void this._doSubmit());
     this.shadow.getElementById('guest-btn')?.addEventListener('click', () => void this._doGuest());
@@ -186,16 +176,10 @@ export class LoginScreen extends BaseComponent {
       const res = await fn();
       setAuthState(res.user, res.session.notifications_poll_interval_seconds, res.session.csrf_token);
       const redirect = consumeRedirectAfterLogin();
-      if (redirect) { navigate(redirect); return; }
-      // Post-login routing (D02 §10)
-      const count = res.session.portfolios_count;
-      if (count === 0) { navigate('/app/portfolios/new'); return; }
-      if (count === 1) {
-        const portfolios = await listPortfolios();
-        navigate(`/app/portfolios/${portfolios[0].id}`);
-      } else {
-        navigate('/app/portfolios');
-      }
+      // Post-login routing: always land on "My Portfolios" first, whether or
+      // not the user has any yet — the list screen already handles the
+      // empty-state with its own "create portfolio" CTA.
+      navigate(redirect ?? '/app/portfolios');
     } catch (ex) {
       if (this._mode === 'register' && ex instanceof ApiError && ex.status === 409) {
         this._emailExists = true;

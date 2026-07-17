@@ -9,4 +9,4 @@
 //
 // This is a standing project convention — see the memory file
 // feedback-app-versioning.md — applied automatically, without being asked again.
-export const APP_VERSION = '1.0.0.6';
+export const APP_VERSION = '1.0.0.7';

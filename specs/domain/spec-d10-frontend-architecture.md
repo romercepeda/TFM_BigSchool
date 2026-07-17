@@ -187,12 +187,9 @@ The router checks `currentUser.value` from `src/state/auth-state.ts` for routes 
 
 ### 6.3 Post-login redirect
 
-Per Spec D01 §6 step 8 and Spec D02 §10, after successful login the router redirects to:
-- `/portfolios` if the user has 2+ active portfolios.
-- `/portfolios/:id` directly if the user has exactly 1 active portfolio.
-- `/portfolios/new` if the user has 0 active portfolios.
+Per Spec D01 §6 step 8 and Spec D02 §10 (corrected by Changeset C21), after successful login the router always redirects to `/app/portfolios` — regardless of how many active portfolios the user has, including 0 (the list screen's empty state carries its own "Create portfolio" CTA). This replaced the original count-based rule (2+ → `/portfolios`, 1 → straight to `/portfolios/:id`, 0 → `/portfolios/new`), which made the landing screen unpredictable.
 
-The decision uses the `GET /me/portfolios` response received right after login.
+A pending deep-link redirect (the user was bounced to `/app/login` from a protected URL) still takes priority over this default when one is set.
 
 ---
 

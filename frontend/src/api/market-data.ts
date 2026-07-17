@@ -27,7 +27,8 @@ export const getAssetPrice  = (ticker: string, exchange?: string | null) => {
 };
 
 // Live re-fetch, on demand — the refresh icon on the asset detail screen's
-// "Current Price" card (Changeset C19). Not persisted (D09 §5.3).
+// "Current Price" card (Changeset C19). Persisted server-side as today's
+// AssetPriceHistory row, so it survives leaving and re-entering the screen.
 export const refreshAssetPrice = (ticker: string, exchange?: string | null) => {
   const qs = exchange ? `?exchange=${encodeURIComponent(exchange)}` : '';
   return post<PricePoint>(`/market-data/assets/${encodeURIComponent(ticker)}/price/refresh${qs}`);
