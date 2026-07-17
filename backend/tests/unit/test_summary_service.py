@@ -61,10 +61,11 @@ def _holding(
     quote_currency: str,
     lots: list[LotSnapshot],
     sales: tuple[tuple[date, Decimal | None], ...] = (),
+    dividends: tuple[tuple[date, Decimal | None], ...] = (),
 ) -> HoldingSnapshot:
     return HoldingSnapshot(
         holding_id=holding_id, asset_id=asset_id, quote_currency=quote_currency, lots=tuple(lots),
-        sales=sales,
+        sales=sales, dividend_payments=dividends,
     )
 
 
@@ -104,6 +105,7 @@ def test_no_holdings_returns_all_zero() -> None:
     assert result.unrealized_pnl_pct == D("0")
     assert result.realized_pnl == D("0")
     assert result.realized_pnl_pct == D("0")
+    assert result.dividend_income == D("0")
     assert result.trend_30d == []
     assert result.computed_at == NOW
     assert result.base_currency == "EUR"
@@ -528,3 +530,101 @@ def test_holding_summaries_return_one_row_per_holding_not_aggregated() -> None:
     assert rows[0].invested == D("1000.00000000")
     assert rows[1].invested == D("250.00000000")
     assert rows[1].unrealized_pnl == D("50.00000000")  # (60-50)*5
+
+
+# ─── dividend_income (Spec D15 §7) ────────────────────────────────────────────
+
+
+def test_dividend_income_zero_when_no_payments() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1"),
+    ])
+    prices = {ASSET_A: _flat_series("100", TODAY - timedelta(days=60), TODAY)}
+
+    result = compute_summary([holding], prices, {}, "EUR", TODAY, NOW)
+
+    assert result.dividend_income == D("0.00000000")
+
+
+def test_dividend_income_sums_payments_across_holdings() -> None:
+    d = TODAY - timedelta(days=5)
+    holding_a = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(LOT_A, purchase_date=date(2025, 1, 1), qty="10", p_buy="10", fx_buy="1")],
+        dividends=((d, D("15")),),
+    )
+    holding_b = _holding(
+        HOLDING_B, ASSET_B, "EUR",
+        [_lot(LOT_B, purchase_date=date(2025, 1, 1), qty="5", p_buy="20", fx_buy="1")],
+        dividends=((d, D("5")),),
+    )
+    prices = {
+        ASSET_A: _flat_series("10", TODAY - timedelta(days=60), TODAY),
+        ASSET_B: _flat_series("20", TODAY - timedelta(days=60), TODAY),
+    }
+
+    result = compute_summary([holding_a, holding_b], prices, {}, "EUR", TODAY, NOW)
+
+    assert result.dividend_income == D("20.00000000")
+
+
+def test_dividend_income_excludes_unknown_gain_and_future_dated_payments() -> None:
+    past = TODAY - timedelta(days=1)
+    future = TODAY + timedelta(days=1)
+    holding = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(purchase_date=date(2025, 1, 1), qty="10", p_buy="10", fx_buy="1")],
+        dividends=((past, D("10")), (past, None), (future, D("999"))),
+    )
+    prices = {ASSET_A: _flat_series("10", TODAY - timedelta(days=60), TODAY)}
+
+    result = compute_summary([holding], prices, {}, "EUR", TODAY, NOW)
+
+    assert result.dividend_income == D("10.00000000")
+
+
+def test_holding_summary_dividend_income_included_in_total_pnl() -> None:
+    d = TODAY - timedelta(days=5)
+    holding = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1")],
+        dividends=((d, D("20")),),
+    )
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)
+
+    assert row.dividend_income == D("20.00000000")
+    assert row.unrealized_pnl == D("100.00000000")
+    assert row.total_pnl == D("120.00000000")  # unrealized + dividend_income, no sales
+
+
+def test_holding_summary_dividend_coverage_years_matches_worked_example() -> None:
+    """Spec D15 §4.2: avg cost EUR8, annual dividend EUR1/share -> 8 years."""
+    from app.db.models.dividend import AssetDividendSchedule
+
+    holding = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(LOT_A, purchase_date=date(2025, 1, 1), qty="1", p_buy="10", fx_buy="1"),
+        _lot(LOT_B, purchase_date=date(2025, 6, 1), qty="1", p_buy="6", fx_buy="1"),
+    ])
+    prices = {ASSET_A: _flat_series("15", TODAY - timedelta(days=60), TODAY)}
+    schedule = AssetDividendSchedule(
+        asset_id=ASSET_A, frequency="annual", amount_per_payment=D("1"),
+    )
+
+    [row] = compute_holding_summaries(
+        [holding], prices, {}, "EUR", TODAY, schedules={ASSET_A: schedule}
+    )
+
+    assert row.dividend_coverage_years == D("8.00")
+
+
+def test_holding_summary_dividend_coverage_years_none_without_schedule() -> None:
+    holding = _holding(HOLDING_A, ASSET_A, "EUR", [
+        _lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1"),
+    ])
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    [row] = compute_holding_summaries([holding], prices, {}, "EUR", TODAY)
+
+    assert row.dividend_coverage_years is None

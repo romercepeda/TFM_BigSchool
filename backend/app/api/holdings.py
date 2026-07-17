@@ -20,6 +20,8 @@ Endpoints:
     DELETE /portfolios/{pid}/holdings/{hid}/sales/{sid}     — delete sale (restores FIFO)
 """
 
+from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -48,7 +50,14 @@ from app.db.models.sale import Sale, SaleLotConsumption
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import asset_service, lot_service, sale_service, summary_cache, summary_service
+from app.services import (
+    asset_service,
+    dividend_service,
+    lot_service,
+    sale_service,
+    summary_cache,
+    summary_service,
+)
 from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
 
@@ -114,6 +123,23 @@ async def _require_portfolio(
 def _build_aggregates(holding: Holding) -> HoldingAggregates:
     agg = lot_service.compute_holding_aggregates(holding.lots)
     return HoldingAggregates(**agg)
+
+
+async def _compute_dividend_coverage(
+    db: AsyncSession, portfolio, holding: Holding, aggregates: HoldingAggregates
+) -> Decimal | None:
+    """Spec D15 §4.4 — coverage indicator for the holding-detail response.
+    Cache-only FX lookup (no live provider call, per Changeset C19).
+    """
+    schedule = await dividend_service.get_schedule(db, holding.asset_id)
+    if schedule is None:
+        return None
+    fx_rate = await summary_service.get_last_known_fx_rate(
+        db, holding.asset.quote_currency, portfolio.base_currency, date.today()
+    )
+    return dividend_service.compute_dividend_coverage_years(
+        aggregates.avg_purchase_price_base, schedule, fx_rate
+    )
 
 
 # ── Holding endpoints ─────────────────────────────────────────────────────────
@@ -267,16 +293,18 @@ async def get_holding(
     db: AsyncSession = Depends(get_db),
 ) -> HoldingDetailResponse:
     """Return holding detail: asset info, all lots, all sales with FIFO breakdown."""
-    await _require_portfolio(portfolio_id, current_user, db)
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
     detail = await lot_service.get_holding_detail(db, holding_id, portfolio_id)
     if detail is None:
         raise _NOT_FOUND_HOLDING
+    aggregates = _build_aggregates(detail)
     return HoldingDetailResponse(
         id=detail.id,
         asset=detail.asset,
         lots=detail.lots,
         sales=detail.sales,
-        aggregates=_build_aggregates(detail),
+        aggregates=aggregates,
+        dividend_coverage_years=await _compute_dividend_coverage(db, portfolio, detail, aggregates),
         created_at=detail.created_at,
         updated_at=detail.updated_at,
     )
@@ -564,6 +592,14 @@ async def create_sale(
 
     await db.commit()
     summary_cache.invalidate(portfolio_id)
+
+    # D15 §5.4 — a dividend reminder for shares no longer owned is
+    # misleading, so drop the marker alert once the position hits zero.
+    remaining = await dividend_service.get_active_units(db, holding_id)
+    if remaining <= 0:
+        await dividend_service.remove_dividend_alert(db, holding_id, holding.asset.ticker)
+        await db.commit()
+
     # Reload with the FIFO breakdown eager-loaded (D13 §6.1).
     result = await db.execute(
         select(Sale)

@@ -28,12 +28,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.portfolio_schemas import PortfolioListSummary, PortfolioSummary, TrendPoint
+from app.db.models.dividend import AssetDividendSchedule
 from app.db.models.holding import Holding
 from app.db.models.lot import Lot
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
 from app.db.models.portfolio import Portfolio
 from app.db.models.sale import SaleLotConsumption
-from app.services import fx_engine, summary_cache
+from app.services import dividend_service, fx_engine, summary_cache
 from app.services.fx_engine import LotCalcInput
 from app.services.portfolio_service import list_portfolios as list_portfolios_query
 
@@ -86,6 +87,11 @@ class HoldingSnapshot:
     # otherwise the same units would count as both still-held (unrealized)
     # and already-sold (realized) on the same day.
     sales: tuple[tuple[date, Decimal | None], ...] = ()
+    # One entry per DividendPayment on this holding: (payment_date,
+    # gross_amount_base). Same None/future-date exclusion rules as `sales`
+    # (Spec D15 par.7, mirrors D13 par.8's rule exactly, same as the bug
+    # C20 par.6 already found and fixed once for sales).
+    dividend_payments: tuple[tuple[date, Decimal | None], ...] = ()
 
 
 # ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -282,6 +288,22 @@ def _compute_realized_totals(holdings: list[HoldingSnapshot], today: date) -> tu
     return _round(realized_pnl), _round(realized_pnl_pct, _Q_RETURN)
 
 
+def _compute_dividend_income(holdings: list[HoldingSnapshot], today: date) -> Decimal:
+    """Spec D15 §7 — sum of gross_amount_base across every DividendPayment in
+    the portfolio, excluding: payments whose base-currency amount couldn't be
+    computed (unresolved FX at creation, same "no invented values" principle
+    as realized_pnl), and payments dated after `today` (mirrors D13/C20 §6's
+    future-dated-sale exclusion exactly, to avoid the same double-counting
+    class of bug for dividends).
+    """
+    dividend_income = _ZERO
+    for holding in holdings:
+        for payment_date, amount in holding.dividend_payments:
+            if amount is not None and payment_date <= today:
+                dividend_income += amount
+    return _round(dividend_income)
+
+
 # ── Per-holding P&L breakdown (Spec D13 §10, Changeset C20 §8) ───────────────
 
 
@@ -301,8 +323,12 @@ class HoldingPnl:
     invested: Decimal
     unrealized_pnl: Decimal
     realized_pnl: Decimal
+    dividend_income: Decimal
     total_pnl: Decimal
     total_pnl_pct: Decimal
+    # Spec D15 §4 — None whenever not computable (no schedule, irregular
+    # frequency, zero dividend/cost-basis, unresolved current FX rate).
+    dividend_coverage_years: Decimal | None
 
 
 def _compute_holding_pnl(
@@ -311,6 +337,7 @@ def _compute_holding_pnl(
     fx_index: dict[tuple[str, str], _SeriesIndex],
     base_currency: str,
     today: date,
+    schedule: AssetDividendSchedule | None,
 ) -> HoldingPnl:
     active_units = sum((_quantity_remaining_at(lot, today) for lot in holding.lots), _ZERO)
 
@@ -319,14 +346,20 @@ def _compute_holding_pnl(
         if gain is not None and sale_date <= today:
             realized_pnl += gain
 
+    dividend_income = _ZERO
+    for payment_date, amount in holding.dividend_payments:
+        if amount is not None and payment_date <= today:
+            dividend_income += amount
+
     invested = _ZERO
     unrealized_pnl = _ZERO
+    fx_rate: Decimal | None = None
 
     price_result = _last_known(price_index.get(holding.asset_id), today)
     if price_result is not None:
         current_price, _price_date = price_result
 
-        fx_rate: Decimal | None = Decimal("1")
+        fx_rate = Decimal("1")
         if holding.quote_currency != base_currency:
             fx_result = _last_known(fx_index.get((holding.quote_currency, base_currency)), today)
             fx_rate = fx_result[0] if fx_result is not None else None
@@ -349,8 +382,16 @@ def _compute_holding_pnl(
             if calc.total_value_base is not None:
                 unrealized_pnl = calc.total_value_base - invested
 
-    total_pnl = unrealized_pnl + realized_pnl
+    total_pnl = unrealized_pnl + realized_pnl + dividend_income
     total_pnl_pct = (total_pnl / invested) if invested > _ZERO else _ZERO
+
+    # D15 §4.1 — avg cost of currently-held units in base currency, derived
+    # the same way as lot_service.compute_holding_aggregates' weighted
+    # average (invested / active_units), without a second lot-level pass.
+    avg_purchase_price_base = (invested / active_units) if active_units > _ZERO else _ZERO
+    dividend_coverage_years = dividend_service.compute_dividend_coverage_years(
+        avg_purchase_price_base, schedule, fx_rate
+    )
 
     return HoldingPnl(
         holding_id=holding.holding_id,
@@ -358,8 +399,10 @@ def _compute_holding_pnl(
         invested=_round(invested),
         unrealized_pnl=_round(unrealized_pnl),
         realized_pnl=_round(realized_pnl),
+        dividend_income=_round(dividend_income),
         total_pnl=_round(total_pnl),
         total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
+        dividend_coverage_years=dividend_coverage_years,
     )
 
 
@@ -369,6 +412,7 @@ def compute_holding_summaries(
     fx_rates: dict[tuple[str, str], _Series],
     base_currency: str,
     today: date,
+    schedules: dict[UUID, AssetDividendSchedule] | None = None,
 ) -> list[HoldingPnl]:
     """Pure entry point for the per-holding dashboard rows (D13 §10) — one
     row per holding, not aggregated. Deliberately not shared code with
@@ -376,11 +420,18 @@ def compute_holding_summaries(
     at different points (per-holding here vs. once at the portfolio sum
     there), so sharing would either change the aggregate's existing,
     already-tested rounding or complicate this simpler per-row path.
+
+    `schedules` is keyed by asset_id (Spec D15 §4.4) — optional so existing
+    callers/tests that don't care about the dividend indicator still work.
     """
     price_index = {asset_id: _build_index(series) for asset_id, series in prices.items()}
     fx_index = {pair: _build_index(series) for pair, series in fx_rates.items()}
+    schedules = schedules or {}
     return [
-        _compute_holding_pnl(holding, price_index, fx_index, base_currency, today)
+        _compute_holding_pnl(
+            holding, price_index, fx_index, base_currency, today,
+            schedules.get(holding.asset_id),
+        )
         for holding in holdings
     ]
 
@@ -399,6 +450,7 @@ def compute_summary(
     clock" rule) so this function is fully deterministic and unit-testable.
     """
     realized_pnl, realized_pnl_pct = _compute_realized_totals(holdings, today)
+    dividend_income = _compute_dividend_income(holdings, today)
 
     if not holdings:
         return PortfolioSummary(
@@ -408,6 +460,7 @@ def compute_summary(
             unrealized_pnl_pct=_ZERO,
             realized_pnl=realized_pnl,
             realized_pnl_pct=realized_pnl_pct,
+            dividend_income=dividend_income,
             trend_30d=[],
             computed_at=now,
             base_currency=base_currency,
@@ -428,6 +481,7 @@ def compute_summary(
         unrealized_pnl_pct=unrealized_pnl_pct,
         realized_pnl=realized_pnl,
         realized_pnl_pct=realized_pnl_pct,
+        dividend_income=dividend_income,
         trend_30d=trend_30d,
         computed_at=now,
         base_currency=base_currency,
@@ -447,6 +501,7 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
             .selectinload(Lot.sale_consumptions)
             .selectinload(SaleLotConsumption.sale),
             selectinload(Holding.sales),  # D13 §8 — realized_pnl aggregate
+            selectinload(Holding.dividend_payments),  # D15 §7 — dividend_income aggregate
         )
     )
     holdings = result.scalars().all()
@@ -476,6 +531,9 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
                 quote_currency=holding.asset.quote_currency,
                 lots=lots,
                 sales=tuple((s.sale_date, s.realized_gain_base) for s in holding.sales),
+                dividend_payments=tuple(
+                    (p.payment_date, p.gross_amount_base) for p in holding.dividend_payments
+                ),
             )
         )
     return snapshots
@@ -584,8 +642,28 @@ async def get_holding_summaries(db: AsyncSession, portfolio: Portfolio) -> list[
     }
     prices = await _fetch_price_series(db, asset_ids, today)
     fx_rates = await _fetch_fx_series(db, pairs, today)
+    schedules = await dividend_service.get_schedules_for_assets(db, asset_ids)
 
-    return compute_holding_summaries(holdings, prices, fx_rates, portfolio.base_currency, today)
+    return compute_holding_summaries(
+        holdings, prices, fx_rates, portfolio.base_currency, today, schedules
+    )
+
+
+async def get_last_known_fx_rate(
+    db: AsyncSession, quote_currency: str, base_currency: str, as_of: date
+) -> Decimal | None:
+    """Cache-only FX lookup (Spec D15 §4.1) — the latest known rate with
+    as_of_date <= as_of, reusing the same _last_known() pattern as the rest
+    of this module. Deliberately does NOT call the live provider: per
+    Changeset C19, a GET must not trigger a live network fetch on every page
+    view. Same-currency pairs return 1 without a query.
+    """
+    if quote_currency == base_currency:
+        return Decimal("1")
+    series = await _fetch_fx_series(db, {(quote_currency, base_currency)}, as_of)
+    index = _build_index(series.get((quote_currency, base_currency), []))
+    result = _last_known(index, as_of)
+    return result[0] if result is not None else None
 
 
 async def _fetch_active_holdings_count(
@@ -641,7 +719,7 @@ async def get_portfolio_list_summaries(
     results = []
     for portfolio in portfolios:
         summary = await get_summary(db, portfolio, user_id)
-        total_pnl = summary.unrealized_pnl + summary.realized_pnl
+        total_pnl = summary.unrealized_pnl + summary.realized_pnl + summary.dividend_income
         total_pnl_pct = (
             (total_pnl / summary.total_invested) if summary.total_invested > _ZERO else _ZERO
         )
@@ -654,6 +732,7 @@ async def get_portfolio_list_summaries(
             total_invested=summary.total_invested,
             unrealized_pnl=summary.unrealized_pnl,
             realized_pnl=summary.realized_pnl,
+            dividend_income=summary.dividend_income,
             total_pnl=_round(total_pnl),
             total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
         ))

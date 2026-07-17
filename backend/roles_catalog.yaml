@@ -97,6 +97,26 @@ permissions:
     name_key: "permission.date_alert.delete.name"
     description_key: "permission.date_alert.delete.description"
 
+  # ── dividend (Spec D15) ─────────────────────────────────────────────────────
+  - code: dividend.schedule.view
+    name_key: "permission.dividend.schedule.view.name"
+    description_key: "permission.dividend.schedule.view.description"
+  - code: dividend.schedule.edit
+    name_key: "permission.dividend.schedule.edit.name"
+    description_key: "permission.dividend.schedule.edit.description"
+  - code: dividend.payment.view
+    name_key: "permission.dividend.payment.view.name"
+    description_key: "permission.dividend.payment.view.description"
+  - code: dividend.payment.create
+    name_key: "permission.dividend.payment.create.name"
+    description_key: "permission.dividend.payment.create.description"
+  - code: dividend.payment.edit_notes
+    name_key: "permission.dividend.payment.edit_notes.name"
+    description_key: "permission.dividend.payment.edit_notes.description"
+  - code: dividend.payment.delete
+    name_key: "permission.dividend.payment.delete.name"
+    description_key: "permission.dividend.payment.delete.description"
+
   # ── analysis (Spec D07) ─────────────────────────────────────────────────────
   - code: analysis.upload
     name_key: "permission.analysis.upload.name"
@@ -195,6 +215,12 @@ roles:
       - date_alert.create
       - date_alert.edit
       - date_alert.delete
+      - dividend.schedule.view
+      - dividend.schedule.edit
+      - dividend.payment.view
+      - dividend.payment.create
+      - dividend.payment.edit_notes
+      - dividend.payment.delete
       - analysis.upload
       - analysis.view
       - analysis.edit
@@ -244,6 +270,12 @@ roles:
       - date_alert.create
       - date_alert.edit
       - date_alert.delete
+      - dividend.schedule.view
+      - dividend.schedule.edit
+      - dividend.payment.view
+      - dividend.payment.create
+      - dividend.payment.edit_notes
+      - dividend.payment.delete
       - analysis.upload
       - analysis.view
       - analysis.edit

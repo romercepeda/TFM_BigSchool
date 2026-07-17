@@ -107,13 +107,16 @@ export interface PortfolioSummary {
   unrealized_pnl_pct: string;
   realized_pnl: string;
   realized_pnl_pct: string;
+  // Spec D15 §7 — sum of received dividend cash, in base currency.
+  dividend_income: string;
   trend_30d: TrendPoint[];
   computed_at: string;
   base_currency: string;
 }
 
-// Portfolios-list summary row (Spec D13 §9) — one per portfolio, fetched in
-// a single call so the list screen doesn't fire one request per portfolio.
+// Portfolios-list summary row (Spec D13 §9, extended by D15 §7.2) — one per
+// portfolio, fetched in a single call so the list screen doesn't fire one
+// request per portfolio.
 export interface PortfolioListSummary {
   id: string;
   name: string;
@@ -123,19 +126,24 @@ export interface PortfolioListSummary {
   total_invested: string;
   unrealized_pnl: string;
   realized_pnl: string;
+  dividend_income: string;
   total_pnl: string;
   total_pnl_pct: string;
 }
 
-// Per-holding dashboard row (Spec D13 §10).
+// Per-holding dashboard row (Spec D13 §10, extended by D15 §7).
 export interface HoldingPnl {
   holding_id: string;
   active_units: string;
   invested: string;
   unrealized_pnl: string;
   realized_pnl: string;
+  dividend_income: string;
   total_pnl: string;
   total_pnl_pct: string;
+  // Spec D15 §4 — null when not computable (no schedule, irregular
+  // frequency, zero dividend/cost-basis, unresolved current FX rate).
+  dividend_coverage_years: string | null;
 }
 
 // ── Holdings ──────────────────────────────────────────────────────────────────
@@ -165,6 +173,8 @@ export interface Holding {
   sale_count?: number;
   lots?: Lot[];
   sales?: Sale[];
+  // Spec D15 §4.4 — only populated on the single-holding detail response.
+  dividend_coverage_years?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -442,6 +452,38 @@ export interface CascadeFailureEntryOut {
 export interface CascadeFailureListResponse {
   items: CascadeFailureEntryOut[];
   total: number;
+}
+
+// ── Dividend Tracking (Spec D15) ────────────────────────────────────────────
+
+export type DividendFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'irregular';
+
+// Asset-scoped declared dividend policy (D15 §3.1) — shared reference data,
+// one row per asset, edited in place.
+export interface DividendSchedule {
+  id: string;
+  asset_id: string;
+  frequency: DividendFrequency;
+  amount_per_payment: string;
+  next_payment_date: string | null;
+  origin: 'manual' | 'auto';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Holding-scoped record of an actual dividend cash payment received (D15 §3.2).
+export interface DividendPayment {
+  id: string;
+  holding_id: string;
+  payment_date: string;
+  gross_amount_quote: string;
+  fx_rate_at_payment: string | null;
+  fx_rate_origin: string;
+  gross_amount_base: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── API Error ─────────────────────────────────────────────────────────────────

@@ -6,6 +6,10 @@ import { getHolding, deleteHolding, addLot, updateLot, deleteLot, updateAsset } 
 import type { AddLotBody } from '../api/holdings.js';
 import { previewSale, createSale, updateSaleReason, deleteSale } from '../api/sales.js';
 import type { SaleIn } from '../api/sales.js';
+import {
+  getDividendSchedule, upsertDividendSchedule, deleteDividendSchedule,
+  listDividendPayments, createDividendPayment, updateDividendPaymentNotes, deleteDividendPayment,
+} from '../api/dividends.js';
 import { getPortfolio } from '../api/portfolios.js';
 import { listIndicators, getAssetIndicators } from '../api/indicators.js';
 import { getAssetPrice, refreshAssetPrice } from '../api/market-data.js';
@@ -13,7 +17,10 @@ import { listPriceLevels, deletePriceLevel, markAlertSeen } from '../api/price-l
 import { listDateAlerts, deleteDateAlert, markDateAlertSeen } from '../api/date-alerts.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
-import type { Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert, Sale, SalePreview } from '../api/types.js';
+import type {
+  Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert, Sale, SalePreview,
+  DividendSchedule, DividendPayment, DividendFrequency,
+} from '../api/types.js';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../utils/format.js';
 
 interface LotForm { date: string; qty: string; price: string; notes: string; }
@@ -28,6 +35,16 @@ const emptySaleForm = (): SaleForm => ({
 });
 
 const SALE_PREVIEW_DEBOUNCE_MS = 300;
+
+interface ScheduleForm { frequency: DividendFrequency; amount: string; nextDate: string; notes: string; }
+
+const emptyScheduleForm = (): ScheduleForm => ({ frequency: 'annual', amount: '', nextDate: '', notes: '' });
+
+interface PaymentForm { date: string; amount: string; notes: string; }
+
+const emptyPaymentForm = (): PaymentForm => ({
+  date: new Date().toISOString().slice(0, 10), amount: '', notes: '',
+});
 
 export class AssetDetailScreen extends BaseComponent {
   private _portfolioId = '';
@@ -83,6 +100,27 @@ export class AssetDetailScreen extends BaseComponent {
   private _confirmDeleteSaleId: string | null = null;
   private _deleteSaleError = '';
 
+  // Dividend tracking (Spec D15)
+  private _dividendSchedule: DividendSchedule | null = null;
+  private _dividendPayments: DividendPayment[] = [];
+
+  // Dividend schedule form (D15 §5.2)
+  private _editingSchedule = false;
+  private _scheduleForm: ScheduleForm = emptyScheduleForm();
+  private _scheduleError = '';
+  private _confirmDeleteSchedule = false;
+
+  // Dividend payment form (D15 §6.2)
+  private _addingPayment = false;
+  private _paymentForm: PaymentForm = emptyPaymentForm();
+  private _paymentError = '';
+
+  // Dividend payment history (D15 §6.3)
+  private _editPaymentNotesId: string | null = null;
+  private _editPaymentNotesValue = '';
+  private _confirmDeletePaymentId: string | null = null;
+  private _deletePaymentError = '';
+
   set params(p: RouteParams) {
     this._portfolioId = p['portfolioId'] ?? '';
     this._holdingId   = p['holdingId'] ?? '';
@@ -100,6 +138,11 @@ export class AssetDetailScreen extends BaseComponent {
     this._expandedSaleId = null;
     this._editSaleReasonId = null;
     this._confirmDeleteSaleId = null;
+    this._editingSchedule = false;
+    this._confirmDeleteSchedule = false;
+    this._addingPayment = false;
+    this._editPaymentNotesId = null;
+    this._confirmDeletePaymentId = null;
     this.shadow.innerHTML = this.render();
 
     try {
@@ -118,13 +161,16 @@ export class AssetDetailScreen extends BaseComponent {
     const ticker = this._holding.asset.ticker;
     const assetId = this._holding.asset.id;
 
-    const [indResult, priceResult, levelsResult, dateAlertsResult, portfolioResult] = await Promise.allSettled([
-      Promise.all([listIndicators(), getAssetIndicators(assetId)]),
-      getAssetPrice(ticker, this._holding.asset.market),
-      listPriceLevels(this._portfolioId, this._holdingId),
-      listDateAlerts(this._portfolioId, this._holdingId),
-      getPortfolio(this._portfolioId),
-    ]);
+    const [indResult, priceResult, levelsResult, dateAlertsResult, portfolioResult, scheduleResult, paymentsResult] =
+      await Promise.allSettled([
+        Promise.all([listIndicators(), getAssetIndicators(assetId)]),
+        getAssetPrice(ticker, this._holding.asset.market),
+        listPriceLevels(this._portfolioId, this._holdingId),
+        listDateAlerts(this._portfolioId, this._holdingId),
+        getPortfolio(this._portfolioId),
+        getDividendSchedule(assetId),
+        listDividendPayments(this._portfolioId, this._holdingId),
+      ]);
 
     if (indResult.status === 'fulfilled') {
       const [allInds, histories] = indResult.value;
@@ -138,6 +184,10 @@ export class AssetDetailScreen extends BaseComponent {
     if (levelsResult.status === 'fulfilled') this._priceLevels = levelsResult.value;
     if (dateAlertsResult.status === 'fulfilled') this._dateAlerts = dateAlertsResult.value;
     if (portfolioResult.status === 'fulfilled') this._baseCurrency = portfolioResult.value.base_currency;
+    // scheduleResult rejects with a 404 when the asset has no declared
+    // schedule yet (Spec D15 §3.1) — not an error state for this screen.
+    this._dividendSchedule = scheduleResult.status === 'fulfilled' ? scheduleResult.value : null;
+    if (paymentsResult.status === 'fulfilled') this._dividendPayments = paymentsResult.value;
     this._priceLoading = false;
 
     this.shadow.innerHTML = this.render();
@@ -506,6 +556,13 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-sub">${a.quote_currency} / ${t('screen.asset.unit')}</div>
         </div>
         <div class="summary-card">
+          <div class="summary-label">${t('screen.dividend.coverage_years')}</div>
+          <div class="summary-value">${h.dividend_coverage_years != null
+            ? formatNumber(Number(h.dividend_coverage_years), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '—'}</div>
+          <div class="summary-sub">${t('screen.dividend.years')}</div>
+        </div>
+        <div class="summary-card">
           <div class="summary-label-row">
             <div class="summary-label">${t('screen.asset.current_price')}</div>
             <button
@@ -595,6 +652,8 @@ export class AssetDetailScreen extends BaseComponent {
       </div>
 
       ${this._renderSalesHistory(sales, a.quote_currency)}
+
+      ${this._renderDividendsSection(a.quote_currency)}
 
       ${this._indicators.length > 0 ? `
       <div class="section">
@@ -883,6 +942,158 @@ export class AssetDetailScreen extends BaseComponent {
     `;
   }
 
+  // ── Dividend tracking (Spec D15) ─────────────────────────────────────────────
+
+  private _renderDividendsSection(quoteCurrency: string): string {
+    const schedule = this._dividendSchedule;
+    const payments = [...this._dividendPayments].sort((a, b) => b.payment_date.localeCompare(a.payment_date));
+    return `
+      <div class="section boxed-section">
+        <div class="section-title">
+          ${t('screen.dividend.schedule.title')}
+          <button class="btn-xs" id="${schedule ? 'edit-schedule-btn' : 'add-schedule-btn'}">
+            ${schedule ? t('screen.dividend.schedule.edit') : t('screen.dividend.schedule.declare')}
+          </button>
+        </div>
+        ${this._editingSchedule ? this._renderScheduleForm() : this._renderScheduleSummary(schedule, quoteCurrency)}
+
+        <div class="section-title" style="margin-top:var(--space-5);">
+          ${t('screen.dividend.payments.title')} · ${payments.length}
+          <button class="btn-xs" id="add-payment-btn">${t('screen.dividend.payments.add')}</button>
+        </div>
+        ${this._addingPayment ? this._renderAddPaymentForm() : ''}
+        ${payments.length === 0 && !this._addingPayment
+          ? `<div class="empty-state">${t('screen.dividend.payments.empty')}</div>`
+          : payments.length > 0
+            ? `<div class="table-wrap"><table class="table">
+                <thead><tr>
+                  <th>${t('screen.dividend.payments.date')}</th>
+                  <th class="num">${t('screen.dividend.payments.gross_amount')}</th>
+                  <th>${t('screen.sale.reason')}</th>
+                  <th class="act"></th>
+                </tr></thead>
+                <tbody>
+                  ${payments.map((p) => this._renderPaymentRow(p, quoteCurrency)).join('')}
+                </tbody>
+              </table></div>`
+            : ''}
+      </div>
+    `;
+  }
+
+  private _renderScheduleSummary(schedule: DividendSchedule | null, quoteCurrency: string): string {
+    if (!schedule) return `<div class="empty-state">${t('screen.dividend.schedule.empty')}</div>`;
+    return `
+      <div style="font-size:var(--font-size-sm);display:flex;flex-direction:column;gap:var(--space-1);">
+        <div><strong>${t('screen.dividend.schedule.frequency')}:</strong> ${t('screen.dividend.frequency.' + schedule.frequency)}</div>
+        <div><strong>${t('screen.dividend.schedule.amount')}:</strong> ${formatCurrency(Number(schedule.amount_per_payment), quoteCurrency)} / ${t('screen.asset.unit')}</div>
+        <div><strong>${t('screen.dividend.schedule.next_payment')}:</strong> ${schedule.next_payment_date ? this._fmt(schedule.next_payment_date) : '—'}</div>
+        ${schedule.notes ? `<div><strong>${t('screen.sale.reason')}:</strong> ${schedule.notes}</div>` : ''}
+        <div style="margin-top:var(--space-1);">
+          ${this._confirmDeleteSchedule
+            ? `<span class="confirm-label">${t('screen.dividend.schedule.delete.confirm')}</span>
+               <button class="btn-xs-danger" id="do-delete-schedule-btn">${t('common.button.confirm')}</button>
+               <button class="btn-xs" id="cancel-delete-schedule-btn">${t('common.button.cancel')}</button>`
+            : `<button class="btn-xs-danger" id="delete-schedule-btn">${t('common.button.delete')}</button>`}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderScheduleForm(): string {
+    const f = this._scheduleForm;
+    const frequencies: DividendFrequency[] = ['monthly', 'quarterly', 'semiannual', 'annual', 'irregular'];
+    return `
+      <div class="form-row" style="flex-direction:column;gap:var(--space-3);align-items:stretch;">
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.frequency')}</label>
+            <select class="form-input" id="schedule-frequency">
+              ${frequencies.map((fr) => `<option value="${fr}" ${f.frequency === fr ? 'selected' : ''}>${t('screen.dividend.frequency.' + fr)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.amount')}</label>
+            <input class="form-input" id="schedule-amount" type="number" step="any" min="0" value="${f.amount}" style="width:100px" />
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.next_payment')}</label>
+            <input class="form-input" id="schedule-next-date" type="date" value="${f.nextDate}" />
+          </div>
+          <div class="form-field" style="flex:1;min-width:180px;">
+            <label class="form-label">${t('screen.sale.reason')}</label>
+            <input class="form-input" id="schedule-notes" type="text" value="${f.notes}" style="width:100%" />
+          </div>
+          <div class="form-actions">
+            <button class="btn-xs-primary" id="save-schedule-btn">${t('common.button.save')}</button>
+            <button class="btn-xs" id="cancel-schedule-btn">${t('common.button.cancel')}</button>
+          </div>
+        </div>
+        ${this._scheduleError ? `<div class="form-error">${this._scheduleError}</div>` : ''}
+      </div>
+    `;
+  }
+
+  private _renderAddPaymentForm(): string {
+    const f = this._paymentForm;
+    return `
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">${t('screen.dividend.payments.date')}</label>
+          <input class="form-input" id="payment-date" type="date" value="${f.date}" />
+        </div>
+        <div class="form-field">
+          <label class="form-label">${t('screen.dividend.payments.gross_amount')}</label>
+          <input class="form-input" id="payment-amount" type="number" step="any" min="0" value="${f.amount}" style="width:100px" />
+        </div>
+        <div class="form-field" style="flex:1;min-width:160px;">
+          <label class="form-label">${t('screen.sale.reason')}</label>
+          <input class="form-input" id="payment-notes" type="text" value="${f.notes}" style="width:100%" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-xs-primary" id="save-payment-btn">${t('common.button.save')}</button>
+          <button class="btn-xs" id="cancel-payment-btn">${t('common.button.cancel')}</button>
+        </div>
+      </div>
+      ${this._paymentError ? `<div class="form-error">${this._paymentError}</div>` : ''}
+    `;
+  }
+
+  private _renderPaymentRow(p: DividendPayment, quoteCurrency: string): string {
+    if (this._confirmDeletePaymentId === p.id) {
+      return `<tr>
+        <td colspan="4">
+          <div class="confirm-row">
+            <span class="confirm-label">${t('screen.dividend.payments.delete.confirm')}</span>
+            <button class="btn-xs-danger" data-do-delete-payment="${p.id}">${t('common.button.confirm')}</button>
+            <button class="btn-xs" data-cancel-delete-payment="${p.id}">${t('common.button.cancel')}</button>
+            ${this._deletePaymentError ? `<span style="color:var(--color-danger);font-size:var(--font-size-xs)">${this._deletePaymentError}</span>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    const editing = this._editPaymentNotesId === p.id;
+    const reason = p.notes ?? '';
+
+    return `<tr>
+      <td>${this._fmt(p.payment_date)}</td>
+      <td class="num">${formatCurrency(Number(p.gross_amount_quote), quoteCurrency)}</td>
+      <td class="reason-cell" title="${reason}">
+        ${editing
+          ? `<input class="form-input" id="edit-payment-notes-input" type="text" value="${this._editPaymentNotesValue}" style="width:160px" />`
+          : (reason || '—')}
+      </td>
+      <td class="num lot-actions">
+        ${editing
+          ? `<button class="btn-xs-primary" data-save-payment-notes="${p.id}">${t('common.button.save')}</button>
+             <button class="btn-xs" id="cancel-edit-payment-notes-btn">${t('common.button.cancel')}</button>`
+          : `<button class="btn-xs" data-edit-payment-notes="${p.id}" data-current-notes="${reason}">${t('screen.sale.edit_reason')}</button>
+             <button class="btn-xs-danger" data-delete-payment="${p.id}">${t('common.button.delete')}</button>`}
+      </td>
+    </tr>`;
+  }
+
   protected afterRender(): void {
     const pid = this._portfolioId, hid = this._holdingId;
     this.shadow.getElementById('levels-btn')?.addEventListener('click', () =>
@@ -1094,6 +1305,210 @@ export class AssetDetailScreen extends BaseComponent {
     this.shadow.querySelectorAll<HTMLElement>('[data-save-sale-reason]').forEach((btn) => {
       btn.addEventListener('click', () => void this._doSaveSaleReason(btn.dataset['saveSaleReason']!));
     });
+
+    // Dividend schedule (Spec D15 §5.2)
+    this.shadow.getElementById('add-schedule-btn')?.addEventListener('click', () => {
+      this._editingSchedule = true;
+      this._scheduleForm = emptyScheduleForm();
+      this._scheduleError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#schedule-amount')?.focus();
+    });
+    this.shadow.getElementById('edit-schedule-btn')?.addEventListener('click', () => {
+      const s = this._dividendSchedule;
+      this._editingSchedule = true;
+      this._scheduleForm = s
+        ? { frequency: s.frequency, amount: s.amount_per_payment, nextDate: s.next_payment_date ?? '', notes: s.notes ?? '' }
+        : emptyScheduleForm();
+      this._scheduleError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#schedule-amount')?.focus();
+    });
+    this.shadow.getElementById('cancel-schedule-btn')?.addEventListener('click', () => {
+      this._editingSchedule = false;
+      this._scheduleError = '';
+      this._rerender();
+    });
+    this.shadow.getElementById('save-schedule-btn')?.addEventListener('click', () => void this._doSaveSchedule());
+    ['schedule-frequency', 'schedule-amount', 'schedule-next-date', 'schedule-notes'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => {
+        this._scheduleForm = {
+          frequency: ((this.shadow.getElementById('schedule-frequency') as HTMLSelectElement)?.value as DividendFrequency) ?? 'annual',
+          amount: (this.shadow.getElementById('schedule-amount') as HTMLInputElement)?.value ?? '',
+          nextDate: (this.shadow.getElementById('schedule-next-date') as HTMLInputElement)?.value ?? '',
+          notes: (this.shadow.getElementById('schedule-notes') as HTMLInputElement)?.value ?? '',
+        };
+      });
+    });
+    this.shadow.getElementById('delete-schedule-btn')?.addEventListener('click', () => {
+      this._confirmDeleteSchedule = true;
+      this._rerender();
+    });
+    this.shadow.getElementById('do-delete-schedule-btn')?.addEventListener('click', () => void this._doDeleteSchedule());
+    this.shadow.getElementById('cancel-delete-schedule-btn')?.addEventListener('click', () => {
+      this._confirmDeleteSchedule = false;
+      this._rerender();
+    });
+
+    // Dividend payments (Spec D15 §6)
+    this.shadow.getElementById('add-payment-btn')?.addEventListener('click', () => {
+      this._addingPayment = !this._addingPayment;
+      this._paymentForm = emptyPaymentForm();
+      this._paymentError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#payment-date')?.focus();
+    });
+    this.shadow.getElementById('save-payment-btn')?.addEventListener('click', () => void this._doAddPayment());
+    this.shadow.getElementById('cancel-payment-btn')?.addEventListener('click', () => {
+      this._addingPayment = false;
+      this._paymentError = '';
+      this._rerender();
+    });
+    this._bindPaymentFormInputs();
+
+    this.shadow.querySelectorAll<HTMLElement>('[data-edit-payment-notes]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._editPaymentNotesId = btn.dataset['editPaymentNotes']!;
+        this._editPaymentNotesValue = btn.dataset['currentNotes'] ?? '';
+        this._rerender();
+        this.shadow.querySelector<HTMLInputElement>('#edit-payment-notes-input')?.focus();
+      });
+    });
+    this.shadow.getElementById('cancel-edit-payment-notes-btn')?.addEventListener('click', () => {
+      this._editPaymentNotesId = null;
+      this._rerender();
+    });
+    this.shadow.getElementById('edit-payment-notes-input')?.addEventListener('input', () => {
+      this._editPaymentNotesValue = (this.shadow.getElementById('edit-payment-notes-input') as HTMLInputElement)?.value ?? '';
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-save-payment-notes]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doSavePaymentNotes(btn.dataset['savePaymentNotes']!));
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeletePaymentId = btn.dataset['deletePayment']!;
+        this._deletePaymentError = '';
+        this._rerender();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-do-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doDeletePayment(btn.dataset['doDeletePayment']!));
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-cancel-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeletePaymentId = null;
+        this._deletePaymentError = '';
+        this._rerender();
+      });
+    });
+  }
+
+  private _bindPaymentFormInputs(): void {
+    const read = (): PaymentForm => ({
+      date: (this.shadow.getElementById('payment-date') as HTMLInputElement)?.value ?? '',
+      amount: (this.shadow.getElementById('payment-amount') as HTMLInputElement)?.value ?? '',
+      notes: (this.shadow.getElementById('payment-notes') as HTMLInputElement)?.value ?? '',
+    });
+    ['payment-date', 'payment-amount', 'payment-notes'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => { this._paymentForm = read(); });
+    });
+  }
+
+  private async _reloadDividendData(): Promise<void> {
+    if (!this._holding) return;
+    const [scheduleResult, paymentsResult] = await Promise.allSettled([
+      getDividendSchedule(this._holding.asset.id),
+      listDividendPayments(this._portfolioId, this._holdingId),
+    ]);
+    this._dividendSchedule = scheduleResult.status === 'fulfilled' ? scheduleResult.value : null;
+    if (paymentsResult.status === 'fulfilled') this._dividendPayments = paymentsResult.value;
+  }
+
+  private async _doSaveSchedule(): Promise<void> {
+    if (!this._holding) return;
+    const f = this._scheduleForm;
+    if (!f.amount || Number(f.amount) <= 0) {
+      this._scheduleError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    try {
+      await upsertDividendSchedule(this._holding.asset.id, {
+        frequency: f.frequency,
+        amount_per_payment: Number(f.amount),
+        next_payment_date: f.nextDate || null,
+        notes: f.notes || undefined,
+      });
+      this._editingSchedule = false;
+      this._scheduleError = '';
+      await this._reloadDividendData();
+      // Schedule changes affect the coverage-years indicator (Spec D15 §4),
+      // which lives on the holding-detail response — reload it too.
+      await this._reloadHolding();
+    } catch (ex) {
+      this._scheduleError = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doDeleteSchedule(): Promise<void> {
+    if (!this._holding) return;
+    try {
+      await deleteDividendSchedule(this._holding.asset.id);
+      this._confirmDeleteSchedule = false;
+      await this._reloadDividendData();
+      await this._reloadHolding();
+    } catch (ex) {
+      this._error = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doAddPayment(): Promise<void> {
+    const f = this._paymentForm;
+    if (!f.date || !f.amount || Number(f.amount) <= 0) {
+      this._paymentError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    try {
+      await createDividendPayment(this._portfolioId, this._holdingId, {
+        payment_date: f.date,
+        gross_amount_quote: Number(f.amount),
+        fx_rate_origin: 'auto',
+        notes: f.notes || undefined,
+      });
+      this._addingPayment = false;
+      this._paymentForm = emptyPaymentForm();
+      this._paymentError = '';
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._paymentError = (ex as Error).message;
+    }
+    this._rerender();
+  }
+
+  private async _doDeletePayment(paymentId: string): Promise<void> {
+    try {
+      await deleteDividendPayment(this._portfolioId, this._holdingId, paymentId);
+      this._confirmDeletePaymentId = null;
+      this._deletePaymentError = '';
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._deletePaymentError = (ex as Error).message;
+    }
+    this._rerender();
+  }
+
+  private async _doSavePaymentNotes(paymentId: string): Promise<void> {
+    try {
+      await updateDividendPaymentNotes(this._portfolioId, this._holdingId, paymentId, this._editPaymentNotesValue);
+      this._editPaymentNotesId = null;
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._error = (ex as Error).message;
+    }
+    this._rerender();
   }
 
   private _bindSellFormInputs(): void {

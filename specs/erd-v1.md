@@ -18,6 +18,7 @@ erDiagram
 
     Asset ||--o{ Holding : "referenced by (D03 §3.2)"
     Asset ||--o{ AssetPriceHistory : "has prices (D09 §5.1)"
+    Asset ||--o| AssetDividendSchedule : "declares (D15 §3.1)"
 
     Holding ||--o{ Lot : "made of (D03 §3.3)"
     Holding ||--o{ Sale : "and sales (D03 §3.4)"
@@ -25,6 +26,7 @@ erDiagram
     Holding ||--o{ PriceLevelHistoryEntry : "analysis history (D06 §4)"
     Holding ||--o{ AnalysisJob : "PDF analyses (D07 §6)"
     Holding ||--o{ AnalysisReport : "analysis results (D07 §8.2)"
+    Holding ||--o{ DividendPayment : "receives (D15 §3.2)"
 
     Lot ||--o{ SaleLotConsumption : "consumed by (D03 §3.5)"
     Sale ||--|{ SaleLotConsumption : "consumes lots FIFO (D03 §7.2)"
@@ -109,6 +111,31 @@ erDiagram
         UUID sale_id FK
         UUID lot_id FK
         NUMERIC quantity_consumed "> 0"
+    }
+
+    AssetDividendSchedule {
+        UUID id PK
+        UUID asset_id FK "unique, one schedule per asset"
+        enum frequency "monthly|quarterly|semiannual|annual|irregular"
+        NUMERIC amount_per_payment "gross, in quote currency"
+        date next_payment_date "nullable, best estimate"
+        enum origin "manual|auto, manual-only in v1"
+        text notes
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DividendPayment {
+        UUID id PK
+        UUID holding_id FK
+        date payment_date
+        NUMERIC gross_amount_quote "total gross received, in quote currency"
+        NUMERIC fx_rate_at_payment "null if manual_pending"
+        enum fx_rate_origin "auto|manual|corrected|manual_pending"
+        NUMERIC gross_amount_base "immutable once computed"
+        text notes
+        timestamp created_at
+        timestamp updated_at
     }
 
     Indicator {

@@ -202,12 +202,18 @@ class HoldingSummaryResponse(BaseModel):
 
 
 class HoldingDetailResponse(BaseModel):
-    """Full detail view: asset + all lots + all sales."""
+    """Full detail view: asset + all lots + all sales.
+
+    dividend_coverage_years (Spec D15 §4) is None whenever no schedule is
+    declared for the asset, the schedule's frequency is 'irregular', the
+    declared amount is zero, or the current FX rate is unresolved.
+    """
     id: UUID
     asset: AssetResponse
     lots: list[LotResponse]
     sales: list[SaleResponse]
     aggregates: HoldingAggregates
+    dividend_coverage_years: Decimal | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -215,16 +221,21 @@ class HoldingDetailResponse(BaseModel):
 
 
 class HoldingPnlResponse(BaseModel):
-    """One row for the portfolio dashboard's asset list (Spec D13 §10) — units
-    held, currently-invested cost basis, and combined P&L for this specific
-    holding. active_units == 0 signals a fully-sold holding: the frontend
-    renders "Sold · Realized P&L" and ignores invested/total_pnl_pct for it
-    (both read as zero in that case, per summary_service.compute_holding_summaries).
+    """One row for the portfolio dashboard's asset list (Spec D13 §10,
+    extended by D15 §7) — units held, currently-invested cost basis, and
+    combined P&L for this specific holding. active_units == 0 signals a
+    fully-sold holding: the frontend renders "Sold · Realized P&L" and
+    ignores invested/total_pnl_pct for it (both read as zero in that case,
+    per summary_service.compute_holding_summaries). dividend_income is this
+    holding's share of received dividend cash (D15 §7); dividend_coverage_years
+    is the D15 §4 indicator, None when not computable.
     """
     holding_id: UUID
     active_units: Decimal
     invested: Decimal
     unrealized_pnl: Decimal
     realized_pnl: Decimal
+    dividend_income: Decimal
     total_pnl: Decimal
     total_pnl_pct: Decimal
+    dividend_coverage_years: Decimal | None = None
