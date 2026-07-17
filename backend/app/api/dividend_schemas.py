@@ -15,14 +15,23 @@ from app.api.d03_schemas import FxRateOrigin
 
 DividendFrequency = Literal["monthly", "quarterly", "semiannual", "annual", "irregular"]
 DividendScheduleOrigin = Literal["manual", "auto"]
+DividendAmountType = Literal["nominal", "percentage"]
 
 
 # ── AssetDividendSchedule schemas (D15 §3.1, §5.2) ────────────────────────────
 
 
 class DividendScheduleIn(BaseModel):
-    """Upsert body for PUT .../dividend-schedule (D15 §5.2, §8.1)."""
+    """Upsert body for PUT .../dividend-schedule (D15 §5.2, §8.1).
+
+    amount_type='nominal': amount_per_payment is a currency amount per share
+    (quote_currency). amount_type='percentage': amount_per_payment is a plain
+    percentage number (e.g. 2.5 for "2.5%") of the current share price —
+    lets the user record the dividend exactly as the company announced it,
+    without doing the conversion by hand.
+    """
     frequency: DividendFrequency
+    amount_type: DividendAmountType = "nominal"
     amount_per_payment: Decimal = Field(gt=0, decimal_places=8)
     next_payment_date: date | None = None
     notes: str | None = Field(default=None, max_length=500)
@@ -32,6 +41,7 @@ class DividendScheduleResponse(BaseModel):
     id: UUID
     asset_id: UUID
     frequency: str
+    amount_type: str
     amount_per_payment: Decimal
     next_payment_date: date | None
     origin: str

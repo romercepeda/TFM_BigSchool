@@ -134,11 +134,13 @@ async def _compute_dividend_coverage(
     schedule = await dividend_service.get_schedule(db, holding.asset_id)
     if schedule is None:
         return None
+    today = date.today()
     fx_rate = await summary_service.get_last_known_fx_rate(
-        db, holding.asset.quote_currency, portfolio.base_currency, date.today()
+        db, holding.asset.quote_currency, portfolio.base_currency, today
     )
+    current_price = await summary_service.get_last_known_price(db, holding.asset_id, today)
     return dividend_service.compute_dividend_coverage_years(
-        aggregates.avg_purchase_price_base, schedule, fx_rate
+        aggregates.avg_purchase_price_base, schedule, fx_rate, current_price
     )
 
 

@@ -2,10 +2,11 @@
 //   - schedule: asset-scoped (/assets/{id}/dividend-schedule)
 //   - payments: holding-scoped (/portfolios/{id}/holdings/{id}/dividend-payments)
 import { get, post, patch, put, del } from './client.js';
-import type { DividendFrequency, DividendPayment, DividendSchedule } from './types.js';
+import type { DividendAmountType, DividendFrequency, DividendPayment, DividendSchedule } from './types.js';
 
 export interface DividendScheduleIn {
   frequency: DividendFrequency;
+  amount_type: DividendAmountType;
   amount_per_payment: number;
   next_payment_date?: string | null;
   notes?: string | null;

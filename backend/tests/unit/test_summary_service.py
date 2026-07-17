@@ -106,6 +106,8 @@ def test_no_holdings_returns_all_zero() -> None:
     assert result.realized_pnl == D("0")
     assert result.realized_pnl_pct == D("0")
     assert result.dividend_income == D("0")
+    assert result.total_pnl == D("0")
+    assert result.total_pnl_pct == D("0")
     assert result.trend_30d == []
     assert result.computed_at == NOW
     assert result.base_currency == "EUR"
@@ -566,6 +568,34 @@ def test_dividend_income_sums_payments_across_holdings() -> None:
     result = compute_summary([holding_a, holding_b], prices, {}, "EUR", TODAY, NOW)
 
     assert result.dividend_income == D("20.00000000")
+
+
+def test_portfolio_total_pnl_sums_all_three_components() -> None:
+    """User feedback: the header had no single 'P&L Total' figure — added
+    post-v1 as unrealized_pnl + realized_pnl + dividend_income, against
+    total_invested (same convention as PortfolioListSummary.total_pnl_pct).
+    """
+    sale_date = TODAY - timedelta(days=5)
+    div_date = TODAY - timedelta(days=3)
+    holding = _holding(
+        HOLDING_A, ASSET_A, "EUR",
+        [_lot(purchase_date=TODAY - timedelta(days=45), qty="10", p_buy="100", fx_buy="1",
+              consumptions=((sale_date, D("2")),))],
+        sales=((sale_date, D("30")),),
+        dividends=((div_date, D("15")),),
+    )
+    prices = {ASSET_A: _flat_series("110", TODAY - timedelta(days=60), TODAY)}
+
+    result = compute_summary([holding], prices, {}, "EUR", TODAY, NOW)
+
+    # unrealized: 8 remaining units * (110-100) = 80. realized: 30. dividends: 15.
+    assert result.unrealized_pnl == D("80.00000000")
+    assert result.realized_pnl == D("30.00000000")
+    assert result.dividend_income == D("15.00000000")
+    assert result.total_pnl == D("125.00000000")
+    # 125 / 800 = 0.15625 exactly -> ROUND_HALF_EVEN 4dp rounds the exact
+    # halfway case to the even neighbor, 0.1562 (not 0.1563).
+    assert result.total_pnl_pct == D("0.1562")
 
 
 def test_dividend_income_excludes_unknown_gain_and_future_dated_payments() -> None:

@@ -49,7 +49,8 @@ Dividend policy is a fact about the **company or fund**, not about any one user'
 | `id` | UUID | Primary key. |
 | `asset_id` | UUID | FK to `assets.id`, **unique** — at most one schedule row per asset. |
 | `frequency` | enum | `monthly` \| `quarterly` \| `semiannual` \| `annual` \| `irregular`. Drives the annualization in §4. |
-| `amount_per_payment` | NUMERIC(18,8) | Declared amount per share/unit, **gross**, in the asset's `quote_currency`. |
+| `amount_type` | enum | **Added in Changeset C22**, user feedback: companies announce dividends either as a fixed currency amount or as a percentage of the share price, and the user wants to enter the figure exactly as announced. `nominal` \| `percentage`. Default `nominal`. |
+| `amount_per_payment` | NUMERIC(18,8) | Declared amount per payment, **gross**. If `amount_type='nominal'`: a currency amount per share, in the asset's `quote_currency`. If `amount_type='percentage'`: a plain percentage number (e.g. `2.5` for "2.5%") of the current share price — converted to a nominal per-share amount at computation time (§4.1) using the current price, the same cache-only "last known price" pattern already used for FX (Changeset C19). |
 | `next_payment_date` | date, nullable | Best-known estimate of the next pay date. Null if unknown. |
 | `origin` | enum | `manual` \| `auto`. Always `manual` in v1 (§9) — the column exists now so a future automatic-fetch changeset is additive, not a migration that touches every existing row's semantics (same reasoning as `Lot.fx_rate_origin`, D03 §3.3). |
 | `notes` | text, nullable | Free-form, e.g. "Cut from $0.30 to $0.22 in Q2 2026." |
@@ -193,6 +194,8 @@ Extends D13 §8/§10 with a third component everywhere `unrealized_pnl + realize
 ### 7.1 Portfolio header tile
 
 A new tile, **"Dividendos"**, alongside the existing "P&L Latente" / "P&L Real" tiles (C08 §7, D13 §8), showing cumulative `dividend_income` in the portfolio's base currency. Always non-negative (dividends can't be negative), so no red/green color-coding is needed — rendered in the same neutral/positive style as "Invertido".
+
+**Added in Changeset C22**, user feedback: "P&L Latente" is deliberately narrow (paper gain from price movement only, per C08/D13 — unchanged by this spec) but the header had *no* tile showing the combined result, so recording a dividend payment appeared to have no visible effect at the header level (it only showed up in the list/dashboard rows, §7.2). A sixth tile, **"P&L Total"**, is added: `unrealized_pnl + realized_pnl + dividend_income`, against `total_invested` (same convention as `PortfolioListSummary.total_pnl_pct`). `PortfolioSummary` gains `total_pnl`/`total_pnl_pct` fields for it. "P&L Latente" itself is untouched — it still means exactly what it meant before this spec existed.
 
 ### 7.2 List and row summaries (D13 §9/§10)
 

@@ -109,6 +109,9 @@ export interface PortfolioSummary {
   realized_pnl_pct: string;
   // Spec D15 §7 — sum of received dividend cash, in base currency.
   dividend_income: string;
+  // unrealized_pnl + realized_pnl + dividend_income, against total_invested.
+  total_pnl: string;
+  total_pnl_pct: string;
   trend_30d: TrendPoint[];
   computed_at: string;
   base_currency: string;
@@ -457,6 +460,10 @@ export interface CascadeFailureListResponse {
 // ── Dividend Tracking (Spec D15) ────────────────────────────────────────────
 
 export type DividendFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'irregular';
+// 'nominal': amount_per_payment is a currency amount per share. 'percentage':
+// amount_per_payment is a plain percentage of the current share price (e.g.
+// 2.5 for "2.5%") — lets the user record the dividend exactly as announced.
+export type DividendAmountType = 'nominal' | 'percentage';
 
 // Asset-scoped declared dividend policy (D15 §3.1) — shared reference data,
 // one row per asset, edited in place.
@@ -464,6 +471,7 @@ export interface DividendSchedule {
   id: string;
   asset_id: string;
   frequency: DividendFrequency;
+  amount_type: DividendAmountType;
   amount_per_payment: string;
   next_payment_date: string | null;
   origin: 'manual' | 'auto';

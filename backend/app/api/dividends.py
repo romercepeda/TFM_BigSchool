@@ -101,6 +101,7 @@ async def upsert_dividend_schedule(
         schedule = await dividend_service.upsert_schedule(
             db, asset,
             frequency=body.frequency,
+            amount_type=body.amount_type,
             amount_per_payment=body.amount_per_payment,
             next_payment_date=body.next_payment_date,
             notes=body.notes,

@@ -68,7 +68,13 @@ class PortfolioSummary(BaseModel):
     the sum of gross_amount_base across every DividendPayment in the
     portfolio (D15 §7), kept as its own bucket rather than folded into
     realized_pnl since dividends and capital gains are taxed differently in
-    Spain (D15 §2). Total P&L = unrealized_pnl + realized_pnl + dividend_income.
+    Spain (D15 §2). total_pnl/total_pnl_pct (added post-v1, user feedback:
+    the header had no single figure reflecting the combined result — only
+    the per-holding/per-portfolio list rows did) = unrealized_pnl +
+    realized_pnl + dividend_income, against total_invested — same convention
+    as PortfolioListSummary.total_pnl_pct below. unrealized_pnl itself is
+    deliberately left unchanged by this addition: it still means exactly
+    "paper gain from price movement, nothing else."
     """
     total_value: Decimal
     total_invested: Decimal
@@ -77,6 +83,8 @@ class PortfolioSummary(BaseModel):
     realized_pnl: Decimal
     realized_pnl_pct: Decimal
     dividend_income: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal
     trend_30d: list[TrendPoint]
     computed_at: datetime
     base_currency: str

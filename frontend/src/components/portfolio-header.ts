@@ -102,6 +102,7 @@ export class PortfolioHeader extends BaseComponent {
       <div class="tile skeleton"></div>
       <div class="tile skeleton"></div>
       <div class="tile skeleton"></div>
+      <div class="tile skeleton"></div>
     `;
   }
 
@@ -130,6 +131,11 @@ export class PortfolioHeader extends BaseComponent {
 
     const dividendIncome = Number(s.dividend_income);
 
+    const totalPnl = Number(s.total_pnl);
+    const totalPnlPct = Number(s.total_pnl_pct);
+    const totalClass = totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral';
+    const totalSign = totalPnl > 0 ? '+' : '';
+
     return `
       <div class="tile">
         <span class="label">${t('portfolio_header.total_value')}</span>
@@ -153,6 +159,11 @@ export class PortfolioHeader extends BaseComponent {
       <div class="tile">
         <span class="label">${t('portfolio_header.dividend_income')}</span>
         <span class="value">${formatCurrency(dividendIncome, currency)}</span>
+      </div>
+      <div class="tile">
+        <span class="label">${t('portfolio_header.total_pnl')}</span>
+        <span class="value ${totalClass}">${formatCurrency(totalPnl, currency)}</span>
+        <span class="delta ${totalClass}">${totalSign}${formatPercent(totalPnlPct * 100)}</span>
       </div>
       <div class="tile chart-tile">
         <span class="label">${t('portfolio_header.trend_30d')}</span>

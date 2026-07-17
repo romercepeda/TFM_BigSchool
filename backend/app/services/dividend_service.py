@@ -28,6 +28,7 @@ from app.db.models.lot import Lot
 _Q_MONETARY = Decimal("0.00000001")  # 8 dp, matches sale_service/summary_service's monetary precision
 _Q_YEARS = Decimal("0.01")
 _ZERO = Decimal("0")
+_HUNDRED = Decimal("100")
 
 # D15 §5.3 — the fixed prefix that marks a DateAlert as system-generated from
 # a dividend schedule, so it can be found again on the next edit without a
@@ -55,11 +56,17 @@ def compute_dividend_coverage_years(
     avg_purchase_price_base: Decimal,
     schedule: AssetDividendSchedule | None,
     fx_rate_current: Decimal | None,
+    current_price_quote: Decimal | None = None,
 ) -> Decimal | None:
     """D15 §4.1 — years of the current annualized dividend needed to cover the
     average purchase price. None whenever the inputs don't support a
     meaningful estimate (no schedule, irregular frequency, zero/negative
     dividend or cost basis, unresolved current FX rate) — D15 §4.3.
+
+    schedule.amount_type='percentage' (added post-v1) needs current_price_quote
+    to convert the declared percentage into a nominal per-share amount before
+    annualizing — None whenever that price isn't available either, same as
+    fx_rate_current.
     """
     if schedule is None or fx_rate_current is None:
         return None
@@ -69,7 +76,14 @@ def compute_dividend_coverage_years(
     if payments_per_year is None:
         return None
 
-    annualized_per_share_base = schedule.amount_per_payment * payments_per_year * fx_rate_current
+    if schedule.amount_type == "percentage":
+        if current_price_quote is None or current_price_quote <= _ZERO:
+            return None
+        amount_per_payment_quote = current_price_quote * (schedule.amount_per_payment / _HUNDRED)
+    else:
+        amount_per_payment_quote = schedule.amount_per_payment
+
+    annualized_per_share_base = amount_per_payment_quote * payments_per_year * fx_rate_current
     if annualized_per_share_base <= _ZERO:
         return None
 
@@ -105,6 +119,7 @@ async def upsert_schedule(
     asset: Asset,
     *,
     frequency: str,
+    amount_type: str,
     amount_per_payment: Decimal,
     next_payment_date: date_ | None,
     notes: str | None,
@@ -125,6 +140,7 @@ async def upsert_schedule(
         db.add(schedule)
 
     schedule.frequency = frequency
+    schedule.amount_type = amount_type
     schedule.amount_per_payment = amount_per_payment
     schedule.next_payment_date = next_payment_date
     schedule.notes = notes

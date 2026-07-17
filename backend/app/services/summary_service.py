@@ -354,6 +354,7 @@ def _compute_holding_pnl(
     invested = _ZERO
     unrealized_pnl = _ZERO
     fx_rate: Decimal | None = None
+    current_price: Decimal | None = None
 
     price_result = _last_known(price_index.get(holding.asset_id), today)
     if price_result is not None:
@@ -390,7 +391,7 @@ def _compute_holding_pnl(
     # average (invested / active_units), without a second lot-level pass.
     avg_purchase_price_base = (invested / active_units) if active_units > _ZERO else _ZERO
     dividend_coverage_years = dividend_service.compute_dividend_coverage_years(
-        avg_purchase_price_base, schedule, fx_rate
+        avg_purchase_price_base, schedule, fx_rate, current_price
     )
 
     return HoldingPnl(
@@ -461,6 +462,8 @@ def compute_summary(
             realized_pnl=realized_pnl,
             realized_pnl_pct=realized_pnl_pct,
             dividend_income=dividend_income,
+            total_pnl=realized_pnl + dividend_income,
+            total_pnl_pct=_ZERO,
             trend_30d=[],
             computed_at=now,
             base_currency=base_currency,
@@ -474,6 +477,9 @@ def compute_summary(
         holdings, price_index, fx_index, base_currency, today
     )
 
+    total_pnl = unrealized_pnl + realized_pnl + dividend_income
+    total_pnl_pct = (total_pnl / total_invested) if total_invested > _ZERO else _ZERO
+
     return PortfolioSummary(
         total_value=total_value,
         total_invested=total_invested,
@@ -482,6 +488,8 @@ def compute_summary(
         realized_pnl=realized_pnl,
         realized_pnl_pct=realized_pnl_pct,
         dividend_income=dividend_income,
+        total_pnl=_round(total_pnl),
+        total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
         trend_30d=trend_30d,
         computed_at=now,
         base_currency=base_currency,
@@ -649,6 +657,19 @@ async def get_holding_summaries(db: AsyncSession, portfolio: Portfolio) -> list[
     )
 
 
+async def get_last_known_price(
+    db: AsyncSession, asset_id: UUID, as_of: date
+) -> Decimal | None:
+    """Cache-only price lookup (Spec D15's percentage-type schedule needs the
+    current price to convert to a nominal amount) — latest known close with
+    as_of_date <= as_of. No live provider call, per Changeset C19.
+    """
+    series = await _fetch_price_series(db, {asset_id}, as_of)
+    index = _build_index(series.get(asset_id, []))
+    result = _last_known(index, as_of)
+    return result[0] if result is not None else None
+
+
 async def get_last_known_fx_rate(
     db: AsyncSession, quote_currency: str, base_currency: str, as_of: date
 ) -> Decimal | None:
@@ -719,10 +740,10 @@ async def get_portfolio_list_summaries(
     results = []
     for portfolio in portfolios:
         summary = await get_summary(db, portfolio, user_id)
-        total_pnl = summary.unrealized_pnl + summary.realized_pnl + summary.dividend_income
-        total_pnl_pct = (
-            (total_pnl / summary.total_invested) if summary.total_invested > _ZERO else _ZERO
-        )
+        # summary.total_pnl/total_pnl_pct (added post-v1 for the header's own
+        # "P&L Total" tile) already use the identical formula/denominator
+        # this list row needs — reused directly rather than recomputed, so
+        # the two can never drift.
         results.append(PortfolioListSummary(
             id=portfolio.id,
             name=portfolio.name,
@@ -733,7 +754,7 @@ async def get_portfolio_list_summaries(
             unrealized_pnl=summary.unrealized_pnl,
             realized_pnl=summary.realized_pnl,
             dividend_income=summary.dividend_income,
-            total_pnl=_round(total_pnl),
-            total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
+            total_pnl=summary.total_pnl,
+            total_pnl_pct=summary.total_pnl_pct,
         ))
     return results

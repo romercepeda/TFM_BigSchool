@@ -19,7 +19,7 @@ import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
 import type {
   Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert, Sale, SalePreview,
-  DividendSchedule, DividendPayment, DividendFrequency,
+  DividendSchedule, DividendPayment, DividendFrequency, DividendAmountType,
 } from '../api/types.js';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../utils/format.js';
 
@@ -36,9 +36,13 @@ const emptySaleForm = (): SaleForm => ({
 
 const SALE_PREVIEW_DEBOUNCE_MS = 300;
 
-interface ScheduleForm { frequency: DividendFrequency; amount: string; nextDate: string; notes: string; }
+interface ScheduleForm {
+  frequency: DividendFrequency; amountType: DividendAmountType; amount: string; nextDate: string; notes: string;
+}
 
-const emptyScheduleForm = (): ScheduleForm => ({ frequency: 'annual', amount: '', nextDate: '', notes: '' });
+const emptyScheduleForm = (): ScheduleForm => ({
+  frequency: 'annual', amountType: 'nominal', amount: '', nextDate: '', notes: '',
+});
 
 interface PaymentForm { date: string; amount: string; notes: string; }
 
@@ -986,7 +990,9 @@ export class AssetDetailScreen extends BaseComponent {
     return `
       <div style="font-size:var(--font-size-sm);display:flex;flex-direction:column;gap:var(--space-1);">
         <div><strong>${t('screen.dividend.schedule.frequency')}:</strong> ${t('screen.dividend.frequency.' + schedule.frequency)}</div>
-        <div><strong>${t('screen.dividend.schedule.amount')}:</strong> ${formatCurrency(Number(schedule.amount_per_payment), quoteCurrency)} / ${t('screen.asset.unit')}</div>
+        <div><strong>${t('screen.dividend.schedule.amount')}:</strong> ${schedule.amount_type === 'percentage'
+          ? `${formatNumber(Number(schedule.amount_per_payment), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%`
+          : `${formatCurrency(Number(schedule.amount_per_payment), quoteCurrency)} / ${t('screen.asset.unit')}`}</div>
         <div><strong>${t('screen.dividend.schedule.next_payment')}:</strong> ${schedule.next_payment_date ? this._fmt(schedule.next_payment_date) : '—'}</div>
         ${schedule.notes ? `<div><strong>${t('screen.sale.reason')}:</strong> ${schedule.notes}</div>` : ''}
         <div style="margin-top:var(--space-1);">
@@ -1013,8 +1019,16 @@ export class AssetDetailScreen extends BaseComponent {
             </select>
           </div>
           <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.amount_type')}</label>
+            <select class="form-input" id="schedule-amount-type">
+              <option value="nominal" ${f.amountType === 'nominal' ? 'selected' : ''}>${t('screen.dividend.schedule.amount_type.nominal')}</option>
+              <option value="percentage" ${f.amountType === 'percentage' ? 'selected' : ''}>${t('screen.dividend.schedule.amount_type.percentage')}</option>
+            </select>
+          </div>
+          <div class="form-field">
             <label class="form-label">${t('screen.dividend.schedule.amount')}</label>
             <input class="form-input" id="schedule-amount" type="number" step="any" min="0" value="${f.amount}" style="width:100px" />
+            <span class="summary-sub">${f.amountType === 'percentage' ? '%' : t('screen.asset.unit')}</span>
           </div>
           <div class="form-field">
             <label class="form-label">${t('screen.dividend.schedule.next_payment')}</label>
@@ -1318,7 +1332,10 @@ export class AssetDetailScreen extends BaseComponent {
       const s = this._dividendSchedule;
       this._editingSchedule = true;
       this._scheduleForm = s
-        ? { frequency: s.frequency, amount: s.amount_per_payment, nextDate: s.next_payment_date ?? '', notes: s.notes ?? '' }
+        ? {
+            frequency: s.frequency, amountType: s.amount_type, amount: s.amount_per_payment,
+            nextDate: s.next_payment_date ?? '', notes: s.notes ?? '',
+          }
         : emptyScheduleForm();
       this._scheduleError = '';
       this._rerender();
@@ -1330,15 +1347,21 @@ export class AssetDetailScreen extends BaseComponent {
       this._rerender();
     });
     this.shadow.getElementById('save-schedule-btn')?.addEventListener('click', () => void this._doSaveSchedule());
+    const readScheduleForm = (): ScheduleForm => ({
+      frequency: ((this.shadow.getElementById('schedule-frequency') as HTMLSelectElement)?.value as DividendFrequency) ?? 'annual',
+      amountType: ((this.shadow.getElementById('schedule-amount-type') as HTMLSelectElement)?.value as DividendAmountType) ?? 'nominal',
+      amount: (this.shadow.getElementById('schedule-amount') as HTMLInputElement)?.value ?? '',
+      nextDate: (this.shadow.getElementById('schedule-next-date') as HTMLInputElement)?.value ?? '',
+      notes: (this.shadow.getElementById('schedule-notes') as HTMLInputElement)?.value ?? '',
+    });
     ['schedule-frequency', 'schedule-amount', 'schedule-next-date', 'schedule-notes'].forEach((id) => {
-      this.shadow.getElementById(id)?.addEventListener('input', () => {
-        this._scheduleForm = {
-          frequency: ((this.shadow.getElementById('schedule-frequency') as HTMLSelectElement)?.value as DividendFrequency) ?? 'annual',
-          amount: (this.shadow.getElementById('schedule-amount') as HTMLInputElement)?.value ?? '',
-          nextDate: (this.shadow.getElementById('schedule-next-date') as HTMLInputElement)?.value ?? '',
-          notes: (this.shadow.getElementById('schedule-notes') as HTMLInputElement)?.value ?? '',
-        };
-      });
+      this.shadow.getElementById(id)?.addEventListener('input', () => { this._scheduleForm = readScheduleForm(); });
+    });
+    // Separate 'change' + full rerender: the amount field's unit suffix
+    // (% vs currency) needs to flip immediately when the type changes.
+    this.shadow.getElementById('schedule-amount-type')?.addEventListener('change', () => {
+      this._scheduleForm = readScheduleForm();
+      this._rerender();
     });
     this.shadow.getElementById('delete-schedule-btn')?.addEventListener('click', () => {
       this._confirmDeleteSchedule = true;
@@ -1435,6 +1458,7 @@ export class AssetDetailScreen extends BaseComponent {
     try {
       await upsertDividendSchedule(this._holding.asset.id, {
         frequency: f.frequency,
+        amount_type: f.amountType,
         amount_per_payment: Number(f.amount),
         next_payment_date: f.nextDate || null,
         notes: f.notes || undefined,

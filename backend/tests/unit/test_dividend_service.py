@@ -16,9 +16,9 @@ D = Decimal
 ASSET_A = UUID("aaaaaaaa-0000-0000-0000-000000000001")
 
 
-def _schedule(frequency: str, amount: str) -> AssetDividendSchedule:
+def _schedule(frequency: str, amount: str, amount_type: str = "nominal") -> AssetDividendSchedule:
     return AssetDividendSchedule(
-        asset_id=ASSET_A, frequency=frequency, amount_per_payment=D(amount)
+        asset_id=ASSET_A, frequency=frequency, amount_type=amount_type, amount_per_payment=D(amount)
     )
 
 
@@ -66,3 +66,26 @@ def test_none_when_annualized_dividend_is_zero() -> None:
 
 def test_none_when_current_fx_rate_unresolved() -> None:
     assert compute_dividend_coverage_years(D("8"), _schedule("annual", "1"), None) is None
+
+
+# ─── amount_type='percentage' (user feedback: register as % of current price) ─
+
+
+def test_percentage_type_converts_using_current_price() -> None:
+    # Declared as "2%" annual, current price EUR50 -> nominal EUR1.00/share/year.
+    # avg cost EUR8 -> 8 / 1.00 = 8 years, matching the nominal worked example.
+    schedule = _schedule("annual", "2", amount_type="percentage")
+    result = compute_dividend_coverage_years(D("8"), schedule, D("1"), current_price_quote=D("50"))
+    assert result == D("8.00")
+
+
+def test_percentage_type_none_without_current_price() -> None:
+    schedule = _schedule("annual", "2", amount_type="percentage")
+    result = compute_dividend_coverage_years(D("8"), schedule, D("1"), current_price_quote=None)
+    assert result is None
+
+
+def test_percentage_type_none_when_current_price_zero() -> None:
+    schedule = _schedule("annual", "2", amount_type="percentage")
+    result = compute_dividend_coverage_years(D("8"), schedule, D("1"), current_price_quote=D("0"))
+    assert result is None

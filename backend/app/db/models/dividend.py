@@ -28,6 +28,11 @@ _DIVIDEND_SCHEDULE_ORIGIN_ENUM = Enum(
     name="dividend_schedule_origin_enum",
 )
 
+_DIVIDEND_AMOUNT_TYPE_ENUM = Enum(
+    "nominal", "percentage",
+    name="dividend_amount_type_enum",
+)
+
 
 class AssetDividendSchedule(Base):
     __tablename__ = "asset_dividend_schedules"
@@ -37,7 +42,18 @@ class AssetDividendSchedule(Base):
         ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
     )
     frequency: Mapped[str] = mapped_column(_DIVIDEND_FREQUENCY_ENUM, nullable=False)
-    # Declared amount per share/unit, gross, in the asset's quote_currency.
+    # 'nominal': amount_per_payment is a currency amount per share, in
+    # quote_currency. 'percentage': amount_per_payment is a percentage value
+    # (e.g. 2.5 for "2.5%") of the current share price at computation time —
+    # some companies announce dividends this way instead of a fixed amount.
+    # Added after v1 shipped (user feedback: the declared figure is a
+    # reference the user copies from the company's announcement verbatim,
+    # in whichever unit that announcement used).
+    amount_type: Mapped[str] = mapped_column(
+        _DIVIDEND_AMOUNT_TYPE_ENUM, nullable=False, server_default="nominal"
+    )
+    # Declared amount per payment. In quote_currency if amount_type='nominal';
+    # a plain percentage number (not a fraction) if amount_type='percentage'.
     amount_per_payment: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
     next_payment_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     origin: Mapped[str] = mapped_column(
