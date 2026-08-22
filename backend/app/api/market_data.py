@@ -148,11 +148,11 @@ async def refresh_asset_price(
 
     This is the only path left that calls the live provider outside the daily
     job — triggered explicitly by the user via the refresh icon on the asset
-    detail screen's "Current Price" card, never automatically. Per D09 §5.3,
-    the result is NOT written to AssetPriceHistory (that table is
-    append-only/immutable per trading day, owned by the daily job); this is a
-    transient value shown to the user with its own fetch timestamp, same as
-    the live branch that used to run on every page load.
+    detail screen's "Current Price" card, never automatically. The fetched
+    price is upserted into today's AssetPriceHistory row (see
+    MarketDataService.refresh_and_store_current_price), so it is still the
+    stored "current price" the next time the asset is viewed — not just a
+    value held in the frontend's in-memory state.
 
     Falls back to the last known stored price if the live call fails —
     identical fallback semantics to Changeset C14, just moved behind an
@@ -161,7 +161,9 @@ async def refresh_asset_price(
     svc = get_market_data_service()
     ticker_upper = ticker.upper()
     try:
-        point = await svc.get_current_price(ticker_upper, exchange.upper() if exchange else None)
+        point = await svc.refresh_and_store_current_price(
+            db, ticker_upper, exchange.upper() if exchange else None
+        )
     except ProviderError as exc:
         fallback = await _last_known_price(db, ticker_upper)
         if fallback is None:

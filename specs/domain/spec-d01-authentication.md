@@ -123,7 +123,7 @@ A user owns one or more Portfolios (see Spec D02 — Portfolio Management), each
    - If a non-guest account exists with that email → reject with error "An account already exists with this email. Please sign in using the corresponding method." (Section 4.2).
    - Otherwise → create a new guest `User` and proceed as a new user.
    Session token issued where applicable. No verification email is sent in v1.
-8. On successful authentication (any source), the user is routed to "My Portfolios" if they have more than one portfolio, directly to the Dashboard if they have exactly one, or to "Create Portfolio" if they have none yet.
+8. On successful authentication (any source), the user is always routed to "My Portfolios" first (corrected by Changeset C21) — regardless of how many portfolios they have, including none (the list screen's empty state carries its own "Create Portfolio" CTA).
 
 ---
 

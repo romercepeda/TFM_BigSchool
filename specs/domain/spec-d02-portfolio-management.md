@@ -125,7 +125,7 @@ The following user flows correspond to existing screens in the functional design
 | Restore | Archived portfolios → Restore action on a specific portfolio |
 | Permanently delete | Archived portfolios → Delete action on a specific portfolio (with confirmation) |
 
-Post-login routing (per Spec D01, Section 6, step 8): if the user has **2+ active portfolios**, they land on "My Portfolios"; if exactly **1 active portfolio**, they land directly on its Dashboard; if **0 active portfolios** (e.g. a brand-new user or one who just archived all of theirs), they land on "Create portfolio".
+Post-login routing (per Spec D01, Section 6, step 8; corrected by Changeset C21): the user always lands on "My Portfolios" first, regardless of how many active portfolios they have — including **0** (the list screen's own empty state carries the "Create portfolio" CTA). This replaces the original count-based rule (2+ → My Portfolios, 1 → straight to its Dashboard, 0 → Create portfolio directly), which in practice meant the user rarely landed on the same screen twice and made "where am I" harder to predict.
 
 ---
 

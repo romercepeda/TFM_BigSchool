@@ -1,7 +1,11 @@
 """AssetPriceHistory and FxRateHistory ORM models — Spec D09.
 
-Both tables are write-once: INSERT ... ON CONFLICT DO NOTHING.
-Historical values are never updated after the initial insert (D09 §5.3).
+Both tables are append-only across trading days: the daily job inserts with
+ON CONFLICT DO NOTHING, so a past day's close is never overwritten. The one
+exception is AssetPriceHistory's own day: a manual "refresh price" action
+(MarketDataService.refresh_and_store_current_price) is allowed to update
+*today's* row, since it represents a newer, explicit observation than
+whatever the daily job or a previous refresh wrote for today.
 """
 
 from datetime import date, datetime

@@ -187,7 +187,7 @@ async def test_search_assets_happy_path() -> None:
     ("internal_market", "expected"),
     [
         ("BME", "MC"),
-        ("XETRA", "XETRA"),
+        ("XETR", "XETRA"),
         ("EURONEXT", "PA"),
         ("LSE", "LSE"),
         ("NASDAQ", "US"),

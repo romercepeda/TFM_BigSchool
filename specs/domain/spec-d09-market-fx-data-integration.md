@@ -130,18 +130,20 @@ Uniqueness constraint: `(quote_currency, base_currency, as_of_date)`. Same immut
 
 ### 5.3 Immutability of stored historical data
 
-Historical prices and FX rates, once stored, are never overwritten. A second fetch returning a different value for the same date does not update the stored row. This is intentional, for two reasons:
+Historical prices and FX rates, once stored, are never overwritten *across trading days*. A second fetch returning a different value for a past date does not update the stored row. This is intentional, for two reasons:
 
 - Financial calculations should not change retroactively. A user who saw a 12% gain yesterday should not see 11.7% today because a data provider issued a correction.
 - Providers occasionally publish small revisions (cents-level) that would silently shift downstream KPIs without any user-visible explanation.
 
-When a re-fetch produces a different value, a warning is logged with both values for diagnosis, but the database row is left as-is. The exception is **manual correction**: an administrator may correct a stored value directly via a database operation if a fetch obviously captured corrupt data. This is not exposed as an application endpoint in v1.
+When a re-fetch produces a different value for a past date, a warning is logged with both values for diagnosis, but the database row is left as-is. The exception is **manual correction**: an administrator may correct a stored value directly via a database operation if a fetch obviously captured corrupt data. This is not exposed as an application endpoint in v1.
 
-### 5.4 Current prices: not persisted
+The one other exception is **today's own row** (Changeset C21) — see §5.4.
+
+### 5.4 Current prices: cache-only, with a persisted manual refresh
 
 Current (intraday or most-recent) prices are **not** persisted in their own dedicated table. They are fetched fresh by the daily job (Section 6) and stored as the latest entry of `AssetPriceHistory` for the trading day they cover.
 
-Outside the daily job, current prices are fetched live in exactly one place: an explicit, user-triggered refresh action on the asset detail screen (Changeset C19 — the refresh icon on the "Current Price" card, `POST /market-data/assets/{ticker}/price/refresh`). That result is transient and, per §5.3, is never written back into `AssetPriceHistory`. Every other read of "current price" (the asset detail screen's automatic load, the define-levels form's price pre-fill) is cache-only — it reads the last value the daily job (or a prior manual refresh) produced, and does not call the live provider. This was corrected in Changeset C19 after the original v1 implementation of `GET .../price` called the live provider on every request, contradicting this section's original intent.
+Outside the daily job, current prices are fetched live in exactly one place: an explicit, user-triggered refresh action on the asset detail screen (Changeset C19 — the refresh icon on the "Current Price" card, `POST /market-data/assets/{ticker}/price/refresh`). Changeset C19 originally made this result transient (shown to the user but never written back). Changeset C21 corrected that: the refresh endpoint now upserts the fetched price into *today's* `AssetPriceHistory` row (`MarketDataService.refresh_and_store_current_price`), so it becomes the stored "current price" and survives leaving and re-entering the screen — a manual refresh is a newer, explicit observation than whatever the daily job or an earlier refresh wrote for today, so overwriting today's row (never a past day's, per §5.3) is correct. Every other read of "current price" (the asset detail screen's automatic load, the define-levels form's price pre-fill) is cache-only — it reads the last value the daily job (or a prior manual refresh) produced, and does not call the live provider.
 
 ---
 

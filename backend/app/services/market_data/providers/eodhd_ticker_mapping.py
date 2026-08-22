@@ -13,12 +13,15 @@ separate `_US_EXCHANGES`/`_provider_symbol()` — intentionally not unified
 with this module until Changeset C04 Step 7 removes that legacy path
 entirely, so the live path is never touched mid-migration.
 
-NOTE: the European entries below (XETRA, EURONEXT) are the author's best
-knowledge of Twelve Data's exchange field values and have not been verified
-against a live Twelve Data response — confirm before relying on them for a
-real Xetra/Euronext asset. BME (Madrid) and LSE (London) are already used
-elsewhere in this codebase (see market_data/service.py's TEF:BME example)
-and are confirmed.
+NOTE: all entries below have been verified live against Twelve Data's
+symbol_search `exchange` field and EODHD's real-time endpoint (2026-07-17,
+BMW/MBG/TEF/RNO/BP). Twelve Data reports Xetra-listed instruments as "XETR"
+(not "XETRA" as this map originally assumed), which meant every Xetra asset
+(e.g. BMW, Mercedes-Benz/MBG) raised "no EODHD exchange mapping" here and
+fell through to Finnhub, which also refuses non-US symbols — the on-demand
+current-price cascade was exhausted with no working provider. EODHD's own
+suffix for Xetra is confirmed correct as "XETRA" (e.g. BMW.XETRA, MBG.XETRA
+both return live quotes); only the internal *key* was wrong.
 """
 
 from app.services.market_data.types import ProviderError
@@ -32,7 +35,7 @@ _US_EODHD_SUFFIX = "US"
 # Internal (Twelve Data) exchange code -> EODHD exchange code.
 EXCHANGE_TO_EODHD: dict[str, str] = {
     "BME": "MC",  # Madrid — e.g. SAN.MC
-    "XETRA": "XETRA",  # Frankfurt/Xetra — e.g. SAP.XETRA
+    "XETR": "XETRA",  # Frankfurt/Xetra — e.g. BMW.XETRA, SAP.XETRA
     "EURONEXT": "PA",  # Euronext Paris — e.g. AIR.PA
     "LSE": "LSE",  # London — e.g. BP.LSE
 }
