@@ -3,7 +3,8 @@
 Endpoints:
     POST   /portfolios                    — create a new portfolio
     GET    /portfolios                    — list portfolios (active by default)
-    GET    /portfolios/{id}/summary       — portfolioHeader summary (Changeset C08)
+    GET    /portfolios/summaries          — lightweight summary per portfolio, one round trip (D13 §9)
+    GET    /portfolios/{id}/summary       — portfolioHeader summary (Changeset C08, extended by D13 §8)
     PATCH  /portfolios/{id}               — rename a portfolio
     POST   /portfolios/{id}/archive       — archive (soft-delete)
     POST   /portfolios/{id}/restore       — restore from archive
@@ -22,6 +23,7 @@ from app.api.d06_schemas import PortfolioAlertItem, PortfolioAlertsResponse
 from app.api.date_alert_schemas import PortfolioDateAlertItem
 from app.api.portfolio_schemas import (
     CreatePortfolioRequest,
+    PortfolioListSummary,
     PortfolioResponse,
     PortfolioSummary,
     RenamePortfolioRequest,
@@ -96,6 +98,27 @@ async def list_all(
     """List portfolios for the current user. Active only by default."""
     portfolios = await list_portfolios(db, current_user.id, include_archived=include_archived)
     return [PortfolioResponse.model_validate(p) for p in portfolios]
+
+
+@router.get(
+    "/summaries",
+    response_model=list[PortfolioListSummary],
+    dependencies=[Depends(require_permission("portfolio.list"))],
+)
+async def list_summaries(
+    include_archived: bool = Query(default=False, description="Set to true to include archived portfolios."),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PortfolioListSummary]:
+    """One lightweight summary per portfolio the user owns, in a single round
+    trip (Spec D13 §9) — the Portfolios listing screen doesn't fire one
+    request per portfolio. Must be registered before GET /{portfolio_id}:
+    otherwise FastAPI would try to parse "summaries" as a portfolio_id UUID
+    and 422 before this handler is ever reached.
+    """
+    return await summary_service.get_portfolio_list_summaries(
+        db, current_user.id, include_archived=include_archived
+    )
 
 
 @router.get(

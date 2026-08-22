@@ -1,10 +1,11 @@
-"""Portfolio summary service — Changeset C08.
+"""Portfolio summary service — Changeset C08, extended by Spec D13 §8 / Changeset C20 §6.
 
-Computes the portfolioHeader values (Valor Total, Invertido, P&L Latente, and
-the 30-day trend) from data already persisted by Spec D09 (AssetPriceHistory,
-FxRateHistory) and the existing FX engine (Spec D04). No new tables, no new
-provider calls: "today" reuses the same last-known-price/last-known-fx-rate
-lookup as every other day in the 30-day window, rather than a live fetch.
+Computes the portfolioHeader values (Valor Total, Invertido, P&L Latente, P&L
+Real, and the 30-day trend) from data already persisted by Spec D09
+(AssetPriceHistory, FxRateHistory), the existing FX engine (Spec D04), and
+each holding's Sale rows (Spec D13). No new tables, no new provider calls:
+"today" reuses the same last-known-price/last-known-fx-rate lookup as every
+other day in the 30-day window, rather than a live fetch.
 
 Split in two layers, matching this project's testing convention (Spec 00c —
 DB-touching paths are verified manually; automated tests cover pure logic):
@@ -22,18 +23,20 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.portfolio_schemas import PortfolioSummary, TrendPoint
+from app.api.portfolio_schemas import PortfolioListSummary, PortfolioSummary, TrendPoint
+from app.db.models.dividend import AssetDividendSchedule
 from app.db.models.holding import Holding
 from app.db.models.lot import Lot
 from app.db.models.market_data import AssetPriceHistory, FxRateHistory
 from app.db.models.portfolio import Portfolio
 from app.db.models.sale import SaleLotConsumption
-from app.services import fx_engine, summary_cache
+from app.services import dividend_service, fx_engine, summary_cache
 from app.services.fx_engine import LotCalcInput
+from app.services.portfolio_service import list_portfolios as list_portfolios_query
 
 _Q_MONETARY = Decimal("0.00000001")  # 8 dp, matches fx_engine's monetary precision (D04)
 _Q_RETURN = Decimal("0.0001")        # 4 dp, matches fx_engine's return precision (D04)
@@ -74,6 +77,21 @@ class HoldingSnapshot:
     asset_id: UUID
     quote_currency: str
     lots: tuple[LotSnapshot, ...]
+    # One entry per sale on this holding: (sale_date, realized_gain_base).
+    # None means that sale's realized_gain_base couldn't be computed
+    # (unresolved FX at creation, or a pre-D13 sale the backfill migration
+    # couldn't reconstruct) — excluded from the aggregate rather than treated
+    # as zero. A future-dated sale (sale_date > today) is also excluded until
+    # its date arrives, matching how _quantity_remaining_at treats a
+    # future-dated consumption as not-yet-happened for the unrealized side —
+    # otherwise the same units would count as both still-held (unrealized)
+    # and already-sold (realized) on the same day.
+    sales: tuple[tuple[date, Decimal | None], ...] = ()
+    # One entry per DividendPayment on this holding: (payment_date,
+    # gross_amount_base). Same None/future-date exclusion rules as `sales`
+    # (Spec D15 par.7, mirrors D13 par.8's rule exactly, same as the bug
+    # C20 par.6 already found and fixed once for sales).
+    dividend_payments: tuple[tuple[date, Decimal | None], ...] = ()
 
 
 # ── Pure helpers ───────────────────────────────────────────────────────────────
@@ -237,6 +255,188 @@ def _compute_current_totals(
     )
 
 
+def _compute_realized_totals(holdings: list[HoldingSnapshot], today: date) -> tuple[Decimal, Decimal]:
+    """Changeset C20 §6 / Spec D13 §8 — realized_pnl, realized_pnl_pct.
+
+    realized_pnl sums every sale's realized_gain_base across the portfolio's
+    holdings, excluding: sales whose gain couldn't be computed (same "no
+    invented values" principle as the trend/current-totals computations
+    above), and sales dated after `today` — a future-dated sale hasn't
+    happened yet, so counting its gain now while its units still count as
+    held (unrealized) would double-count the same position.
+
+    total_invested_ever (the denominator) is the base-currency cost of every
+    lot ever created, consumed or not, regardless of date — each lot's own
+    fx_rate_at_purchase is used, same as cost-basis elsewhere; a lot with
+    unresolved FX is excluded. This corrects D13 §8's literal text (a
+    quote-currency sum, which would mix currencies across holdings quoted
+    differently) to match Changeset C20 §6's formula, which already converts
+    to base currency.
+    """
+    realized_pnl = _ZERO
+    total_invested_ever = _ZERO
+
+    for holding in holdings:
+        for sale_date, gain in holding.sales:
+            if gain is not None and sale_date <= today:
+                realized_pnl += gain
+        for lot in holding.lots:
+            if lot.fx_rate_at_purchase is not None:
+                total_invested_ever += lot.quantity * lot.unit_price * lot.fx_rate_at_purchase
+
+    realized_pnl_pct = (realized_pnl / total_invested_ever) if total_invested_ever > _ZERO else _ZERO
+    return _round(realized_pnl), _round(realized_pnl_pct, _Q_RETURN)
+
+
+def _compute_dividend_income(holdings: list[HoldingSnapshot], today: date) -> Decimal:
+    """Spec D15 §7 — sum of gross_amount_base across every DividendPayment in
+    the portfolio, excluding: payments whose base-currency amount couldn't be
+    computed (unresolved FX at creation, same "no invented values" principle
+    as realized_pnl), and payments dated after `today` (mirrors D13/C20 §6's
+    future-dated-sale exclusion exactly, to avoid the same double-counting
+    class of bug for dividends).
+    """
+    dividend_income = _ZERO
+    for holding in holdings:
+        for payment_date, amount in holding.dividend_payments:
+            if amount is not None and payment_date <= today:
+                dividend_income += amount
+    return _round(dividend_income)
+
+
+# ── Per-holding P&L breakdown (Spec D13 §10, Changeset C20 §8) ───────────────
+
+
+@dataclass(frozen=True)
+class HoldingPnl:
+    """One holding's row for the portfolio dashboard's asset list (D13 §10).
+
+    Unknowable current-market figures (no price/fx ever recorded for this
+    holding) default to zero rather than None — every holding still needs a
+    row, so "excluded from the aggregate" (as in _compute_current_totals)
+    becomes "zero contribution" here. The frontend distinguishes "sold out"
+    (active_units == 0) from "no market data yet" the same way either way:
+    invested/unrealized_pnl read as zero.
+    """
+    holding_id: UUID
+    active_units: Decimal
+    invested: Decimal
+    unrealized_pnl: Decimal
+    realized_pnl: Decimal
+    dividend_income: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal
+    # Spec D15 §4 — None whenever not computable (no schedule, irregular
+    # frequency, zero dividend/cost-basis, unresolved current FX rate).
+    dividend_coverage_years: Decimal | None
+
+
+def _compute_holding_pnl(
+    holding: HoldingSnapshot,
+    price_index: dict[UUID, _SeriesIndex],
+    fx_index: dict[tuple[str, str], _SeriesIndex],
+    base_currency: str,
+    today: date,
+    schedule: AssetDividendSchedule | None,
+) -> HoldingPnl:
+    active_units = sum((_quantity_remaining_at(lot, today) for lot in holding.lots), _ZERO)
+
+    realized_pnl = _ZERO
+    for sale_date, gain in holding.sales:
+        if gain is not None and sale_date <= today:
+            realized_pnl += gain
+
+    dividend_income = _ZERO
+    for payment_date, amount in holding.dividend_payments:
+        if amount is not None and payment_date <= today:
+            dividend_income += amount
+
+    invested = _ZERO
+    unrealized_pnl = _ZERO
+    fx_rate: Decimal | None = None
+    current_price: Decimal | None = None
+
+    price_result = _last_known(price_index.get(holding.asset_id), today)
+    if price_result is not None:
+        current_price, _price_date = price_result
+
+        fx_rate = Decimal("1")
+        if holding.quote_currency != base_currency:
+            fx_result = _last_known(fx_index.get((holding.quote_currency, base_currency)), today)
+            fx_rate = fx_result[0] if fx_result is not None else None
+
+        if fx_rate is not None:
+            lot_inputs = [
+                LotCalcInput(
+                    lot_id=lot.lot_id,
+                    quantity_remaining=_quantity_remaining_at(lot, today),
+                    unit_price_at_purchase=lot.unit_price,
+                    fx_rate_at_purchase=lot.fx_rate_at_purchase,
+                    current_unit_price=current_price,
+                    fx_rate_current=fx_rate,
+                )
+                for lot in holding.lots
+            ]
+            calc = fx_engine.calculate_holding(lot_inputs)
+            if calc.total_cost_base is not None:
+                invested = calc.total_cost_base
+            if calc.total_value_base is not None:
+                unrealized_pnl = calc.total_value_base - invested
+
+    total_pnl = unrealized_pnl + realized_pnl + dividend_income
+    total_pnl_pct = (total_pnl / invested) if invested > _ZERO else _ZERO
+
+    # D15 §4.1 — avg cost of currently-held units in base currency, derived
+    # the same way as lot_service.compute_holding_aggregates' weighted
+    # average (invested / active_units), without a second lot-level pass.
+    avg_purchase_price_base = (invested / active_units) if active_units > _ZERO else _ZERO
+    dividend_coverage_years = dividend_service.compute_dividend_coverage_years(
+        avg_purchase_price_base, schedule, fx_rate, current_price
+    )
+
+    return HoldingPnl(
+        holding_id=holding.holding_id,
+        active_units=_round(active_units),
+        invested=_round(invested),
+        unrealized_pnl=_round(unrealized_pnl),
+        realized_pnl=_round(realized_pnl),
+        dividend_income=_round(dividend_income),
+        total_pnl=_round(total_pnl),
+        total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
+        dividend_coverage_years=dividend_coverage_years,
+    )
+
+
+def compute_holding_summaries(
+    holdings: list[HoldingSnapshot],
+    prices: dict[UUID, _Series],
+    fx_rates: dict[tuple[str, str], _Series],
+    base_currency: str,
+    today: date,
+    schedules: dict[UUID, AssetDividendSchedule] | None = None,
+) -> list[HoldingPnl]:
+    """Pure entry point for the per-holding dashboard rows (D13 §10) — one
+    row per holding, not aggregated. Deliberately not shared code with
+    _compute_current_totals (the portfolio-level aggregate): the two round
+    at different points (per-holding here vs. once at the portfolio sum
+    there), so sharing would either change the aggregate's existing,
+    already-tested rounding or complicate this simpler per-row path.
+
+    `schedules` is keyed by asset_id (Spec D15 §4.4) — optional so existing
+    callers/tests that don't care about the dividend indicator still work.
+    """
+    price_index = {asset_id: _build_index(series) for asset_id, series in prices.items()}
+    fx_index = {pair: _build_index(series) for pair, series in fx_rates.items()}
+    schedules = schedules or {}
+    return [
+        _compute_holding_pnl(
+            holding, price_index, fx_index, base_currency, today,
+            schedules.get(holding.asset_id),
+        )
+        for holding in holdings
+    ]
+
+
 def compute_summary(
     holdings: list[HoldingSnapshot],
     prices: dict[UUID, _Series],
@@ -250,12 +450,20 @@ def compute_summary(
     `today` and `now` are passed in by the caller (mirrors fx_engine's "no
     clock" rule) so this function is fully deterministic and unit-testable.
     """
+    realized_pnl, realized_pnl_pct = _compute_realized_totals(holdings, today)
+    dividend_income = _compute_dividend_income(holdings, today)
+
     if not holdings:
         return PortfolioSummary(
             total_value=_ZERO,
             total_invested=_ZERO,
             unrealized_pnl=_ZERO,
             unrealized_pnl_pct=_ZERO,
+            realized_pnl=realized_pnl,
+            realized_pnl_pct=realized_pnl_pct,
+            dividend_income=dividend_income,
+            total_pnl=realized_pnl + dividend_income,
+            total_pnl_pct=_ZERO,
             trend_30d=[],
             computed_at=now,
             base_currency=base_currency,
@@ -269,11 +477,19 @@ def compute_summary(
         holdings, price_index, fx_index, base_currency, today
     )
 
+    total_pnl = unrealized_pnl + realized_pnl + dividend_income
+    total_pnl_pct = (total_pnl / total_invested) if total_invested > _ZERO else _ZERO
+
     return PortfolioSummary(
         total_value=total_value,
         total_invested=total_invested,
         unrealized_pnl=unrealized_pnl,
         unrealized_pnl_pct=unrealized_pnl_pct,
+        realized_pnl=realized_pnl,
+        realized_pnl_pct=realized_pnl_pct,
+        dividend_income=dividend_income,
+        total_pnl=_round(total_pnl),
+        total_pnl_pct=_round(total_pnl_pct, _Q_RETURN),
         trend_30d=trend_30d,
         computed_at=now,
         base_currency=base_currency,
@@ -292,6 +508,8 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
             selectinload(Holding.lots)
             .selectinload(Lot.sale_consumptions)
             .selectinload(SaleLotConsumption.sale),
+            selectinload(Holding.sales),  # D13 §8 — realized_pnl aggregate
+            selectinload(Holding.dividend_payments),  # D15 §7 — dividend_income aggregate
         )
     )
     holdings = result.scalars().all()
@@ -320,6 +538,10 @@ async def _fetch_holding_snapshots(db: AsyncSession, portfolio_id: UUID) -> list
                 asset_id=holding.asset_id,
                 quote_currency=holding.asset.quote_currency,
                 lots=lots,
+                sales=tuple((s.sale_date, s.realized_gain_base) for s in holding.sales),
+                dividend_payments=tuple(
+                    (p.payment_date, p.gross_amount_base) for p in holding.dividend_payments
+                ),
             )
         )
     return snapshots
@@ -404,3 +626,135 @@ async def get_summary(db: AsyncSession, portfolio: Portfolio, user_id: UUID) -> 
 
     summary_cache.store(portfolio.id, user_id, summary)
     return summary
+
+
+async def get_holding_summaries(db: AsyncSession, portfolio: Portfolio) -> list[HoldingPnl]:
+    """Per-holding dashboard rows for a portfolio (Spec D13 §10, Changeset C20 §8).
+
+    Reuses the exact same thin fetchers as get_summary() (one query each for
+    holdings/lots, prices, FX) — not cached separately from the portfolio
+    summary cache, since this is a distinct read shape or from it, but cheap
+    enough (same query pattern) that a personal-portfolio's holding count
+    doesn't warrant its own cache layer.
+    """
+    today = date.today()
+    holdings = await _fetch_holding_snapshots(db, portfolio.id)
+    if not holdings:
+        return []
+
+    asset_ids = {h.asset_id for h in holdings}
+    pairs = {
+        (h.quote_currency, portfolio.base_currency)
+        for h in holdings
+        if h.quote_currency != portfolio.base_currency
+    }
+    prices = await _fetch_price_series(db, asset_ids, today)
+    fx_rates = await _fetch_fx_series(db, pairs, today)
+    schedules = await dividend_service.get_schedules_for_assets(db, asset_ids)
+
+    return compute_holding_summaries(
+        holdings, prices, fx_rates, portfolio.base_currency, today, schedules
+    )
+
+
+async def get_last_known_price(
+    db: AsyncSession, asset_id: UUID, as_of: date
+) -> Decimal | None:
+    """Cache-only price lookup (Spec D15's percentage-type schedule needs the
+    current price to convert to a nominal amount) — latest known close with
+    as_of_date <= as_of. No live provider call, per Changeset C19.
+    """
+    series = await _fetch_price_series(db, {asset_id}, as_of)
+    index = _build_index(series.get(asset_id, []))
+    result = _last_known(index, as_of)
+    return result[0] if result is not None else None
+
+
+async def get_last_known_fx_rate(
+    db: AsyncSession, quote_currency: str, base_currency: str, as_of: date
+) -> Decimal | None:
+    """Cache-only FX lookup (Spec D15 §4.1) — the latest known rate with
+    as_of_date <= as_of, reusing the same _last_known() pattern as the rest
+    of this module. Deliberately does NOT call the live provider: per
+    Changeset C19, a GET must not trigger a live network fetch on every page
+    view. Same-currency pairs return 1 without a query.
+    """
+    if quote_currency == base_currency:
+        return Decimal("1")
+    series = await _fetch_fx_series(db, {(quote_currency, base_currency)}, as_of)
+    index = _build_index(series.get((quote_currency, base_currency), []))
+    result = _last_known(index, as_of)
+    return result[0] if result is not None else None
+
+
+async def _fetch_active_holdings_count(
+    db: AsyncSession, portfolio_ids: list[UUID]
+) -> dict[UUID, int]:
+    """Number of distinct holdings with active_units > 0, per portfolio (D13 §9).
+
+    A direct SQL aggregate over the live quantity_consumed column — assets_count
+    is inherently a "right now" figure (unlike the date-reconstructed trend/
+    current-totals above), so no as-of-date lot-history logic is needed here.
+    One query for every portfolio in `portfolio_ids`, not one per portfolio.
+    """
+    if not portfolio_ids:
+        return {}
+    result = await db.execute(
+        select(
+            Holding.portfolio_id,
+            Holding.id,
+            func.sum(Lot.quantity - Lot.quantity_consumed),
+        )
+        .join(Lot, Lot.holding_id == Holding.id)
+        .where(Holding.portfolio_id.in_(portfolio_ids))
+        .group_by(Holding.portfolio_id, Holding.id)
+    )
+    counts: dict[UUID, int] = {}
+    for portfolio_id, _holding_id, remaining in result.all():
+        if remaining is not None and remaining > _ZERO:
+            counts[portfolio_id] = counts.get(portfolio_id, 0) + 1
+    return counts
+
+
+async def get_portfolio_list_summaries(
+    db: AsyncSession, user_id: UUID, *, include_archived: bool = False
+) -> list[PortfolioListSummary]:
+    """One lightweight summary per portfolio the user owns (Spec D13 §9), in a
+    single round trip for the Portfolios listing screen.
+
+    Reuses get_summary() per portfolio (so it benefits from the same 5-minute
+    cache as the portfolio header) rather than a bespoke cross-portfolio SQL
+    aggregate — at personal-portfolio scale (a handful of portfolios per
+    user), N calls to an already-cached, already-tested computation is a
+    better trade than a parallel aggregate query path that would need its
+    own testing and could drift from get_summary()'s figures. assets_count is
+    the one piece fetched in a single dedicated query across all portfolios,
+    since it isn't part of PortfolioSummary at all.
+    """
+    portfolios = await list_portfolios_query(db, user_id, include_archived=include_archived)
+    if not portfolios:
+        return []
+
+    active_counts = await _fetch_active_holdings_count(db, [p.id for p in portfolios])
+
+    results = []
+    for portfolio in portfolios:
+        summary = await get_summary(db, portfolio, user_id)
+        # summary.total_pnl/total_pnl_pct (added post-v1 for the header's own
+        # "P&L Total" tile) already use the identical formula/denominator
+        # this list row needs — reused directly rather than recomputed, so
+        # the two can never drift.
+        results.append(PortfolioListSummary(
+            id=portfolio.id,
+            name=portfolio.name,
+            base_currency=portfolio.base_currency,
+            status=portfolio.status,
+            assets_count=active_counts.get(portfolio.id, 0),
+            total_invested=summary.total_invested,
+            unrealized_pnl=summary.unrealized_pnl,
+            realized_pnl=summary.realized_pnl,
+            dividend_income=summary.dividend_income,
+            total_pnl=summary.total_pnl,
+            total_pnl_pct=summary.total_pnl_pct,
+        ))
+    return results

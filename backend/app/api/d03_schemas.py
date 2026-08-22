@@ -92,22 +92,29 @@ class SaleIn(BaseModel):
     unit_price: Decimal = Field(gt=0, decimal_places=8)
     fx_rate_at_sale: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     fx_rate_origin: FxRateOrigin = "manual"
-    notes: str | None = None
+    # D13 §4.1 "reason" field — max 500 characters.
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class SalePatch(BaseModel):
-    """All fields optional for PATCH."""
-    sale_date: date | None = None
-    quantity: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    unit_price: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    fx_rate_at_sale: Decimal | None = Field(default=None, gt=0, decimal_places=8)
-    fx_rate_origin: FxRateOrigin | None = None
-    notes: str | None = None
+    """Sales are immutable except for the reason (D13 §11) — every other
+    field (quantity, price, date, FX) is locked once a sale is created."""
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class SaleLotConsumptionResponse(BaseModel):
+    """FIFO breakdown row for a persisted sale (D13 §6.1: "which lots were
+    consumed, in what proportion, at what cost"). purchase_date/unit_price/
+    cost_contribution are properties on the SaleLotConsumption model that
+    reach into the consumed Lot — see that model's docstring. Requires
+    SaleLotConsumption.lot to be eager-loaded wherever a Sale is fetched for
+    serialization.
+    """
     lot_id: UUID
     quantity_consumed: Decimal
+    purchase_date: date
+    unit_price: Decimal
+    cost_contribution: Decimal
 
     model_config = {"from_attributes": True}
 
@@ -120,11 +127,48 @@ class SaleResponse(BaseModel):
     fx_rate_at_sale: Decimal | None
     fx_rate_origin: str
     notes: str | None
+    # Realized-gain fields (Spec D13 §4.1). None only for pre-D13 sales that
+    # could not be backfilled (no SaleLotConsumption history).
+    cost_basis_quote: Decimal | None
+    cost_basis_base: Decimal | None
+    realized_gain_quote: Decimal | None
+    realized_gain_base: Decimal | None
     created_at: datetime
     updated_at: datetime
     lot_consumptions: list[SaleLotConsumptionResponse]
 
     model_config = {"from_attributes": True}
+
+
+class LotConsumptionPreview(BaseModel):
+    """One lot's contribution to a proposed sale (Spec D13 §7.1)."""
+    lot_id: UUID
+    purchase_date: date
+    units_consumed: Decimal
+    unit_price: Decimal
+    cost_contribution: Decimal
+
+
+class SalePreviewOut(BaseModel):
+    """Read-only FIFO + realized-gain preview for a proposed sale (D13 §7.1,
+    §5.3) — no sale is created; the frontend shows these exact figures before
+    the user confirms.
+    """
+    insufficient_units: bool
+    units_available: Decimal
+    lot_consumptions: list[LotConsumptionPreview]
+    cost_basis_quote: Decimal
+    sale_proceeds_quote: Decimal
+    realized_gain_quote: Decimal | None
+    quote_currency: str
+    # None whenever a consumed lot's fx_rate_at_purchase or fx_rate_at_sale
+    # itself is unresolved (manual_pending) — see SaleService.compute_sale_preview.
+    cost_basis_base: Decimal | None
+    sale_proceeds_base: Decimal | None
+    realized_gain_base: Decimal | None
+    base_currency: str
+    fx_rate_at_sale: Decimal | None
+    fx_rate_origin: str
 
 
 # ── Holding schemas ───────────────────────────────────────────────────────────
@@ -158,13 +202,40 @@ class HoldingSummaryResponse(BaseModel):
 
 
 class HoldingDetailResponse(BaseModel):
-    """Full detail view: asset + all lots + all sales."""
+    """Full detail view: asset + all lots + all sales.
+
+    dividend_coverage_years (Spec D15 §4) is None whenever no schedule is
+    declared for the asset, the schedule's frequency is 'irregular', the
+    declared amount is zero, or the current FX rate is unresolved.
+    """
     id: UUID
     asset: AssetResponse
     lots: list[LotResponse]
     sales: list[SaleResponse]
     aggregates: HoldingAggregates
+    dividend_coverage_years: Decimal | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class HoldingPnlResponse(BaseModel):
+    """One row for the portfolio dashboard's asset list (Spec D13 §10,
+    extended by D15 §7) — units held, currently-invested cost basis, and
+    combined P&L for this specific holding. active_units == 0 signals a
+    fully-sold holding: the frontend renders "Sold · Realized P&L" and
+    ignores invested/total_pnl_pct for it (both read as zero in that case,
+    per summary_service.compute_holding_summaries). dividend_income is this
+    holding's share of received dividend cash (D15 §7); dividend_coverage_years
+    is the D15 §4 indicator, None when not computable.
+    """
+    holding_id: UUID
+    active_units: Decimal
+    invested: Decimal
+    unrealized_pnl: Decimal
+    realized_pnl: Decimal
+    dividend_income: Decimal
+    total_pnl: Decimal
+    total_pnl_pct: Decimal
+    dividend_coverage_years: Decimal | None = None

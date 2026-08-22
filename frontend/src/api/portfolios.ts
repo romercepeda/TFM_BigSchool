@@ -1,5 +1,5 @@
 import { get, post, patch, del } from './client.js';
-import type { Portfolio, PortfolioAlerts, PortfolioSummary } from './types.js';
+import type { Portfolio, PortfolioAlerts, PortfolioSummary, PortfolioListSummary, HoldingPnl } from './types.js';
 
 export interface CreatePortfolioBody { name: string; base_currency: string; }
 export interface UpdatePortfolioBody { name?: string; }
@@ -15,3 +15,9 @@ export const restorePortfolio = (id: string)                 => post<Portfolio>(
 export const deletePortfolio  = (id: string)                 => del<void>(`/portfolios/${id}`);
 export const getPortfolioSummary = (id: string)              => get<PortfolioSummary>(`/portfolios/${id}/summary`);
 export const getPortfolioAlerts  = (id: string)               => get<PortfolioAlerts>(`/portfolios/${id}/alerts`);
+
+// D13 §9/§10 — one round trip each, not one request per portfolio/holding.
+export const getPortfolioSummaries = (include_archived = false) =>
+  get<PortfolioListSummary[]>(`/portfolios/summaries${include_archived ? '?include_archived=true' : ''}`);
+export const getHoldingSummaries   = (portfolioId: string) =>
+  get<HoldingPnl[]>(`/portfolios/${portfolioId}/holdings/summary`);

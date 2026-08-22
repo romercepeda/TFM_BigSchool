@@ -105,9 +105,48 @@ export interface PortfolioSummary {
   total_invested: string;
   unrealized_pnl: string;
   unrealized_pnl_pct: string;
+  realized_pnl: string;
+  realized_pnl_pct: string;
+  // Spec D15 §7 — sum of received dividend cash, in base currency.
+  dividend_income: string;
+  // unrealized_pnl + realized_pnl + dividend_income, against total_invested.
+  total_pnl: string;
+  total_pnl_pct: string;
   trend_30d: TrendPoint[];
   computed_at: string;
   base_currency: string;
+}
+
+// Portfolios-list summary row (Spec D13 §9, extended by D15 §7.2) — one per
+// portfolio, fetched in a single call so the list screen doesn't fire one
+// request per portfolio.
+export interface PortfolioListSummary {
+  id: string;
+  name: string;
+  base_currency: string;
+  status: string;
+  assets_count: number;
+  total_invested: string;
+  unrealized_pnl: string;
+  realized_pnl: string;
+  dividend_income: string;
+  total_pnl: string;
+  total_pnl_pct: string;
+}
+
+// Per-holding dashboard row (Spec D13 §10, extended by D15 §7).
+export interface HoldingPnl {
+  holding_id: string;
+  active_units: string;
+  invested: string;
+  unrealized_pnl: string;
+  realized_pnl: string;
+  dividend_income: string;
+  total_pnl: string;
+  total_pnl_pct: string;
+  // Spec D15 §4 — null when not computable (no schedule, irregular
+  // frequency, zero dividend/cost-basis, unresolved current FX rate).
+  dividend_coverage_years: string | null;
 }
 
 // ── Holdings ──────────────────────────────────────────────────────────────────
@@ -137,13 +176,21 @@ export interface Holding {
   sale_count?: number;
   lots?: Lot[];
   sales?: Sale[];
+  // Spec D15 §4.4 — only populated on the single-holding detail response.
+  dividend_coverage_years?: string | null;
   created_at: string;
   updated_at: string;
 }
 
+// D13 §6.1's FIFO breakdown ("which lots were consumed, at what cost") — the
+// last three fields come from the consumed Lot via backend properties (see
+// SaleLotConsumption model), not stored on this junction row itself.
 export interface LotConsumption {
   lot_id: string;
   quantity_consumed: number;
+  purchase_date: string;
+  unit_price: string;
+  cost_contribution: string;
 }
 
 export interface Lot {
@@ -167,9 +214,41 @@ export interface Sale {
   fx_rate_at_sale: number | null;
   fx_rate_origin: string;
   notes: string | null;
+  // Realized-gain fields (Spec D13 §4.1). null only for a pre-D13 sale that
+  // couldn't be backfilled (no SaleLotConsumption history).
+  cost_basis_quote: number | null;
+  cost_basis_base: number | null;
+  realized_gain_quote: number | null;
+  realized_gain_base: number | null;
   created_at: string;
   updated_at: string;
   lot_consumptions: LotConsumption[];
+}
+
+// D13 §7.1 preview payload — Decimal fields arrive as strings (see the
+// PortfolioSummary note above); parse with Number() before formatting.
+export interface LotConsumptionPreview {
+  lot_id: string;
+  purchase_date: string;
+  units_consumed: string;
+  unit_price: string;
+  cost_contribution: string;
+}
+
+export interface SalePreview {
+  insufficient_units: boolean;
+  units_available: string;
+  lot_consumptions: LotConsumptionPreview[];
+  cost_basis_quote: string;
+  sale_proceeds_quote: string;
+  realized_gain_quote: string | null;
+  quote_currency: string;
+  cost_basis_base: string | null;
+  sale_proceeds_base: string | null;
+  realized_gain_base: string | null;
+  base_currency: string;
+  fx_rate_at_sale: string | null;
+  fx_rate_origin: string;
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────
@@ -214,6 +293,9 @@ export interface IndicatorSnapshot {
 export interface IndicatorSnapshotHistory {
   indicator: Indicator;
   snapshots: IndicatorSnapshot[];
+  // Post-v1: trailing 3-year average of every valued snapshot, any source.
+  // null for qualitative indicators or when nothing falls in the window.
+  avg_3y: string | null;
 }
 
 // ── Price Levels ──────────────────────────────────────────────────────────────
@@ -376,6 +458,43 @@ export interface CascadeFailureEntryOut {
 export interface CascadeFailureListResponse {
   items: CascadeFailureEntryOut[];
   total: number;
+}
+
+// ── Dividend Tracking (Spec D15) ────────────────────────────────────────────
+
+export type DividendFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'irregular';
+// 'nominal': amount_per_payment is a currency amount per share. 'percentage':
+// amount_per_payment is a plain percentage of the current share price (e.g.
+// 2.5 for "2.5%") — lets the user record the dividend exactly as announced.
+export type DividendAmountType = 'nominal' | 'percentage';
+
+// Asset-scoped declared dividend policy (D15 §3.1) — shared reference data,
+// one row per asset, edited in place.
+export interface DividendSchedule {
+  id: string;
+  asset_id: string;
+  frequency: DividendFrequency;
+  amount_type: DividendAmountType;
+  amount_per_payment: string;
+  next_payment_date: string | null;
+  origin: 'manual' | 'auto';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Holding-scoped record of an actual dividend cash payment received (D15 §3.2).
+export interface DividendPayment {
+  id: string;
+  holding_id: string;
+  payment_date: string;
+  gross_amount_quote: string;
+  fx_rate_at_payment: string | null;
+  fx_rate_origin: string;
+  gross_amount_base: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ── API Error ─────────────────────────────────────────────────────────────────

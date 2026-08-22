@@ -1,7 +1,7 @@
-// portfolioHeader block — Changeset C08 §7. Three tiles (Valor Total,
-// Invertido, P&L Latente) + the 30-day trend sparkline. The P&L Realizado
-// tile from the visual redesign is deliberately not rendered (§11.1,
-// deferred to a future D13 changeset).
+// portfolioHeader block — Changeset C08 §7, completed by Spec D13 §8 / C20 §7.
+// Four tiles (Valor Total, Invertido, P&L Latente, P&L Realizado) + the
+// 30-day trend sparkline. C08 §11.1 deferred the P&L Realizado tile to D13;
+// that deferral is now closed.
 
 import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
@@ -100,6 +100,9 @@ export class PortfolioHeader extends BaseComponent {
       <div class="tile skeleton"></div>
       <div class="tile skeleton"></div>
       <div class="tile skeleton"></div>
+      <div class="tile skeleton"></div>
+      <div class="tile skeleton"></div>
+      <div class="tile skeleton"></div>
     `;
   }
 
@@ -123,6 +126,16 @@ export class PortfolioHeader extends BaseComponent {
     const deltaClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
     const sign = pnl > 0 ? '+' : '';
 
+    const realizedPnl = Number(s.realized_pnl);
+    const realizedClass = realizedPnl > 0 ? 'positive' : realizedPnl < 0 ? 'negative' : 'neutral';
+
+    const dividendIncome = Number(s.dividend_income);
+
+    const totalPnl = Number(s.total_pnl);
+    const totalPnlPct = Number(s.total_pnl_pct);
+    const totalClass = totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral';
+    const totalSign = totalPnl > 0 ? '+' : '';
+
     return `
       <div class="tile">
         <span class="label">${t('portfolio_header.total_value')}</span>
@@ -138,6 +151,19 @@ export class PortfolioHeader extends BaseComponent {
       <div class="tile">
         <span class="label">${t('portfolio_header.unrealized_pnl')}</span>
         <span class="value ${deltaClass}">${formatCurrency(pnl, currency)}</span>
+      </div>
+      <div class="tile">
+        <span class="label">${t('portfolio_header.realized_pnl')}</span>
+        <span class="value ${realizedClass}">${formatCurrency(realizedPnl, currency)}</span>
+      </div>
+      <div class="tile">
+        <span class="label">${t('portfolio_header.dividend_income')}</span>
+        <span class="value">${formatCurrency(dividendIncome, currency)}</span>
+      </div>
+      <div class="tile">
+        <span class="label">${t('portfolio_header.total_pnl')}</span>
+        <span class="value ${totalClass}">${formatCurrency(totalPnl, currency)}</span>
+        <span class="delta ${totalClass}">${totalSign}${formatPercent(totalPnlPct * 100)}</span>
       </div>
       <div class="tile chart-tile">
         <span class="label">${t('portfolio_header.trend_30d')}</span>

@@ -4,22 +4,56 @@ import '../components/indicator-card.js';
 import { t } from '../i18n/i18n.js';
 import { getHolding, deleteHolding, addLot, updateLot, deleteLot, updateAsset } from '../api/holdings.js';
 import type { AddLotBody } from '../api/holdings.js';
+import { previewSale, createSale, updateSaleReason, deleteSale } from '../api/sales.js';
+import type { SaleIn } from '../api/sales.js';
+import {
+  getDividendSchedule, upsertDividendSchedule, deleteDividendSchedule,
+  listDividendPayments, createDividendPayment, updateDividendPaymentNotes, deleteDividendPayment,
+} from '../api/dividends.js';
+import { getPortfolio } from '../api/portfolios.js';
 import { listIndicators, getAssetIndicators } from '../api/indicators.js';
 import { getAssetPrice, refreshAssetPrice } from '../api/market-data.js';
 import { listPriceLevels, deletePriceLevel, markAlertSeen } from '../api/price-levels.js';
 import { listDateAlerts, deleteDateAlert, markDateAlertSeen } from '../api/date-alerts.js';
 import { navigate } from '../router/router.js';
 import type { RouteParams } from '../router/router.js';
-import type { Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert } from '../api/types.js';
+import type {
+  Holding, Indicator, IndicatorSnapshotHistory, PriceLevel, DateAlert, Sale, SalePreview,
+  DividendSchedule, DividendPayment, DividendFrequency, DividendAmountType,
+} from '../api/types.js';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../utils/format.js';
 
 interface LotForm { date: string; qty: string; price: string; notes: string; }
 
 const emptyLotForm = (): LotForm => ({ date: '', qty: '', price: '', notes: '' });
 
+interface SaleForm { date: string; qty: string; price: string; notes: string; }
+
+const emptySaleForm = (): SaleForm => ({
+  date: new Date().toISOString().slice(0, 10),
+  qty: '', price: '', notes: '',
+});
+
+const SALE_PREVIEW_DEBOUNCE_MS = 300;
+
+interface ScheduleForm {
+  frequency: DividendFrequency; amountType: DividendAmountType; amount: string; nextDate: string; notes: string;
+}
+
+const emptyScheduleForm = (): ScheduleForm => ({
+  frequency: 'annual', amountType: 'nominal', amount: '', nextDate: '', notes: '',
+});
+
+interface PaymentForm { date: string; amount: string; notes: string; }
+
+const emptyPaymentForm = (): PaymentForm => ({
+  date: new Date().toISOString().slice(0, 10), amount: '', notes: '',
+});
+
 export class AssetDetailScreen extends BaseComponent {
   private _portfolioId = '';
   private _holdingId = '';
+  private _baseCurrency = '';
   private _holding: Holding | null = null;
   private _indicators: Indicator[] = [];
   private _indicatorHistories: IndicatorSnapshotHistory[] = [];
@@ -54,6 +88,47 @@ export class AssetDetailScreen extends BaseComponent {
   private _editAssetForm = { ticker: '', name: '', market: '' };
   private _editAssetError = '';
 
+  // Sell (D13 §5, Changeset C20 §8)
+  private _sellingAsset = false;
+  private _sellForm: SaleForm = emptySaleForm();
+  private _sellError = '';
+  private _sellPreview: SalePreview | null = null;
+  private _sellPreviewLoading = false;
+  private _sellSubmitting = false;
+  private _previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Sales history (D13 §6, Changeset C20 §9)
+  private _expandedSaleId: string | null = null;
+  private _editSaleReasonId: string | null = null;
+  private _editSaleReasonValue = '';
+  private _confirmDeleteSaleId: string | null = null;
+  private _deleteSaleError = '';
+
+  // Dividend tracking (Spec D15)
+  private _dividendSchedule: DividendSchedule | null = null;
+  private _dividendPayments: DividendPayment[] = [];
+
+  // Dividend schedule form (D15 §5.2)
+  private _editingSchedule = false;
+  private _scheduleForm: ScheduleForm = emptyScheduleForm();
+  private _scheduleError = '';
+  private _confirmDeleteSchedule = false;
+
+  // Dividend payment form (D15 §6.2)
+  private _addingPayment = false;
+  private _paymentForm: PaymentForm = emptyPaymentForm();
+  private _paymentError = '';
+
+  // Dividend payment history (D15 §6.3)
+  private _editPaymentNotesId: string | null = null;
+  private _editPaymentNotesValue = '';
+  private _confirmDeletePaymentId: string | null = null;
+  private _deletePaymentError = '';
+
+  // Guards against re-binding the 'indicator-updated' listener on every
+  // re-render (see afterRender()).
+  private _indicatorListenerBound = false;
+
   set params(p: RouteParams) {
     this._portfolioId = p['portfolioId'] ?? '';
     this._holdingId   = p['holdingId'] ?? '';
@@ -67,6 +142,15 @@ export class AssetDetailScreen extends BaseComponent {
     this._addingLot = false;
     this._editLotId = null;
     this._confirmDeleteLotId = null;
+    this._sellingAsset = false;
+    this._expandedSaleId = null;
+    this._editSaleReasonId = null;
+    this._confirmDeleteSaleId = null;
+    this._editingSchedule = false;
+    this._confirmDeleteSchedule = false;
+    this._addingPayment = false;
+    this._editPaymentNotesId = null;
+    this._confirmDeletePaymentId = null;
     this.shadow.innerHTML = this.render();
 
     try {
@@ -85,12 +169,16 @@ export class AssetDetailScreen extends BaseComponent {
     const ticker = this._holding.asset.ticker;
     const assetId = this._holding.asset.id;
 
-    const [indResult, priceResult, levelsResult, dateAlertsResult] = await Promise.allSettled([
-      Promise.all([listIndicators(), getAssetIndicators(assetId)]),
-      getAssetPrice(ticker, this._holding.asset.market),
-      listPriceLevels(this._portfolioId, this._holdingId),
-      listDateAlerts(this._portfolioId, this._holdingId),
-    ]);
+    const [indResult, priceResult, levelsResult, dateAlertsResult, portfolioResult, scheduleResult, paymentsResult] =
+      await Promise.allSettled([
+        Promise.all([listIndicators(), getAssetIndicators(assetId)]),
+        getAssetPrice(ticker, this._holding.asset.market),
+        listPriceLevels(this._portfolioId, this._holdingId),
+        listDateAlerts(this._portfolioId, this._holdingId),
+        getPortfolio(this._portfolioId),
+        getDividendSchedule(assetId),
+        listDividendPayments(this._portfolioId, this._holdingId),
+      ]);
 
     if (indResult.status === 'fulfilled') {
       const [allInds, histories] = indResult.value;
@@ -103,6 +191,11 @@ export class AssetDetailScreen extends BaseComponent {
     }
     if (levelsResult.status === 'fulfilled') this._priceLevels = levelsResult.value;
     if (dateAlertsResult.status === 'fulfilled') this._dateAlerts = dateAlertsResult.value;
+    if (portfolioResult.status === 'fulfilled') this._baseCurrency = portfolioResult.value.base_currency;
+    // scheduleResult rejects with a 404 when the asset has no declared
+    // schedule yet (Spec D15 §3.1) — not an error state for this screen.
+    this._dividendSchedule = scheduleResult.status === 'fulfilled' ? scheduleResult.value : null;
+    if (paymentsResult.status === 'fulfilled') this._dividendPayments = paymentsResult.value;
     this._priceLoading = false;
 
     this.shadow.innerHTML = this.render();
@@ -199,6 +292,18 @@ export class AssetDetailScreen extends BaseComponent {
         .summary-value.positive { color: var(--color-success); }
         .summary-value.negative { color: var(--color-danger); }
         .summary-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
+        .positive { color: var(--color-success); }
+        .negative { color: var(--color-danger); }
+        .sell-hint { font-size: var(--font-size-xs); color: var(--color-text-muted); align-self: center; }
+        .sale-preview { border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+          padding: var(--space-3); background: var(--color-bg-primary); font-size: var(--font-size-sm); }
+        .sale-preview-title { font-weight: var(--font-weight-medium); margin-bottom: var(--space-2); }
+        .sale-preview-lot { color: var(--color-text-secondary); }
+        .sale-preview-row { display: flex; justify-content: space-between; margin-top: var(--space-1); }
+        .sale-preview-row.total { font-weight: var(--font-weight-semibold); border-top: 1px solid var(--color-border);
+          padding-top: var(--space-1); margin-top: var(--space-2); }
+        .sale-detail { font-size: var(--font-size-sm); display: flex; flex-direction: column; gap: var(--space-2); }
+        .reason-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
         @media (max-width: 639px) { .actions { justify-content: flex-start; } }
@@ -220,6 +325,7 @@ export class AssetDetailScreen extends BaseComponent {
         .btn-xs-danger:hover { background: var(--color-danger); color: #fff; }
         .btn-xs-primary { padding: 1px var(--space-2); border-radius: var(--radius-sm);
           font-size: var(--font-size-xs); background: var(--color-accent); color: #fff; }
+        .btn-xs-primary:disabled { background: var(--color-border); color: var(--color-text-muted); cursor: default; }
         .lot-actions { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
         .lot-actions button { width: 100%; text-align: center; }
 
@@ -410,6 +516,21 @@ export class AssetDetailScreen extends BaseComponent {
     const plClass = pl === null ? '' : pl >= 0 ? 'positive' : 'negative';
     const plSign = pl !== null && pl >= 0 ? '+' : '';
 
+    // Total gain including dividends collected on this holding (D15 follow-up:
+    // "Unrealized P&L" above is deliberately price-only, same as the
+    // portfolio header's "P&L Latente" — this tile is the combined figure
+    // the user actually wants to see at a glance on the asset page).
+    // gross_amount_quote (not _base) matches the currency every other figure
+    // on this screen is already shown in (the asset's quote_currency).
+    const today = new Date().toISOString().slice(0, 10);
+    const dividendTotalQuote = this._dividendPayments
+      .filter((p) => p.payment_date <= today)
+      .reduce((sum, p) => sum + Number(p.gross_amount_quote), 0);
+    const totalGain = pl !== null ? pl + dividendTotalQuote : null;
+    const totalGainPct = totalGain !== null && costBasis > 0 ? (totalGain / costBasis) * 100 : null;
+    const totalGainClass = totalGain === null ? '' : totalGain >= 0 ? 'positive' : 'negative';
+    const totalGainSign = totalGain !== null && totalGain >= 0 ? '+' : '';
+
     const anyLotNotes = lots.some((l) => l.notes);
     const technicalIndicators = this._indicators.filter((ind) => ind.nature === 'technical');
     const fundamentalIndicators = this._indicators.filter((ind) => ind.nature === 'fundamental');
@@ -426,6 +547,9 @@ export class AssetDetailScreen extends BaseComponent {
           </div>
         </div>
         <div class="actions">
+          ${qty > 0
+            ? `<button class="btn-outline" id="sell-btn">${t('screen.holding.add_sale')}</button>`
+            : `<span class="sell-hint">${t('screen.sale.no_units')}</span>`}
           <button class="btn-outline" id="levels-btn">${t('screen.holding.alerts')}</button>
           <button class="btn-outline" id="analysis-btn">${t('screen.holding.analysis')}</button>
           <button class="btn-outline" id="edit-asset-btn">${t('screen.asset.edit_asset')}</button>
@@ -442,6 +566,8 @@ export class AssetDetailScreen extends BaseComponent {
 
       ${this._renderAssetAlerts(a.quote_currency)}
 
+      ${this._sellingAsset ? this._renderSellForm(a.quote_currency, qty) : ''}
+
       <div class="summary-grid">
         <div class="summary-card">
           <div class="summary-label">${t('screen.asset.quantity')}</div>
@@ -451,6 +577,13 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-label">${t('screen.asset.avg_cost')}</div>
           <div class="summary-value">${formatNumber(avgCost, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</div>
           <div class="summary-sub">${a.quote_currency} / ${t('screen.asset.unit')}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">${t('screen.dividend.coverage_years')}</div>
+          <div class="summary-value">${h.dividend_coverage_years != null
+            ? formatNumber(Number(h.dividend_coverage_years), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '—'}</div>
+          <div class="summary-sub">${t('screen.dividend.years')}</div>
         </div>
         <div class="summary-card">
           <div class="summary-label-row">
@@ -480,6 +613,14 @@ export class AssetDetailScreen extends BaseComponent {
           <div class="summary-label">${t('screen.asset.unrealized_pl')}</div>
           <div class="summary-value ${plClass}">${pl !== null ? `${plSign}${formatNumber(pl, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</div>
           ${plPct !== null ? `<div class="summary-sub">${plSign}${formatNumber(plPct, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</div>` : ''}
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">${t('screen.asset.total_gain')}</div>
+          <div class="summary-value ${totalGainClass}">${totalGain !== null ? `${totalGainSign}${formatNumber(totalGain, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</div>
+          ${totalGainPct !== null ? `<div class="summary-sub">${totalGainSign}${formatNumber(totalGainPct, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</div>` : ''}
+          ${dividendTotalQuote > 0
+            ? `<div class="summary-sub">${t('screen.asset.total_gain.includes_dividends', { amount: formatCurrency(dividendTotalQuote, a.quote_currency) })}</div>`
+            : ''}
         </div>
       </div>
 
@@ -541,27 +682,9 @@ export class AssetDetailScreen extends BaseComponent {
             : ''}
       </div>
 
-      ${sales.length > 0 ? `
-      <div class="section">
-        <div class="section-title">${t('screen.holding.sales')} · ${sales.length}</div>
-        <div class="table-wrap"><table class="table">
-          <thead><tr>
-            <th>${t('screen.sale.sale_date')}</th>
-            <th class="num">${t('screen.sale.quantity')}</th>
-            <th class="num">${t('screen.sale.price')}</th>
-            <th class="num">Total</th>
-          </tr></thead>
-          <tbody>
-            ${sales.map((s) => `<tr>
-              <td>${this._fmt(s.sale_date)}</td>
-              <td class="num">${formatNumber(Number(s.quantity), { maximumFractionDigits: 8 })}</td>
-              <td class="num">${formatNumber(Number(s.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
-              <td class="num">${formatNumber(Number(s.quantity) * Number(s.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table></div>
-      </div>
-      ` : ''}
+      ${this._renderSalesHistory(sales, a.quote_currency)}
+
+      ${this._renderDividendsSection(a.quote_currency)}
 
       ${this._indicators.length > 0 ? `
       <div class="section">
@@ -653,8 +776,376 @@ export class AssetDetailScreen extends BaseComponent {
     `;
   }
 
+  // ── Sell form + FIFO preview (Spec D13 §5, Changeset C20 §8) ────────────────
+
+  private _canSubmitSale(): boolean {
+    const f = this._sellForm;
+    if (!f.date || !f.qty || !f.price) return false;
+    if (Number(f.qty) <= 0 || Number(f.price) <= 0) return false;
+    if (this._sellSubmitting) return false;
+    if (!this._sellPreview || this._sellPreview.insufficient_units) return false;
+    return true;
+  }
+
+  private _renderSellForm(quoteCurrency: string, availableUnits: number): string {
+    const f = this._sellForm;
+    return `
+      <div class="section boxed-section">
+        <div class="section-title">${t('screen.holding.add_sale')}</div>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-field">
+            <label class="form-label">${t('screen.sale.sale_date')}</label>
+            <input class="form-input" id="sell-date" type="date" value="${f.date}" />
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.sale.quantity')}</label>
+            <input class="form-input" id="sell-qty" type="number" step="any" min="0" max="${availableUnits}" value="${f.qty}" style="width:100px" />
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.sale.price')}</label>
+            <input class="form-input" id="sell-price" type="number" step="any" min="0" value="${f.price}" style="width:100px" />
+          </div>
+          <div class="form-field" style="flex:1;min-width:200px;">
+            <label class="form-label">${t('screen.sale.reason')}</label>
+            <input class="form-input" id="sell-notes" type="text" value="${f.notes}"
+              placeholder="${t('screen.sale.reason_placeholder')}" style="width:100%" />
+          </div>
+        </div>
+        <div id="sell-preview-container" style="margin-top:var(--space-3);">
+          ${this._renderSellPreviewContent(quoteCurrency)}
+        </div>
+        ${this._sellError ? `<div class="form-error">${this._sellError}</div>` : ''}
+        <div class="form-actions" style="margin-top:var(--space-3);">
+          <button class="btn-xs-primary" id="sell-submit-btn" ${this._canSubmitSale() ? '' : 'disabled'}>${t('screen.sale.submit')}</button>
+          <button class="btn-xs" id="sell-cancel-btn">${t('common.button.cancel')}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderSellPreviewContent(quoteCurrency: string): string {
+    if (this._sellPreviewLoading) {
+      return `<div class="sell-hint">${t('common.loading')}</div>`;
+    }
+    const p = this._sellPreview;
+    if (!p) return '';
+    if (p.insufficient_units) {
+      return `<div class="form-error">${t('screen.sale.insufficient_units', {
+        available: formatNumber(Number(p.units_available), { maximumFractionDigits: 8 }),
+      })}</div>`;
+    }
+    const gainQuote = p.realized_gain_quote !== null ? Number(p.realized_gain_quote) : null;
+    const gainClass = gainQuote === null ? '' : gainQuote > 0 ? 'positive' : gainQuote < 0 ? 'negative' : '';
+    const gainLabel = gainQuote !== null && gainQuote < 0 ? t('screen.sale.preview.loss') : t('screen.sale.preview.gain');
+    return `
+      <div class="sale-preview">
+        <div class="sale-preview-title">${t('screen.sale.preview.title')}</div>
+        ${p.lot_consumptions.map((c) => `
+          <div class="sale-preview-lot">${t('screen.sale.preview.lot_line', {
+            date: this._fmt(c.purchase_date),
+            units: formatNumber(Number(c.units_consumed), { maximumFractionDigits: 8 }),
+            price: formatNumber(Number(c.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+            cost: formatCurrency(Number(c.cost_contribution), quoteCurrency),
+          })}</div>
+        `).join('')}
+        <div class="sale-preview-row">
+          <span>${t('screen.sale.preview.total_cost')}</span>
+          <span>${formatCurrency(Number(p.cost_basis_quote), quoteCurrency)}</span>
+        </div>
+        <div class="sale-preview-row">
+          <span>${t('screen.sale.preview.proceeds')}</span>
+          <span>${formatCurrency(Number(p.sale_proceeds_quote), quoteCurrency)}</span>
+        </div>
+        <div class="sale-preview-row total ${gainClass}">
+          <span>${gainLabel}</span>
+          <span>${gainQuote !== null ? `${gainQuote >= 0 ? '+' : ''}${formatCurrency(gainQuote, quoteCurrency)}` : '—'}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private _updateSellPreviewDOM(quoteCurrency: string): void {
+    const container = this.shadow.getElementById('sell-preview-container');
+    if (container) container.innerHTML = this._renderSellPreviewContent(quoteCurrency);
+    const submitBtn = this.shadow.getElementById('sell-submit-btn') as HTMLButtonElement | null;
+    if (submitBtn) submitBtn.disabled = !this._canSubmitSale();
+  }
+
+  // ── Sales history (Spec D13 §6, Changeset C20 §9) ───────────────────────────
+
+  private _renderSalesHistory(sales: Sale[], quoteCurrency: string): string {
+    const sorted = [...sales].sort((s1, s2) => s2.sale_date.localeCompare(s1.sale_date));
+    return `
+      <div class="section">
+        <div class="section-title">${t('screen.holding.sales')} · ${sorted.length}</div>
+        ${sorted.length === 0
+          ? `<div class="empty-state">${t('screen.sale.history_empty')}</div>`
+          : `<div class="table-wrap"><table class="table">
+              <thead><tr>
+                <th>${t('screen.sale.sale_date')}</th>
+                <th class="num">${t('screen.sale.quantity')}</th>
+                <th class="num">${t('screen.sale.price')}</th>
+                <th>${t('screen.sale.reason')}</th>
+                <th class="num">${t('screen.sale.realized_gain')}</th>
+                <th class="act"></th>
+              </tr></thead>
+              <tbody>
+                ${sorted.map((s) => this._renderSaleRow(s, quoteCurrency)).join('')}
+              </tbody>
+            </table></div>`}
+      </div>
+    `;
+  }
+
+  private _renderSaleRow(s: Sale, quoteCurrency: string): string {
+    if (this._confirmDeleteSaleId === s.id) {
+      return `<tr>
+        <td colspan="6">
+          <div class="confirm-row">
+            <span class="confirm-label">${t('screen.sale.delete.confirm')}</span>
+            <button class="btn-xs-danger" data-do-delete-sale="${s.id}">${t('common.button.confirm')}</button>
+            <button class="btn-xs" data-cancel-delete-sale="${s.id}">${t('common.button.cancel')}</button>
+            ${this._deleteSaleError ? `<span style="color:var(--color-danger);font-size:var(--font-size-xs)">${this._deleteSaleError}</span>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    const gainBase = s.realized_gain_base !== null ? Number(s.realized_gain_base) : null;
+    const gainClass = gainBase === null ? '' : gainBase > 0 ? 'positive' : gainBase < 0 ? 'negative' : '';
+    const reason = s.notes ?? '';
+
+    const row = `<tr>
+      <td>${this._fmt(s.sale_date)}</td>
+      <td class="num">${formatNumber(Number(s.quantity), { maximumFractionDigits: 8 })}</td>
+      <td class="num">${formatNumber(Number(s.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+      <td class="reason-cell" title="${reason}">${reason || '—'}</td>
+      <td class="num ${gainClass}">${gainBase !== null ? `${gainBase >= 0 ? '+' : ''}${formatCurrency(gainBase, this._baseCurrency || quoteCurrency)}` : '—'}</td>
+      <td class="num lot-actions">
+        <button class="btn-xs" data-toggle-sale="${s.id}">${this._expandedSaleId === s.id ? t('common.button.close') : t('screen.sale.view_details')}</button>
+        <button class="btn-xs-danger" data-delete-sale="${s.id}">${t('common.button.delete')}</button>
+      </td>
+    </tr>`;
+
+    if (this._expandedSaleId !== s.id) return row;
+    return row + `<tr class="edit-td"><td colspan="6">${this._renderSaleDetail(s, quoteCurrency)}</td></tr>`;
+  }
+
+  private _renderSaleDetail(s: Sale, quoteCurrency: string): string {
+    const baseCurrency = this._baseCurrency || quoteCurrency;
+    const editing = this._editSaleReasonId === s.id;
+    return `
+      <div class="sale-detail">
+        <div>
+          <strong>${t('screen.sale.reason')}:</strong>
+          ${editing
+            ? `<input class="form-input" id="edit-sale-reason-input" type="text" value="${this._editSaleReasonValue}" style="width:240px" />
+               <button class="btn-xs-primary" data-save-sale-reason="${s.id}">${t('common.button.save')}</button>
+               <button class="btn-xs" id="cancel-edit-sale-reason-btn">${t('common.button.cancel')}</button>`
+            : `${s.notes || '—'}
+               <button class="btn-xs" data-edit-sale-reason="${s.id}" data-current-reason="${s.notes ?? ''}">${t('screen.sale.edit_reason')}</button>`}
+        </div>
+        <div>
+          <strong>${t('screen.sale.fx_rate')}:</strong>
+          ${s.fx_rate_at_sale !== null ? formatNumber(Number(s.fx_rate_at_sale), { maximumFractionDigits: 6 }) : '—'}
+          (${s.fx_rate_origin})
+        </div>
+        <div>
+          <strong>${t('screen.sale.preview.title')}</strong>
+          ${s.lot_consumptions.map((c) => `<div class="sale-preview-lot">${t('screen.sale.preview.lot_line', {
+            date: this._fmt(c.purchase_date),
+            units: formatNumber(Number(c.quantity_consumed), { maximumFractionDigits: 8 }),
+            price: formatNumber(Number(c.unit_price), { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+            cost: formatCurrency(Number(c.cost_contribution), quoteCurrency),
+          })}</div>`).join('')}
+        </div>
+        <div>
+          <strong>${t('screen.sale.preview.total_cost')}:</strong>
+          ${s.cost_basis_quote !== null ? formatCurrency(Number(s.cost_basis_quote), quoteCurrency) : '—'} (${quoteCurrency})
+          / ${s.cost_basis_base !== null ? formatCurrency(Number(s.cost_basis_base), baseCurrency) : '—'} (${baseCurrency})
+        </div>
+        <div>
+          <strong>${t('screen.sale.realized_gain')}:</strong>
+          ${s.realized_gain_quote !== null ? formatCurrency(Number(s.realized_gain_quote), quoteCurrency) : '—'} (${quoteCurrency})
+          / ${s.realized_gain_base !== null ? formatCurrency(Number(s.realized_gain_base), baseCurrency) : '—'} (${baseCurrency})
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Dividend tracking (Spec D15) ─────────────────────────────────────────────
+
+  private _renderDividendsSection(quoteCurrency: string): string {
+    const schedule = this._dividendSchedule;
+    const payments = [...this._dividendPayments].sort((a, b) => b.payment_date.localeCompare(a.payment_date));
+    return `
+      <div class="section boxed-section">
+        <div class="section-title">
+          ${t('screen.dividend.schedule.title')}
+          <button class="btn-xs" id="${schedule ? 'edit-schedule-btn' : 'add-schedule-btn'}">
+            ${schedule ? t('screen.dividend.schedule.edit') : t('screen.dividend.schedule.declare')}
+          </button>
+        </div>
+        ${this._editingSchedule ? this._renderScheduleForm() : this._renderScheduleSummary(schedule, quoteCurrency)}
+
+        <div class="section-title" style="margin-top:var(--space-5);">
+          ${t('screen.dividend.payments.title')} · ${payments.length}
+          <button class="btn-xs" id="add-payment-btn">${t('screen.dividend.payments.add')}</button>
+        </div>
+        ${this._addingPayment ? this._renderAddPaymentForm() : ''}
+        ${payments.length === 0 && !this._addingPayment
+          ? `<div class="empty-state">${t('screen.dividend.payments.empty')}</div>`
+          : payments.length > 0
+            ? `<div class="table-wrap"><table class="table">
+                <thead><tr>
+                  <th>${t('screen.dividend.payments.date')}</th>
+                  <th class="num">${t('screen.dividend.payments.gross_amount')}</th>
+                  <th>${t('screen.sale.reason')}</th>
+                  <th class="act"></th>
+                </tr></thead>
+                <tbody>
+                  ${payments.map((p) => this._renderPaymentRow(p, quoteCurrency)).join('')}
+                </tbody>
+              </table></div>`
+            : ''}
+      </div>
+    `;
+  }
+
+  private _renderScheduleSummary(schedule: DividendSchedule | null, quoteCurrency: string): string {
+    if (!schedule) return `<div class="empty-state">${t('screen.dividend.schedule.empty')}</div>`;
+    return `
+      <div style="font-size:var(--font-size-sm);display:flex;flex-direction:column;gap:var(--space-1);">
+        <div><strong>${t('screen.dividend.schedule.frequency')}:</strong> ${t('screen.dividend.frequency.' + schedule.frequency)}</div>
+        <div><strong>${t('screen.dividend.schedule.amount')}:</strong> ${schedule.amount_type === 'percentage'
+          ? `${formatNumber(Number(schedule.amount_per_payment), { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%`
+          : `${formatCurrency(Number(schedule.amount_per_payment), quoteCurrency)} / ${t('screen.asset.unit')}`}</div>
+        <div><strong>${t('screen.dividend.schedule.next_payment')}:</strong> ${schedule.next_payment_date ? this._fmt(schedule.next_payment_date) : '—'}</div>
+        ${schedule.notes ? `<div><strong>${t('screen.sale.reason')}:</strong> ${schedule.notes}</div>` : ''}
+        <div style="margin-top:var(--space-1);">
+          ${this._confirmDeleteSchedule
+            ? `<span class="confirm-label">${t('screen.dividend.schedule.delete.confirm')}</span>
+               <button class="btn-xs-danger" id="do-delete-schedule-btn">${t('common.button.confirm')}</button>
+               <button class="btn-xs" id="cancel-delete-schedule-btn">${t('common.button.cancel')}</button>`
+            : `<button class="btn-xs-danger" id="delete-schedule-btn">${t('common.button.delete')}</button>`}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderScheduleForm(): string {
+    const f = this._scheduleForm;
+    const frequencies: DividendFrequency[] = ['monthly', 'quarterly', 'semiannual', 'annual', 'irregular'];
+    return `
+      <div class="form-row" style="flex-direction:column;gap:var(--space-3);align-items:stretch;">
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.frequency')}</label>
+            <select class="form-input" id="schedule-frequency">
+              ${frequencies.map((fr) => `<option value="${fr}" ${f.frequency === fr ? 'selected' : ''}>${t('screen.dividend.frequency.' + fr)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.amount_type')}</label>
+            <select class="form-input" id="schedule-amount-type">
+              <option value="nominal" ${f.amountType === 'nominal' ? 'selected' : ''}>${t('screen.dividend.schedule.amount_type.nominal')}</option>
+              <option value="percentage" ${f.amountType === 'percentage' ? 'selected' : ''}>${t('screen.dividend.schedule.amount_type.percentage')}</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.amount')}</label>
+            <input class="form-input" id="schedule-amount" type="number" step="any" min="0" value="${f.amount}" style="width:100px" />
+            <span class="summary-sub">${f.amountType === 'percentage' ? '%' : t('screen.asset.unit')}</span>
+          </div>
+          <div class="form-field">
+            <label class="form-label">${t('screen.dividend.schedule.next_payment')}</label>
+            <input class="form-input" id="schedule-next-date" type="date" value="${f.nextDate}" />
+          </div>
+          <div class="form-field" style="flex:1;min-width:180px;">
+            <label class="form-label">${t('screen.sale.reason')}</label>
+            <input class="form-input" id="schedule-notes" type="text" value="${f.notes}" style="width:100%" />
+          </div>
+          <div class="form-actions">
+            <button class="btn-xs-primary" id="save-schedule-btn">${t('common.button.save')}</button>
+            <button class="btn-xs" id="cancel-schedule-btn">${t('common.button.cancel')}</button>
+          </div>
+        </div>
+        ${this._scheduleError ? `<div class="form-error">${this._scheduleError}</div>` : ''}
+      </div>
+    `;
+  }
+
+  private _renderAddPaymentForm(): string {
+    const f = this._paymentForm;
+    return `
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">${t('screen.dividend.payments.date')}</label>
+          <input class="form-input" id="payment-date" type="date" value="${f.date}" />
+        </div>
+        <div class="form-field">
+          <label class="form-label">${t('screen.dividend.payments.gross_amount')}</label>
+          <input class="form-input" id="payment-amount" type="number" step="any" min="0" value="${f.amount}" style="width:100px" />
+        </div>
+        <div class="form-field" style="flex:1;min-width:160px;">
+          <label class="form-label">${t('screen.sale.reason')}</label>
+          <input class="form-input" id="payment-notes" type="text" value="${f.notes}" style="width:100%" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-xs-primary" id="save-payment-btn">${t('common.button.save')}</button>
+          <button class="btn-xs" id="cancel-payment-btn">${t('common.button.cancel')}</button>
+        </div>
+      </div>
+      ${this._paymentError ? `<div class="form-error">${this._paymentError}</div>` : ''}
+    `;
+  }
+
+  private _renderPaymentRow(p: DividendPayment, quoteCurrency: string): string {
+    if (this._confirmDeletePaymentId === p.id) {
+      return `<tr>
+        <td colspan="4">
+          <div class="confirm-row">
+            <span class="confirm-label">${t('screen.dividend.payments.delete.confirm')}</span>
+            <button class="btn-xs-danger" data-do-delete-payment="${p.id}">${t('common.button.confirm')}</button>
+            <button class="btn-xs" data-cancel-delete-payment="${p.id}">${t('common.button.cancel')}</button>
+            ${this._deletePaymentError ? `<span style="color:var(--color-danger);font-size:var(--font-size-xs)">${this._deletePaymentError}</span>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    const editing = this._editPaymentNotesId === p.id;
+    const reason = p.notes ?? '';
+
+    return `<tr>
+      <td>${this._fmt(p.payment_date)}</td>
+      <td class="num">${formatCurrency(Number(p.gross_amount_quote), quoteCurrency)}</td>
+      <td class="reason-cell" title="${reason}">
+        ${editing
+          ? `<input class="form-input" id="edit-payment-notes-input" type="text" value="${this._editPaymentNotesValue}" style="width:160px" />`
+          : (reason || '—')}
+      </td>
+      <td class="num lot-actions">
+        ${editing
+          ? `<button class="btn-xs-primary" data-save-payment-notes="${p.id}">${t('common.button.save')}</button>
+             <button class="btn-xs" id="cancel-edit-payment-notes-btn">${t('common.button.cancel')}</button>`
+          : `<button class="btn-xs" data-edit-payment-notes="${p.id}" data-current-notes="${reason}">${t('screen.sale.edit_reason')}</button>
+             <button class="btn-xs-danger" data-delete-payment="${p.id}">${t('common.button.delete')}</button>`}
+      </td>
+    </tr>`;
+  }
+
   protected afterRender(): void {
     const pid = this._portfolioId, hid = this._holdingId;
+    // Admin manual-override on an indicator card (post-v1) — bubbles up
+    // through shadow roots via composed:true. Bound once on `this.shadow`
+    // itself (the persistent ShadowRoot, unlike the elements inside it that
+    // get recreated on every re-render), so this guard stops afterRender()
+    // — called on every re-render — from stacking duplicate listeners.
+    if (!this._indicatorListenerBound) {
+      this._indicatorListenerBound = true;
+      this.shadow.addEventListener('indicator-updated', () => void this._reloadIndicators());
+    }
     this.shadow.getElementById('levels-btn')?.addEventListener('click', () =>
       navigate(`/app/portfolios/${pid}/assets/${hid}/levels`));
     this.shadow.getElementById('analysis-btn')?.addEventListener('click', () =>
@@ -709,6 +1200,7 @@ export class AssetDetailScreen extends BaseComponent {
       this._addLotForm = emptyLotForm();
       this._addLotError = '';
       this._editLotId = null;
+      this._sellingAsset = false;
       this._rerender();
       this.shadow.querySelector<HTMLInputElement>('#add-lot-date')?.focus();
     });
@@ -792,6 +1284,390 @@ export class AssetDetailScreen extends BaseComponent {
         };
       });
     });
+
+    // Sell (D13 §5, Changeset C20 §8)
+    this.shadow.getElementById('sell-btn')?.addEventListener('click', () => {
+      this._sellingAsset = !this._sellingAsset;
+      this._sellForm = emptySaleForm();
+      if (this._sellingAsset && this._holding) {
+        this._sellForm.qty = String(this._holding.aggregates.quantity_held);
+      }
+      this._sellError = '';
+      this._sellPreview = null;
+      this._addingLot = false;
+      this._editLotId = null;
+      this._rerender();
+      if (this._sellingAsset) {
+        this.shadow.querySelector<HTMLInputElement>('#sell-date')?.focus();
+        this._scheduleSellPreview();
+      }
+    });
+    this.shadow.getElementById('sell-cancel-btn')?.addEventListener('click', () => {
+      this._sellingAsset = false;
+      this._sellError = '';
+      if (this._previewDebounceTimer) clearTimeout(this._previewDebounceTimer);
+      this._rerender();
+    });
+    this.shadow.getElementById('sell-submit-btn')?.addEventListener('click', () => void this._doSell());
+    this._bindSellFormInputs();
+
+    // Sales history (D13 §6, Changeset C20 §9)
+    this.shadow.querySelectorAll<HTMLElement>('[data-toggle-sale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset['toggleSale']!;
+        this._expandedSaleId = this._expandedSaleId === id ? null : id;
+        this._editSaleReasonId = null;
+        this._rerender();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-delete-sale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeleteSaleId = btn.dataset['deleteSale']!;
+        this._deleteSaleError = '';
+        this._rerender();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-do-delete-sale]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doDeleteSale(btn.dataset['doDeleteSale']!));
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-cancel-delete-sale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeleteSaleId = null;
+        this._deleteSaleError = '';
+        this._rerender();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-edit-sale-reason]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._editSaleReasonId = btn.dataset['editSaleReason']!;
+        this._editSaleReasonValue = btn.dataset['currentReason'] ?? '';
+        this._rerender();
+        this.shadow.querySelector<HTMLInputElement>('#edit-sale-reason-input')?.focus();
+      });
+    });
+    this.shadow.getElementById('cancel-edit-sale-reason-btn')?.addEventListener('click', () => {
+      this._editSaleReasonId = null;
+      this._rerender();
+    });
+    this.shadow.getElementById('edit-sale-reason-input')?.addEventListener('input', () => {
+      this._editSaleReasonValue = (this.shadow.getElementById('edit-sale-reason-input') as HTMLInputElement)?.value ?? '';
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-save-sale-reason]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doSaveSaleReason(btn.dataset['saveSaleReason']!));
+    });
+
+    // Dividend schedule (Spec D15 §5.2)
+    this.shadow.getElementById('add-schedule-btn')?.addEventListener('click', () => {
+      this._editingSchedule = true;
+      this._scheduleForm = emptyScheduleForm();
+      this._scheduleError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#schedule-amount')?.focus();
+    });
+    this.shadow.getElementById('edit-schedule-btn')?.addEventListener('click', () => {
+      const s = this._dividendSchedule;
+      this._editingSchedule = true;
+      this._scheduleForm = s
+        ? {
+            frequency: s.frequency, amountType: s.amount_type, amount: s.amount_per_payment,
+            nextDate: s.next_payment_date ?? '', notes: s.notes ?? '',
+          }
+        : emptyScheduleForm();
+      this._scheduleError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#schedule-amount')?.focus();
+    });
+    this.shadow.getElementById('cancel-schedule-btn')?.addEventListener('click', () => {
+      this._editingSchedule = false;
+      this._scheduleError = '';
+      this._rerender();
+    });
+    this.shadow.getElementById('save-schedule-btn')?.addEventListener('click', () => void this._doSaveSchedule());
+    const readScheduleForm = (): ScheduleForm => ({
+      frequency: ((this.shadow.getElementById('schedule-frequency') as HTMLSelectElement)?.value as DividendFrequency) ?? 'annual',
+      amountType: ((this.shadow.getElementById('schedule-amount-type') as HTMLSelectElement)?.value as DividendAmountType) ?? 'nominal',
+      amount: (this.shadow.getElementById('schedule-amount') as HTMLInputElement)?.value ?? '',
+      nextDate: (this.shadow.getElementById('schedule-next-date') as HTMLInputElement)?.value ?? '',
+      notes: (this.shadow.getElementById('schedule-notes') as HTMLInputElement)?.value ?? '',
+    });
+    ['schedule-frequency', 'schedule-amount', 'schedule-next-date', 'schedule-notes'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => { this._scheduleForm = readScheduleForm(); });
+    });
+    // Separate 'change' + full rerender: the amount field's unit suffix
+    // (% vs currency) needs to flip immediately when the type changes.
+    this.shadow.getElementById('schedule-amount-type')?.addEventListener('change', () => {
+      this._scheduleForm = readScheduleForm();
+      this._rerender();
+    });
+    this.shadow.getElementById('delete-schedule-btn')?.addEventListener('click', () => {
+      this._confirmDeleteSchedule = true;
+      this._rerender();
+    });
+    this.shadow.getElementById('do-delete-schedule-btn')?.addEventListener('click', () => void this._doDeleteSchedule());
+    this.shadow.getElementById('cancel-delete-schedule-btn')?.addEventListener('click', () => {
+      this._confirmDeleteSchedule = false;
+      this._rerender();
+    });
+
+    // Dividend payments (Spec D15 §6)
+    this.shadow.getElementById('add-payment-btn')?.addEventListener('click', () => {
+      this._addingPayment = !this._addingPayment;
+      this._paymentForm = emptyPaymentForm();
+      this._paymentError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#payment-date')?.focus();
+    });
+    this.shadow.getElementById('save-payment-btn')?.addEventListener('click', () => void this._doAddPayment());
+    this.shadow.getElementById('cancel-payment-btn')?.addEventListener('click', () => {
+      this._addingPayment = false;
+      this._paymentError = '';
+      this._rerender();
+    });
+    this._bindPaymentFormInputs();
+
+    this.shadow.querySelectorAll<HTMLElement>('[data-edit-payment-notes]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._editPaymentNotesId = btn.dataset['editPaymentNotes']!;
+        this._editPaymentNotesValue = btn.dataset['currentNotes'] ?? '';
+        this._rerender();
+        this.shadow.querySelector<HTMLInputElement>('#edit-payment-notes-input')?.focus();
+      });
+    });
+    this.shadow.getElementById('cancel-edit-payment-notes-btn')?.addEventListener('click', () => {
+      this._editPaymentNotesId = null;
+      this._rerender();
+    });
+    this.shadow.getElementById('edit-payment-notes-input')?.addEventListener('input', () => {
+      this._editPaymentNotesValue = (this.shadow.getElementById('edit-payment-notes-input') as HTMLInputElement)?.value ?? '';
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-save-payment-notes]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doSavePaymentNotes(btn.dataset['savePaymentNotes']!));
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeletePaymentId = btn.dataset['deletePayment']!;
+        this._deletePaymentError = '';
+        this._rerender();
+      });
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-do-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => void this._doDeletePayment(btn.dataset['doDeletePayment']!));
+    });
+    this.shadow.querySelectorAll<HTMLElement>('[data-cancel-delete-payment]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._confirmDeletePaymentId = null;
+        this._deletePaymentError = '';
+        this._rerender();
+      });
+    });
+  }
+
+  private _bindPaymentFormInputs(): void {
+    const read = (): PaymentForm => ({
+      date: (this.shadow.getElementById('payment-date') as HTMLInputElement)?.value ?? '',
+      amount: (this.shadow.getElementById('payment-amount') as HTMLInputElement)?.value ?? '',
+      notes: (this.shadow.getElementById('payment-notes') as HTMLInputElement)?.value ?? '',
+    });
+    ['payment-date', 'payment-amount', 'payment-notes'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => { this._paymentForm = read(); });
+    });
+  }
+
+  private async _reloadDividendData(): Promise<void> {
+    if (!this._holding) return;
+    const [scheduleResult, paymentsResult] = await Promise.allSettled([
+      getDividendSchedule(this._holding.asset.id),
+      listDividendPayments(this._portfolioId, this._holdingId),
+    ]);
+    this._dividendSchedule = scheduleResult.status === 'fulfilled' ? scheduleResult.value : null;
+    if (paymentsResult.status === 'fulfilled') this._dividendPayments = paymentsResult.value;
+  }
+
+  private async _doSaveSchedule(): Promise<void> {
+    if (!this._holding) return;
+    const f = this._scheduleForm;
+    if (!f.amount || Number(f.amount) <= 0) {
+      this._scheduleError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    try {
+      await upsertDividendSchedule(this._holding.asset.id, {
+        frequency: f.frequency,
+        amount_type: f.amountType,
+        amount_per_payment: Number(f.amount),
+        next_payment_date: f.nextDate || null,
+        notes: f.notes || undefined,
+      });
+      this._editingSchedule = false;
+      this._scheduleError = '';
+      await this._reloadDividendData();
+      // Schedule changes affect the coverage-years indicator (Spec D15 §4),
+      // which lives on the holding-detail response — reload it too.
+      await this._reloadHolding();
+    } catch (ex) {
+      this._scheduleError = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doDeleteSchedule(): Promise<void> {
+    if (!this._holding) return;
+    try {
+      await deleteDividendSchedule(this._holding.asset.id);
+      this._confirmDeleteSchedule = false;
+      await this._reloadDividendData();
+      await this._reloadHolding();
+    } catch (ex) {
+      this._error = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doAddPayment(): Promise<void> {
+    const f = this._paymentForm;
+    if (!f.date || !f.amount || Number(f.amount) <= 0) {
+      this._paymentError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    try {
+      await createDividendPayment(this._portfolioId, this._holdingId, {
+        payment_date: f.date,
+        gross_amount_quote: Number(f.amount),
+        fx_rate_origin: 'auto',
+        notes: f.notes || undefined,
+      });
+      this._addingPayment = false;
+      this._paymentForm = emptyPaymentForm();
+      this._paymentError = '';
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._paymentError = (ex as Error).message;
+    }
+    this._rerender();
+  }
+
+  private async _doDeletePayment(paymentId: string): Promise<void> {
+    try {
+      await deleteDividendPayment(this._portfolioId, this._holdingId, paymentId);
+      this._confirmDeletePaymentId = null;
+      this._deletePaymentError = '';
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._deletePaymentError = (ex as Error).message;
+    }
+    this._rerender();
+  }
+
+  private async _doSavePaymentNotes(paymentId: string): Promise<void> {
+    try {
+      await updateDividendPaymentNotes(this._portfolioId, this._holdingId, paymentId, this._editPaymentNotesValue);
+      this._editPaymentNotesId = null;
+      await this._reloadDividendData();
+    } catch (ex) {
+      this._error = (ex as Error).message;
+    }
+    this._rerender();
+  }
+
+  private _bindSellFormInputs(): void {
+    const quoteCurrency = this._holding?.asset.quote_currency ?? '';
+    const read = (): SaleForm => ({
+      date: (this.shadow.getElementById('sell-date') as HTMLInputElement)?.value ?? '',
+      qty: (this.shadow.getElementById('sell-qty') as HTMLInputElement)?.value ?? '',
+      price: (this.shadow.getElementById('sell-price') as HTMLInputElement)?.value ?? '',
+      notes: (this.shadow.getElementById('sell-notes') as HTMLInputElement)?.value ?? '',
+    });
+    ['sell-date', 'sell-qty', 'sell-price'].forEach((id) => {
+      this.shadow.getElementById(id)?.addEventListener('input', () => {
+        this._sellForm = read();
+        this._sellError = '';
+        this._updateSellPreviewDOM(quoteCurrency);
+        this._scheduleSellPreview();
+      });
+    });
+    this.shadow.getElementById('sell-notes')?.addEventListener('input', () => {
+      this._sellForm = read();
+    });
+  }
+
+  private _scheduleSellPreview(): void {
+    if (this._previewDebounceTimer) clearTimeout(this._previewDebounceTimer);
+    this._previewDebounceTimer = setTimeout(() => void this._fetchSellPreview(), SALE_PREVIEW_DEBOUNCE_MS);
+  }
+
+  private async _fetchSellPreview(): Promise<void> {
+    const f = this._sellForm;
+    const quoteCurrency = this._holding?.asset.quote_currency ?? '';
+    if (!f.date || !f.qty || !f.price || Number(f.qty) <= 0 || Number(f.price) <= 0) {
+      this._sellPreview = null;
+      this._sellPreviewLoading = false;
+      this._updateSellPreviewDOM(quoteCurrency);
+      return;
+    }
+    this._sellPreviewLoading = true;
+    this._updateSellPreviewDOM(quoteCurrency);
+    try {
+      this._sellPreview = await previewSale(this._portfolioId, this._holdingId, {
+        sale_date: f.date, quantity: Number(f.qty), unit_price: Number(f.price), fx_rate_origin: 'auto',
+      });
+    } catch {
+      this._sellPreview = null;
+    }
+    this._sellPreviewLoading = false;
+    this._updateSellPreviewDOM(quoteCurrency);
+  }
+
+  private async _doSell(): Promise<void> {
+    if (!this._canSubmitSale()) return;
+    const f = this._sellForm;
+    this._sellSubmitting = true;
+    this._sellError = '';
+    this._rerender();
+    const body: SaleIn = {
+      sale_date: f.date,
+      quantity: Number(f.qty),
+      unit_price: Number(f.price),
+      fx_rate_origin: 'auto',
+      notes: f.notes || undefined,
+    };
+    try {
+      await createSale(this._portfolioId, this._holdingId, body);
+      this._sellingAsset = false;
+      this._sellForm = emptySaleForm();
+      this._sellPreview = null;
+      this._sellSubmitting = false;
+      await this._reloadHolding();
+    } catch (ex) {
+      this._sellSubmitting = false;
+      this._sellError = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doDeleteSale(saleId: string): Promise<void> {
+    try {
+      await deleteSale(this._portfolioId, this._holdingId, saleId);
+      this._confirmDeleteSaleId = null;
+      this._deleteSaleError = '';
+      this._expandedSaleId = null;
+      await this._reloadHolding();
+    } catch (ex) {
+      this._deleteSaleError = (ex as Error).message;
+      this._rerender();
+    }
+  }
+
+  private async _doSaveSaleReason(saleId: string): Promise<void> {
+    try {
+      await updateSaleReason(this._portfolioId, this._holdingId, saleId, this._editSaleReasonValue);
+      this._editSaleReasonId = null;
+      await this._reloadHolding();
+    } catch (ex) {
+      this._error = (ex as Error).message;
+      this._rerender();
+    }
   }
 
   private _bindFormInputs(
@@ -916,14 +1792,36 @@ export class AssetDetailScreen extends BaseComponent {
     const cards = grid.querySelectorAll('pi-indicator-card') as NodeListOf<HTMLElement & {
       indicator: Indicator;
       snapshots: IndicatorSnapshotHistory['snapshots'];
+      assetId: string;
+      avg3y: string | null;
     }>;
     cards.forEach((card, i) => {
       const ind = indicators[i];
       if (!ind) return;
       const history = this._indicatorHistories.find((h) => h.indicator.code === ind.code);
+      card.assetId = this._holding?.asset.id ?? '';
       card.indicator = ind;
       card.snapshots = history?.snapshots ?? [];
+      card.avg3y = history?.avg_3y ?? null;
     });
+  }
+
+  // Admin manual-override (post-v1): a pi-indicator-card dispatches this
+  // after a successful save. Simplest correct refresh is the same
+  // indicators+histories re-fetch _load() already does — no local merge
+  // logic that could drift from what the backend actually persisted.
+  private async _reloadIndicators(): Promise<void> {
+    if (!this._holding) return;
+    try {
+      const [allInds, histories] = await Promise.all([
+        listIndicators(), getAssetIndicators(this._holding.asset.id),
+      ]);
+      this._indicators = allInds.filter((ind) => ind.scope === 'asset');
+      this._indicatorHistories = histories;
+    } catch {
+      // keep showing the previous values if the reload itself fails
+    }
+    this._rerender();
   }
 }
 

@@ -24,7 +24,6 @@ export interface LotIn {
 
 export interface AddAssetBody { asset: AssetIn; lot: LotIn; }
 export interface AddLotBody   { purchase_date: string; quantity: number; unit_price: number; notes?: string; fx_rate_origin?: string; }
-export interface AddSaleBody  { lot_id: string; quantity: number; price_per_unit: number; sold_at: string; }
 
 export const listHoldings  = (portfolioId: string)               => get<Holding[]>(`/portfolios/${portfolioId}/holdings`);
 export const getHolding    = (portfolioId: string, id: string)   => get<Holding>(`/portfolios/${portfolioId}/holdings/${id}`);
@@ -41,9 +40,9 @@ export const updateLot = (portfolioId: string, holdingId: string, lotId: string,
 export const deleteLot = (portfolioId: string, holdingId: string, lotId: string) =>
   del<void>(`/portfolios/${portfolioId}/holdings/${holdingId}/lots/${lotId}`);
 
+// create/update/delete a Sale live in api/sales.ts (Spec D13 §7) — FIFO lot
+// selection happens server-side, unlike the lot_id-based shape this file
+// used to declare (never wired to any screen; removed rather than kept
+// wrong-but-unused).
 export const listSales = (portfolioId: string, holdingId: string) =>
   get<Sale[]>(`/portfolios/${portfolioId}/holdings/${holdingId}/sales`);
-export const addSale   = (portfolioId: string, holdingId: string, body: AddSaleBody) =>
-  post<Sale>(`/portfolios/${portfolioId}/holdings/${holdingId}/sales`, body);
-export const deleteSale = (portfolioId: string, holdingId: string, saleId: string) =>
-  del<void>(`/portfolios/${portfolioId}/holdings/${holdingId}/sales/${saleId}`);

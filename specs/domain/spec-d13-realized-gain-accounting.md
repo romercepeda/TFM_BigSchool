@@ -88,7 +88,7 @@ The `Sale` entity was declared in Spec D03 §3.4. This section defines its **rea
 | `unit_sale_price` | NUMERIC | Sale price per unit, in the asset's quote currency. Unchanged. |
 | `fx_rate_at_sale` | NUMERIC | Rate between quote currency and portfolio base currency on `sale_date`, per D09 §7. Unchanged. |
 | `fx_rate_origin` | enum | `auto` \| `manual` \| `corrected` \| `manual_pending`. Same semantics as Lot per D03 §3.3 (with the addition from Changeset C04 for `manual_pending`). Unchanged. |
-| `reason` | text, nullable | **New field**: a brief note explaining why the sale was made. Free-form, max 500 characters. Optional. |
+| `reason` | text, nullable | A brief note explaining why the sale was made. Free-form, max 500 characters (enforced at the API layer). Optional. **Implementation note:** the `Sale` entity from D03 §3.4 already has a `notes` column serving this exact purpose (free-form optional text on a sale). C20 §1 reuses that column as `reason` rather than adding a redundant new one — no DB rename, no functional difference, just documenting that `notes` *is* `reason`. |
 | `cost_basis_quote` | NUMERIC | **New field**: sum of the cost basis of consumed lots, in quote currency. Computed at sale time from `SaleLotConsumption`. Immutable after write. |
 | `cost_basis_base` | NUMERIC | **New field**: same as above but converted to portfolio base currency using each lot's `fx_rate_at_purchase`. Enables the "true" realized gain in base currency, respecting each lot's original FX rate. |
 | `realized_gain_quote` | NUMERIC | **New field**: `(quantity_sold × unit_sale_price) − cost_basis_quote`. In quote currency. Immutable. |
@@ -264,8 +264,8 @@ Exposed as: `DELETE /sales/{sale_id}`. Guarded by `Depends(require_permission("s
 
 The `PortfolioSummary` introduced in Changeset C08 §3 gains two new fields:
 
-- **`realized_pnl`** (Decimal, in base currency): sum of `realized_gain_base` across all sales in the portfolio.
-- **`realized_pnl_pct`** (Decimal): `realized_pnl / total_invested_ever`, where `total_invested_ever` is the sum of `unit_price × quantity` across every lot ever created for holdings in the portfolio (regardless of consumption).
+- **`realized_pnl`** (Decimal, in base currency): sum of `realized_gain_base` across all sales in the portfolio, **as of the portfolio's "today"**. A sale dated after today is excluded from the sum until its date arrives — otherwise its units would count as both still-held (unrealized) and already-sold (realized) on the same day. Mirrors the existing rule that a future-dated lot doesn't yet reduce or contribute to today's totals either (Changeset C08 §4).
+- **`realized_pnl_pct`** (Decimal): `realized_pnl / total_invested_ever`, where `total_invested_ever` is the sum of `unit_price × quantity × fx_rate_at_purchase` (each lot converted to base currency via its own purchase-time rate) across every lot ever created for holdings in the portfolio (regardless of consumption). **Correction applied during Changeset C20 §6 implementation:** the original text summed `unit_price × quantity` without `fx_rate_at_purchase`, which would mix currencies as the denominator for a base-currency numerator across a multi-currency portfolio.
 
 The existing `unrealized_pnl` field is **narrowed** semantically: it now excludes any units that have been sold. In practice this was already implicit (unrealized was always about remaining units), but this spec makes it explicit.
 

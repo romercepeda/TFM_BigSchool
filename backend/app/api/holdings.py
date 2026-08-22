@@ -1,4 +1,4 @@
-"""Holdings, Lots, and Sales API endpoints — Spec D03.
+"""Holdings, Lots, and Sales API endpoints — Spec D03, sales extended by Spec D13.
 
 All routes are nested under /portfolios/{portfolio_id}/ to enforce portfolio ownership.
 Authorization: every handler verifies the portfolio belongs to the current user before
@@ -7,39 +7,57 @@ accessing any child entity. Users cannot reach holdings in portfolios they do no
 Endpoints:
     GET    /portfolios/{pid}/holdings                       — list holdings with aggregates
     POST   /portfolios/{pid}/holdings                       — add asset + first lot (atomic)
+    GET    /portfolios/{pid}/holdings/summary               — per-holding P&L rows, one round trip (D13 §10)
     GET    /portfolios/{pid}/holdings/{hid}                 — detail: asset, lots, sales
     DELETE /portfolios/{pid}/holdings/{hid}                 — delete holding + all child records
     POST   /portfolios/{pid}/holdings/{hid}/lots            — add another lot
     PATCH  /portfolios/{pid}/holdings/{hid}/lots/{lid}      — edit lot
     DELETE /portfolios/{pid}/holdings/{hid}/lots/{lid}      — delete lot (blocks if consumed)
-    POST   /portfolios/{pid}/holdings/{hid}/sales           — register sale (FIFO)
-    PATCH  /portfolios/{pid}/holdings/{hid}/sales/{sid}     — edit sale
+    GET    /portfolios/{pid}/holdings/{hid}/sales           — list sales for a holding (D13 §7.3)
+    POST   /portfolios/{pid}/holdings/{hid}/sales/preview   — read-only FIFO preview (D13 §7.1)
+    POST   /portfolios/{pid}/holdings/{hid}/sales           — register sale (FIFO, realized gain)
+    PATCH  /portfolios/{pid}/holdings/{hid}/sales/{sid}     — edit sale reason only (D13 §11)
     DELETE /portfolios/{pid}/holdings/{hid}/sales/{sid}     — delete sale (restores FIFO)
 """
 
+from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.d03_schemas import (
     CreateHoldingRequest,
     HoldingAggregates,
     HoldingDetailResponse,
+    HoldingPnlResponse,
     HoldingSummaryResponse,
+    LotConsumptionPreview,
     LotIn,
     LotPatch,
     LotResponse,
     SaleIn,
     SalePatch,
+    SalePreviewOut,
     SaleResponse,
 )
 from app.auth.dependencies import get_current_user
 from app.db.models.holding import Holding
+from app.db.models.sale import Sale, SaleLotConsumption
 from app.db.models.user import User
 from app.db.session import get_db
 from app.roles.dependencies import require_permission
-from app.services import asset_service, lot_service, sale_service, summary_cache
+from app.services import (
+    asset_service,
+    dividend_service,
+    lot_service,
+    sale_service,
+    summary_cache,
+    summary_service,
+)
 from app.services.market_data.service import get_market_data_service
 from app.services.portfolio_service import get_portfolio_by_id
 
@@ -105,6 +123,25 @@ async def _require_portfolio(
 def _build_aggregates(holding: Holding) -> HoldingAggregates:
     agg = lot_service.compute_holding_aggregates(holding.lots)
     return HoldingAggregates(**agg)
+
+
+async def _compute_dividend_coverage(
+    db: AsyncSession, portfolio, holding: Holding, aggregates: HoldingAggregates
+) -> Decimal | None:
+    """Spec D15 §4.4 — coverage indicator for the holding-detail response.
+    Cache-only FX lookup (no live provider call, per Changeset C19).
+    """
+    schedule = await dividend_service.get_schedule(db, holding.asset_id)
+    if schedule is None:
+        return None
+    today = date.today()
+    fx_rate = await summary_service.get_last_known_fx_rate(
+        db, holding.asset.quote_currency, portfolio.base_currency, today
+    )
+    current_price = await summary_service.get_last_known_price(db, holding.asset_id, today)
+    return dividend_service.compute_dividend_coverage_years(
+        aggregates.avg_purchase_price_base, schedule, fx_rate, current_price
+    )
 
 
 # ── Holding endpoints ─────────────────────────────────────────────────────────
@@ -227,6 +264,26 @@ async def add_holding(
 
 
 @router.get(
+    "/summary",
+    response_model=list[HoldingPnlResponse],
+    dependencies=[Depends(require_permission("holding.view"))],
+)
+async def list_holding_summaries(
+    portfolio_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[HoldingPnlResponse]:
+    """One P&L row per holding in the portfolio, in a single round trip
+    (Spec D13 §10) — the dashboard's asset list doesn't fire one request per
+    holding. Must be registered before GET /{holding_id}: otherwise FastAPI
+    would try to parse "summary" as a holding_id UUID and 422 first.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
+    rows = await summary_service.get_holding_summaries(db, portfolio)
+    return [HoldingPnlResponse(**vars(row)) for row in rows]
+
+
+@router.get(
     "/{holding_id}",
     response_model=HoldingDetailResponse,
     dependencies=[Depends(require_permission("holding.view"))],
@@ -238,16 +295,18 @@ async def get_holding(
     db: AsyncSession = Depends(get_db),
 ) -> HoldingDetailResponse:
     """Return holding detail: asset info, all lots, all sales with FIFO breakdown."""
-    await _require_portfolio(portfolio_id, current_user, db)
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
     detail = await lot_service.get_holding_detail(db, holding_id, portfolio_id)
     if detail is None:
         raise _NOT_FOUND_HOLDING
+    aggregates = _build_aggregates(detail)
     return HoldingDetailResponse(
         id=detail.id,
         asset=detail.asset,
         lots=detail.lots,
         sales=detail.sales,
-        aggregates=_build_aggregates(detail),
+        aggregates=aggregates,
+        dividend_coverage_years=await _compute_dividend_coverage(db, portfolio, detail, aggregates),
         created_at=detail.created_at,
         updated_at=detail.updated_at,
     )
@@ -406,6 +465,89 @@ async def delete_lot(
 # ── Sale endpoints ────────────────────────────────────────────────────────────
 
 
+@router.get(
+    "/{holding_id}/sales",
+    response_model=list[SaleResponse],
+    dependencies=[Depends(require_permission("sale.view"))],
+)
+async def list_sales(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SaleResponse]:
+    """All sales for a holding with their FIFO breakdown, newest first (D13 §7.3)."""
+    await _require_portfolio(portfolio_id, current_user, db)
+    holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
+    if holding is None:
+        raise _NOT_FOUND_HOLDING
+
+    sales = await sale_service.list_sales_for_holding(db, holding_id)
+    return [SaleResponse.model_validate(s) for s in sales]
+
+
+@router.post(
+    "/{holding_id}/sales/preview",
+    response_model=SalePreviewOut,
+    dependencies=[Depends(require_permission("sale.create"))],
+)
+async def preview_sale(
+    portfolio_id: UUID,
+    holding_id: UUID,
+    body: SaleIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SalePreviewOut:
+    """Read-only FIFO + realized-gain preview (D13 §7.1, §5.3) — the exact
+    figures create_sale would persist for this input, without writing
+    anything. Guarded by sale.create (not a separate permission) since
+    previewing is part of the create flow, not an independent capability.
+    """
+    portfolio = await _require_portfolio(portfolio_id, current_user, db)
+    holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
+    if holding is None:
+        raise _NOT_FOUND_HOLDING
+
+    fx_rate, fx_origin = await _resolve_fx_rate(
+        db,
+        quote_currency=holding.asset.quote_currency,
+        base_currency=portfolio.base_currency,
+        on_date=body.sale_date,
+        requested_origin=body.fx_rate_origin,
+        provided_rate=body.fx_rate_at_sale,
+    )
+
+    preview = await sale_service.compute_fifo_preview(
+        db, holding_id,
+        quantity=body.quantity, unit_price=body.unit_price, fx_rate_at_sale=fx_rate,
+    )
+
+    return SalePreviewOut(
+        insufficient_units=preview.fifo.insufficient,
+        units_available=preview.fifo.units_available,
+        lot_consumptions=[
+            LotConsumptionPreview(
+                lot_id=c.lot_id,
+                purchase_date=c.purchase_date,
+                units_consumed=c.units_consumed,
+                unit_price=c.unit_price,
+                cost_contribution=c.cost_contribution,
+            )
+            for c in preview.fifo.consumptions
+        ],
+        cost_basis_quote=preview.fifo.cost_basis_quote,
+        sale_proceeds_quote=preview.sale_proceeds_quote,
+        realized_gain_quote=preview.realized_gain_quote,
+        quote_currency=holding.asset.quote_currency,
+        cost_basis_base=preview.fifo.cost_basis_base if preview.realized_gain_base is not None else None,
+        sale_proceeds_base=preview.sale_proceeds_base,
+        realized_gain_base=preview.realized_gain_base,
+        base_currency=portfolio.base_currency,
+        fx_rate_at_sale=fx_rate,
+        fx_rate_origin=fx_origin,
+    )
+
+
 @router.post(
     "/{holding_id}/sales",
     response_model=SaleResponse,
@@ -452,16 +594,19 @@ async def create_sale(
 
     await db.commit()
     summary_cache.invalidate(portfolio_id)
-    await db.refresh(sale)
-    # Reload with lot_consumptions eager-loaded.
-    sale_detail = await sale_service.get_sale(db, sale.id, holding_id)
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models.sale import Sale as SaleModel
+
+    # D15 §5.4 — a dividend reminder for shares no longer owned is
+    # misleading, so drop the marker alert once the position hits zero.
+    remaining = await dividend_service.get_active_units(db, holding_id)
+    if remaining <= 0:
+        await dividend_service.remove_dividend_alert(db, holding_id, holding.asset.ticker)
+        await db.commit()
+
+    # Reload with the FIFO breakdown eager-loaded (D13 §6.1).
     result = await db.execute(
-        select(SaleModel)
-        .where(SaleModel.id == sale.id)
-        .options(selectinload(SaleModel.lot_consumptions))
+        select(Sale)
+        .where(Sale.id == sale.id)
+        .options(selectinload(Sale.lot_consumptions).selectinload(SaleLotConsumption.lot))
     )
     sale = result.scalar_one()
     return SaleResponse.model_validate(sale)
@@ -470,9 +615,9 @@ async def create_sale(
 @router.patch(
     "/{holding_id}/sales/{sale_id}",
     response_model=SaleResponse,
-    dependencies=[Depends(require_permission("sale.edit"))],
+    dependencies=[Depends(require_permission("sale.edit_reason"))],
 )
-async def edit_sale(
+async def update_sale_reason(
     portfolio_id: UUID,
     holding_id: UUID,
     sale_id: UUID,
@@ -480,7 +625,11 @@ async def edit_sale(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SaleResponse:
-    """Edit a sale. If quantity changes, FIFO is recomputed. Returns 400 if insufficient position."""
+    """Edit a sale's reason. Every other field is immutable (Spec D13 §11).
+
+    Does not invalidate the portfolio summary cache — a reason edit has no
+    financial impact (D13 §8.1).
+    """
     await _require_portfolio(portfolio_id, current_user, db)
     holding = await lot_service.get_holding_with_asset(db, holding_id, portfolio_id)
     if holding is None:
@@ -490,29 +639,13 @@ async def edit_sale(
     if sale is None:
         raise _NOT_FOUND_SALE
 
-    try:
-        sale = await sale_service.edit_sale(
-            db, sale,
-            sale_date=body.sale_date,
-            quantity=body.quantity,
-            unit_price=body.unit_price,
-            fx_rate_at_sale=body.fx_rate_at_sale,
-            fx_rate_origin=body.fx_rate_origin,
-            notes=body.notes,
-        )
-    except ValueError as exc:
-        raise _bad_request(str(exc))
-
+    sale = await sale_service.update_reason(db, sale, body.notes)
     await db.commit()
-    summary_cache.invalidate(portfolio_id)
 
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models.sale import Sale as SaleModel
     result = await db.execute(
-        select(SaleModel)
-        .where(SaleModel.id == sale.id)
-        .options(selectinload(SaleModel.lot_consumptions))
+        select(Sale)
+        .where(Sale.id == sale.id)
+        .options(selectinload(Sale.lot_consumptions).selectinload(SaleLotConsumption.lot))
     )
     sale = result.scalar_one()
     return SaleResponse.model_validate(sale)

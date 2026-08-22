@@ -5,7 +5,7 @@
 import { ApiError } from './types.js';
 import { currentLanguage } from '../state/language-state.js';
 import { navigate } from '../router/router.js';
-import { clearAuthState, getCsrfToken } from '../state/auth-state.js';
+import { clearAuthState, currentUser, getCsrfToken } from '../state/auth-state.js';
 
 const BASE_URL: string = import.meta.env.VITE_BACKEND_BASE_URL ?? 'http://localhost:8000';
 
@@ -32,7 +32,12 @@ export async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
+  // A 401 while a session was active means it just expired server-side —
+  // bounce to login. A 401 with no active session (e.g. a login attempt
+  // itself failing) is not a session expiry: let it fall through to the
+  // generic error handling below so the real "Invalid email or password"
+  // detail reaches the caller instead of being masked by a forced redirect.
+  if (res.status === 401 && currentUser.value !== null) {
     clearAuthState();
     navigate('/app/login');
     throw new ApiError(401, 'unauthorized', 'Session expired. Please log in again.');

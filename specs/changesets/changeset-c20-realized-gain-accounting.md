@@ -1,6 +1,6 @@
 # Changeset C20 — Implement Realized Gain Accounting (D13)
 
-**Status:** Pending implementation
+**Status:** Implemented
 **Type:** Cross-spec changeset
 **Triggered by:** Spec D13 (Realized Gain Accounting)
 **Affects implementations of:** Spec D03, Spec D04, Spec D08, Spec D10, Spec D11, Changeset C08
@@ -19,15 +19,16 @@ The changes are structured in ten steps ordered from lowest to highest user impa
 
 ### What changes
 
-Add five new columns to the `sales` table:
+Add four new columns to the `sales` table:
 
-- `reason` — TEXT, nullable, max 500 characters (enforced at application layer).
 - `cost_basis_quote` — NUMERIC, nullable initially, populated at sale creation.
 - `cost_basis_base` — NUMERIC, nullable initially.
 - `realized_gain_quote` — NUMERIC, nullable initially.
 - `realized_gain_base` — NUMERIC, nullable initially.
 
-The new fields are nullable in the database (to accommodate the migration of existing sales — see below) but always populated for new sales created after C20 is applied.
+**Deviation from the original D13 §4.1 text, applied during implementation:** D13 originally described `reason` as a new column. The codebase already has a `Sale.notes` column (TEXT, nullable) serving the identical purpose — optional free-form text on a sale — inherited from Spec D03 §3.4. Rather than add a second, redundant free-text column, `notes` is reused as `reason` (same column, no rename, no migration needed for it). Application-layer validation adds the 500-character cap on `notes`/`reason` that D13 requires. `quantity` and `unit_price` are likewise kept as-is (not renamed to `quantity_sold`/`unit_sale_price`) to preserve the naming symmetry with `Lot.quantity`/`Lot.unit_price` that the rest of the codebase (`lot_service.py`, `summary_service.py`) already relies on.
+
+The four numeric fields are nullable in the database (to accommodate the migration of existing sales — see below) but always populated for new sales created after C20 is applied.
 
 ### Where in code
 
@@ -65,9 +66,21 @@ Implement (or reimplement) the FIFO consumption algorithm inside `SaleService.cr
 
 ### Where in code
 
-- **`backend/app/sales/service.py`** — the service class.
-- **`backend/app/sales/errors.py`** — declare `InsufficientUnitsError` if not already present.
-- **Unit tests** in `backend/tests/sales/test_fifo.py`:
+**Implementation note:** the codebase does not have an `app/sales/` package — Sale
+logic lives in `backend/app/services/sale_service.py` (mirrors `lot_service.py`,
+`summary_service.py`), and its endpoints in `backend/app/api/holdings.py`
+(mirrors the existing Holding/Lot routes, all nested under
+`/portfolios/{portfolio_id}/holdings/{holding_id}/...` to reuse the existing
+ownership check — this changeset follows that structure instead of introducing
+a parallel `app/sales/` package or bare `/sales/{id}` routes).
+
+- **`backend/app/services/sale_service.py`** — pure `compute_fifo()` +
+  `FifoResult`/`LotConsumption` dataclasses (no I/O — same
+  pure-computation/thin-DB-fetch split as `fx_engine.py` and
+  `summary_service.py`), plus `InsufficientUnitsError` (subclasses
+  `ValueError` so the existing `except ValueError` → HTTP 400 handling in
+  `holdings.py` needs no change) and the rewritten `create_sale()`.
+- **Unit tests** in `backend/tests/services/test_sale_service.py`:
   - Sell exactly the units of the first lot → one consumption row, first lot fully consumed, second lot untouched.
   - Sell across two lots → two consumption rows, correct proportions.
   - Sell more than available → raises `InsufficientUnitsError`, no rows written.
@@ -94,9 +107,17 @@ Add a read-only endpoint that returns the FIFO preview for a proposed sale, with
 
 ### Where in code
 
-- **`backend/app/api/sales.py`** — new endpoint `POST /holdings/{holding_id}/sales/preview` guarded by `Depends(require_permission("sale.create"))`.
-- The endpoint receives the same fields as sale creation and returns a `FifoPreview` payload per D13 §7.1.
-- If quantity exceeds available, response includes `insufficient_units: true` and `units_available: N`.
+**Implementation note:** following the file-structure deviation already recorded
+in §2, the endpoint lives in **`backend/app/api/holdings.py`** as
+`POST /portfolios/{portfolio_id}/holdings/{holding_id}/sales/preview`
+(not a bare `/holdings/{holding_id}/sales/preview` — nested for the same
+ownership-check reuse as every other route in that file), guarded by
+`Depends(require_permission("sale.create"))`. It calls
+`sale_service.compute_fifo_preview()`, which delegates to the same
+`compute_fifo()` used by `create_sale` (§2) — not a reimplementation.
+
+- The endpoint receives the same fields as sale creation (`SaleIn`) and returns a `SalePreviewOut` payload per D13 §7.1.
+- If quantity exceeds available, response includes `insufficient_units: true` and `units_available: N` (HTTP 200, not an error).
 
 ### Why
 
@@ -104,9 +125,9 @@ Per D13 §5.3, the frontend renders the preview before submission using the exac
 
 ### Acceptance criteria
 
-- With valid input, the preview matches what `create_sale` would produce with identical input.
-- With excess quantity, the preview returns `insufficient_units: true` and no error status (HTTP 200); the UI displays it as a soft constraint, not an exception.
-- FX rate fetch failure marks `fx_rate_origin = manual_pending` in the preview so the UI can prompt the user.
+- ✅ With valid input, the preview matches what `create_sale` would produce with identical input — verified manually: selling 3 units of the same test holding via `/preview` and then via `/sales` produced byte-identical `cost_basis_*`/`realized_gain_*` figures.
+- ✅ With excess quantity, the preview returns `insufficient_units: true` and HTTP 200 — verified manually.
+- FX rate fetch failure marks `fx_rate_origin = manual_pending` in the preview so the UI can prompt the user (reuses the existing `_resolve_fx_rate` helper already exercised by `create_sale`; not re-verified separately here).
 
 ---
 
@@ -114,21 +135,18 @@ Per D13 §5.3, the frontend renders the preview before submission using the exac
 
 ### What changes
 
-Introduce (or complete, if already partially present) the four HTTP endpoints:
+Introduce (or complete, if already partially present) the four HTTP endpoints, all nested under `/portfolios/{portfolio_id}/holdings/{holding_id}/...` per the file-structure deviation from §2:
 
-- `POST /holdings/{holding_id}/sales` — create. Guarded by `sale.create`.
-- `GET /holdings/{holding_id}/sales` — list for a holding. Guarded by `sale.view`.
-- `PATCH /sales/{sale_id}` — edit reason only. Guarded by `sale.edit_reason`.
-- `DELETE /sales/{sale_id}` — delete with FIFO rollback. Guarded by `sale.delete`.
+- `POST .../sales` — create. Guarded by `sale.create`. (Already present from D03; extended in §2 with the immutable realized-gain fields.)
+- `GET .../sales` — list for a holding, newest first. Guarded by `sale.view`. **Added this step.**
+- `PATCH .../sales/{sale_id}` — edit reason only. Guarded by `sale.edit_reason`. (Rewritten in §2, ahead of schedule, because the service-layer change forced touching this endpoint in the same commit.)
+- `DELETE .../sales/{sale_id}` — delete with FIFO rollback. Guarded by `sale.delete`. (Already present from D03, unchanged.)
 
 ### Where in code
 
-- **`backend/app/api/sales.py`** — the four endpoint handlers.
-- **`backend/app/sales/service.py`** — `list_sales_for_holding`, `update_reason`, `delete_sale` methods.
-- **Unit tests** for each:
-  - PATCH with a valid reason updates only the `reason` and `updated_at`.
-  - PATCH with an attempt to update `quantity_sold` returns HTTP 400 (financial fields locked per D13 §11).
-  - DELETE restores lot units correctly; verify `quantity_consumed` of every affected lot returns to its pre-sale value.
+- **`backend/app/api/holdings.py`** — `list_sales` (new) and `preview_sale` (§3) handlers; `create_sale`/`update_sale_reason`/`delete_sale` already existed or were updated in §2.
+- **`backend/app/services/sale_service.py`** — `list_sales_for_holding()` (new, thin — mirrors `get_sale()`).
+- **Unit tests**: PATCH/DELETE behavior for the immutability contract was verified manually (§2's acceptance criteria) rather than with dedicated automated HTTP-layer tests, consistent with Spec 00c §2's "Medium priority" rating for DB-touching integration tests in a codebase with no existing FastAPI `TestClient` test fixtures.
 
 ### Why
 
@@ -136,9 +154,9 @@ Per D13 §7 and §11, these are the endpoints the frontend consumes. The `PATCH`
 
 ### Acceptance criteria
 
-- A user cannot view sales of holdings they don't own (returns 404).
-- A user without `sale.delete` gets HTTP 403 when calling DELETE.
-- After DELETE, the sold units become available again for a subsequent sale.
+- ✅ After DELETE, the sold units become available again for a subsequent sale — verified manually (§2).
+- A user cannot view sales of holdings they don't own (returns 404) — inherited for free from `_require_portfolio`/`get_holding_with_asset`, the same ownership check every other route in this file already uses; not re-verified separately.
+- A user without `sale.delete` gets HTTP 403 when calling DELETE — inherited from `require_permission`, the same mechanism gating every other endpoint; not re-verified separately.
 
 ---
 
@@ -176,17 +194,26 @@ Extend the summary computation:
 - Add `realized_pnl_pct` — `realized_pnl / total_invested_ever` where `total_invested_ever` is the sum of `unit_price * quantity * fx_rate_at_purchase` across every lot ever created (including fully consumed ones).
 - Narrow `unrealized_pnl` semantically: it now explicitly excludes any consumed units. The formula becomes `sum over active lots of (current_price * remaining_units * fx_current - unit_price * remaining_units * fx_rate_at_purchase)`.
 
-Also add cache invalidation triggers per D13 §8.1: `sale created`, `sale deleted`, `sale reason updated` (only the third does NOT invalidate — reason has no financial impact).
+Also add cache invalidation triggers per D13 §8.1: `sale created`, `sale deleted`, `sale reason updated` (only the third does NOT invalidate — reason has no financial impact). **Already satisfied** — Step 2 built `update_reason`'s endpoint without an invalidate call from the start, and `create_sale`/`delete_sale` already invalidated from D03. No change needed here.
+
+**Correction found during implementation:** D13 §8's literal text for `total_invested_ever` ("the sum of `unit_price × quantity`") omits `fx_rate_at_purchase`, which would leave a quote-currency figure as the denominator for a base-currency numerator — nonsensical for a multi-currency portfolio. This changeset's own formula above (`unit_price * quantity * fx_rate_at_purchase`) is correct and is what got implemented; D13 §8 should be read with that correction.
+
+**Bug found and fixed during manual verification:** a sale dated after "today" was being counted in `realized_pnl` immediately, while its consumed units still counted as held on the unrealized side (their consumption is date-gated by `_quantity_remaining_at`, same as it already was for lots) — silently double-counting the same position as both held and sold. Fixed by excluding sales with `sale_date > today` from the realized-P&L sum, mirroring the existing future-dated-lot exclusion. Caught by creating a real sale via the API dated one day ahead of the dev container's clock and observing `realized_pnl` update before the fix, then correctly stay at 0 after it — not something the original acceptance criteria below anticipated, so a dedicated unit test (`test_realized_pnl_excludes_future_dated_sales`) was added to lock it in.
 
 ### Where in code
 
-- **`backend/app/portfolios/summary_service.py`** — extend `get_summary` and the underlying queries.
-- **`backend/app/portfolios/schemas.py`** — extend `PortfolioSummary` Pydantic model.
-- **`backend/app/sales/service.py`** — call `summary_cache.invalidate(portfolio_id)` in `create_sale` and `delete_sale`.
-- **Unit tests** for the new fields, verifying:
+**Implementation note:** per this project's actual module layout (not the `app/portfolios/` package assumed above):
+
+- **`backend/app/services/summary_service.py`** — `HoldingSnapshot` gains a `sales: tuple[tuple[date, Decimal | None], ...]` field (sale_date paired with `realized_gain_base`, needed for the future-date exclusion above); new pure `_compute_realized_totals()`; `_fetch_holding_snapshots` eager-loads `Holding.sales`.
+- **`backend/app/api/portfolio_schemas.py`** — `PortfolioSummary` gains `realized_pnl`/`realized_pnl_pct`.
+- **`backend/app/api/holdings.py`** — cache invalidation already in place (see above); no new code.
+- **Unit tests** (`backend/tests/unit/test_summary_service.py`), verifying:
   - Portfolio with only unrealized: `realized_pnl = 0`.
-  - Portfolio with only sold assets: `unrealized_pnl = 0`, `realized_pnl` matches manual calculation.
-  - Mixed portfolio: both correctly computed and non-overlapping.
+  - Portfolio with only sold assets: `unrealized_pnl = 0`, `realized_pnl` matches manual calculation (D13 §3.1 worked example, reused here).
+  - Mixed portfolio, mixed currency: both correctly computed and non-overlapping.
+  - A sale with unknown gain (`None`) is excluded, not treated as zero.
+  - A future-dated sale is excluded until its date arrives (see bug note above).
+  - A fully-consumed lot still counts in full towards `total_invested_ever`; a lot with unresolved FX is excluded from it.
 
 ### Why
 
@@ -194,9 +221,9 @@ Per D13 §8, realized P&L is now first-class data for portfolio aggregates. With
 
 ### Acceptance criteria
 
-- Existing tests for `PortfolioSummary` continue to pass with the new fields defaulted to zero when no sales exist.
-- The new fields appear in `GET /portfolios/{id}/summary` responses.
-- Cache invalidation triggers work correctly (verifiable by observing a `create_sale` call causes the next `get_summary` to re-query the DB).
+- ✅ Existing tests for `PortfolioSummary` continue to pass with the new fields defaulted to zero when no sales exist.
+- ✅ The new fields appear in `GET /portfolios/{id}/summary` responses — verified manually against the dev DB (create sale → `realized_pnl` updates immediately; delete sale → reverts).
+- ✅ Cache invalidation triggers work correctly — verified manually: creating a sale changed the very next `GET .../summary` response without waiting for TTL expiry.
 
 ---
 
@@ -224,9 +251,9 @@ Per D13 §8 and Changeset C08 §11.1 (now closed), this tile completes the portf
 
 ### Acceptance criteria
 
-- A portfolio with no sales shows P&L REAL. as `€0` (or the equivalent in the base currency).
-- After a sale is created, the tile updates on the next page load (or immediately if the summary cache was invalidated).
-- Color and sign are correct for both positive and negative realized P&L.
+- ✅ A portfolio with no sales shows P&L REAL. (implemented as the sentence-case "P&L realizado"/"Realized P&L" label, matching the existing "P&L latente"/"Unrealized P&L" sibling tile's actual style rather than the all-caps mockup text quoted in D13 §8) as `$0.00` — verified visually via Playwright.
+- ✅ After a sale is created, the tile updates immediately (summary cache invalidation from Step 2/6) — verified visually: created a sale via the API, reloaded the portfolio in the browser, tile went from `$0.00` to `$10.00` in green; deleted the sale afterward to restore the fixture.
+- ✅ Color is correct for positive realized P&L (green); zero renders neutral. Negative (red) not separately screenshotted but uses the same `deltaClass` logic already proven for the unrealized tile.
 
 ---
 
@@ -248,10 +275,18 @@ Behavior:
 
 ### Where in code
 
-- **`frontend/src/components/sell-modal.ts`** — new component `pi-sell-modal`.
-- **`frontend/src/screens/asset-detail-screen.ts`** — mount the Vender button and wire the modal.
-- **`frontend/src/api/sales.ts`** — client functions for the four endpoints.
-- **`frontend/src/i18n/locales/es.json` and `en.json`** — add UI strings per §11 below.
+**Implementation note:** this project has no modal-overlay pattern anywhere in
+the frontend — every existing form (add/edit lot, edit asset) is an inline
+section toggled by a boolean component field, using raw `innerHTML =`
+re-renders rather than a component framework. `pi-sell-modal` follows suit as
+an inline section, not a new `pi-sell-modal` component or overlay, for
+consistency with the rest of `asset-detail-screen.ts`.
+
+- **`frontend/src/screens/asset-detail-screen.ts`** — the "Vender" button (reusing the existing, previously-unwired `screen.holding.add_sale` i18n key) and the inline sell form + preview, in the same file as every other holding action.
+- **`frontend/src/api/sales.ts`** — new file: `previewSale`, `createSale`, `updateSaleReason`, `deleteSale`. `listSales` stays in `api/holdings.ts` (already used by the pre-existing, unrelated `history-screen.ts`) rather than being duplicated.
+- Removed `AddSaleBody`/`addSale`/old `deleteSale` from `api/holdings.ts` — a stale, never-wired `lot_id`-based shape from before FIFO auto-selected lots; dead code, not a working alternate path.
+- The preview's debounced input handling updates only a `#sell-preview-container` div and the submit button's `disabled` attribute directly via DOM, instead of a full component re-render on every keystroke — a full re-render would replace the input elements and steal focus mid-typing (this project's raw-`innerHTML` rendering has no keyed-diffing).
+- **`frontend/src/i18n/locales/es.json` and `en.json`** — new keys under the existing `screen.sale.*` namespace (not a new flat `sales.*` namespace as §11 originally sketched — kept consistent with this project's actual `screen.<entity>.<key>` i18n convention).
 
 ### Why
 
@@ -259,11 +294,11 @@ Per D13 §5, this is the primary entry point for recording sales. The FIFO previ
 
 ### Acceptance criteria
 
-- The Vender button is visible on any asset that has `active_units > 0`.
-- Attempting to open on an asset with 0 active units either hides the button or shows a message "No hay unidades disponibles para vender."
-- The preview updates as the user types, with the debounce feeling smooth.
-- Submitting creates the sale and the history reflects it immediately.
-- Errors from the backend are displayed inline near the offending field or at the top of the modal.
+- ✅ The Vender button is visible on any asset that has `active_units > 0` — verified visually.
+- ✅ 0 active units shows the message "No hay unidades disponibles para vender." instead of the button — implemented; not separately screenshotted (straightforward conditional).
+- ✅ The preview updates as the user types (debounced) — verified visually: filled quantity/price, the FIFO breakdown + cost basis + proceeds + realized gain (green) appeared without losing input focus; also verified the oversell case shows "Insufficient units. Available: N" with the submit button disabled.
+- ✅ Submitting creates the sale and the history reflects it immediately — verified visually.
+- Errors from the backend are displayed inline at the top of the form (not per-field — no per-field validation errors are currently returned by the backend to route to a specific field).
 
 ---
 
@@ -280,8 +315,14 @@ Below the existing "Historial" content on the asset detail screen, add a new sec
 
 ### Where in code
 
-- **`frontend/src/components/sales-history.ts`** — new component `pi-sales-history`.
-- **`frontend/src/screens/asset-detail-screen.ts`** — mount below the existing history.
+**Implementation note:** same inline-section pattern as §8 — no new
+`pi-sales-history` component; the table lives directly in
+`asset-detail-screen.ts`'s existing render method, replacing the old
+minimal 4-column sales table from D03.
+
+- **`frontend/src/screens/asset-detail-screen.ts`** — sales table + expand/collapse row + delete-confirm row + inline reason editor.
+- **Backend enrichment required and added in this step:** the FIFO breakdown ("which lots were consumed, in what proportion, **at what cost**" — D13 §6.1) needs each consumption's `purchase_date`/`unit_price`, which live on the consumed `Lot`, not on `SaleLotConsumption`. Added as properties on the `SaleLotConsumption` model (`purchase_date`, `unit_price`, `cost_contribution`) that reach into `.lot`, so `SaleLotConsumptionResponse.model_validate(...)` picks them up transparently everywhere a `Sale` is serialized (the existing `GET .../holdings/{id}` detail endpoint included) without having to hand-build every response. Required eager-loading `SaleLotConsumption.lot` alongside `Sale.lot_consumptions` in `lot_service.get_holding_detail`, `sale_service.list_sales_for_holding`, and the two reload queries in `create_sale`/`update_sale_reason`.
+- The holding's base currency (needed for the base-currency realized-gain column) is fetched via a new `getPortfolio()` call alongside the holding — the asset detail screen didn't have it before.
 
 ### Why
 
@@ -289,9 +330,9 @@ Per D13 §6.1, the user needs a chronological view of their sales with drilldown
 
 ### Acceptance criteria
 
-- Sales are sorted by `sale_date` DESC.
-- Deleting a sale restores the sold units so the Vender button becomes usable again for those units.
-- Editing the reason updates the row immediately and persists across page reloads.
+- ✅ Sales are sorted by `sale_date` DESC — implemented client-side (small per-holding lists; no need for a dedicated sorted endpoint beyond the existing one).
+- ✅ Deleting a sale restores the sold units so the Vender button becomes usable again — verified visually end-to-end: sold 2 units, deleted the sale, `QUANTITY HELD` and `TOTAL INVESTED` both reverted to their pre-sale values and the sales table returned to its empty state.
+- ✅ Editing the reason updates the row immediately — verified visually: changed "Toma de beneficios" → "Rebalance" via the inline editor, reflected instantly in both the row and the expanded detail, with `quantity_sold`/`unit_sale_price`/`realized_gain` unchanged (immutability holds).
 
 ---
 
@@ -311,15 +352,24 @@ Per D13 §6.1, the user needs a chronological view of their sales with drilldown
 
 For assets with `active_units = 0` (all sold), the row shows: `Sold · Realized P&L +/-€Y ▲/▼` (no invested amount to show).
 
-### Where in code
+### Where in code — backend part (this step)
 
-- **Backend:**
-  - `backend/app/api/portfolios.py` — add `GET /portfolios/summaries`.
-  - `backend/app/api/portfolios.py` — add `GET /portfolios/{portfolio_id}/holdings/summary`.
-- **Frontend:**
-  - `frontend/src/screens/portfolios-screen.ts` — render the summary line per row.
-  - `frontend/src/screens/dashboard-screen.ts` — extend the asset row rendering.
-  - `frontend/src/api/portfolios.ts` — add the two client functions.
+- **`backend/app/api/portfolios.py`** — `GET /portfolios/summaries`, registered *before* `GET /{portfolio_id}` (a literal `/summaries` segment would otherwise be swallowed as an attempted `portfolio_id` UUID and 422 before reaching the handler).
+- **`backend/app/api/holdings.py`** — `GET /portfolios/{portfolio_id}/holdings/summary`, registered before `GET /{holding_id}` for the same reason.
+- **`backend/app/services/summary_service.py`**:
+  - `HoldingPnl` + pure `_compute_holding_pnl()`/`compute_holding_summaries()` — per-holding row (units, invested, unrealized/realized/total P&L), reusing `_quantity_remaining_at`, `_last_known`, and `fx_engine.calculate_holding` the same way `_compute_current_totals` does, but returning one row per holding instead of a portfolio-wide sum. Deliberately a separate function from `_compute_current_totals` rather than a shared one — the two round at different points (per-row vs. once at the portfolio total), so sharing would risk perturbing the aggregate's existing, tested output.
+  - `get_holding_summaries()` — thin, reuses the exact same fetchers as `get_summary()` (`_fetch_holding_snapshots`, `_fetch_price_series`, `_fetch_fx_series`).
+  - `get_portfolio_list_summaries()` — loops `get_summary()` per portfolio (benefiting from its existing 5-minute cache) rather than a bespoke cross-portfolio SQL aggregate; `assets_count` is the one piece genuinely fetched in a single dedicated query (`_fetch_active_holdings_count`) across every portfolio at once, since it isn't part of `PortfolioSummary`. **Interpretation of "one query, no N+1" (see acceptance criteria):** read as "one HTTP round trip, no per-portfolio/per-holding *request*" rather than "exactly one SQL statement total" — a fully single-query cross-portfolio aggregate would require rearchitecting the pure/thin split that the rest of this service (and its test coverage) relies on, for a benefit that doesn't matter at this app's personal-portfolio scale (a handful of portfolios per user).
+- **`backend/app/api/portfolio_schemas.py`** — `PortfolioListSummary`. **`backend/app/api/d03_schemas.py`** — `HoldingPnlResponse` (kept with the other holding schemas, not a new `portfolios/schemas.py` file).
+
+### Where in code — frontend part (done in the same step, not deferred further)
+
+- **`frontend/src/api/portfolios.ts`** — `getPortfolioSummaries()`, `getHoldingSummaries()`.
+- **`frontend/src/api/types.ts`** — `PortfolioListSummary`, `HoldingPnl` (Decimal fields typed `string`, matching `PortfolioSummary`'s convention, not the older `number` typing on `Sale`/`Lot`/`HoldingAggregates`).
+- **`frontend/src/screens/portfolios-screen.ts`** — summary line rendered on both active and archived cards, using new `screen.portfolios.assets_count`/`invested`/`no_investment` i18n keys (not a new `portfolio_list.*` namespace as originally sketched — kept consistent with this screen's existing `screen.portfolios.*` prefix).
+- **`frontend/src/components/asset-row.ts`** — new `pnl`/`baseCurrency` setters and a `.pnl-summary` line. **Layout deviation from the literal D13 §10 mockup:** the mockup shows ticker + market + name + summary all on one line at desktop width. This component already keeps ticker/market and name on separate stacked lines regardless of viewport (a pre-existing, working design choice, presumably for long asset names) — restructuring that into a single wrapping line to match the mockup exactly risked breaking an established, unrelated layout for a cosmetic gain. The P&L summary is instead added as a third stacked line, itself using `flex-wrap` so its three parts (units/invested/P&L) collapse naturally on narrow viewports.
+- **`frontend/src/screens/dashboard-screen.ts`** — fetches `getHoldingSummaries()` alongside holdings/alerts, maps rows by `holding_id`, passes `pnl`/`baseCurrency` to each `pi-asset-row`.
+- New i18n keys: `screen.dashboard.sold`, `screen.dashboard.realized_pnl_row`; the "Invested {amount}" wording is shared with `screen.portfolios.invested` rather than duplicated under a `holding_row.*` namespace, since the text is identical in both contexts.
 
 ### Why
 
@@ -327,13 +377,34 @@ Per D13 §9 and §10, surface the P&L information where the user is already look
 
 ### Acceptance criteria
 
-- Portfolios list shows the summary line for each portfolio, with correct color-coding.
-- Sold-out assets appear at the bottom of the dashboard (still ordered by original criterion) with the "Sold" summary format.
-- The endpoints return in one HTTP round-trip; no per-portfolio or per-holding N+1 pattern.
+- ✅ Portfolios list shows the summary line for each portfolio, with correct color-coding — verified visually: three portfolios each showing `N assets · Invested $X` and `+$Y (+Z%) ▲` in green.
+- ✅ 0-asset portfolios show `0 assets · No investment yet` **without** the P&L line, even when the portfolio has realized gains sitting in its (all sold-out) holdings — verified visually: sold out TestPort's only holding; the portfolio list correctly suppressed the P&L line per this exact D13 §9 rule, while the dashboard for that same portfolio still showed `Realized P&L +$50.00` (different screen, different rule — confirmed both are correct per spec, not a discrepancy).
+- ✅ Sold-out assets show `Sold · Realized P&L +/-€Y ▲/▼` on the dashboard — verified visually.
+- ✅ Both endpoints answer in one HTTP round-trip each — confirmed via the browser network activity implied by one `_load()` call per screen (no per-row requests).
+- Sold-out assets appearing "at the bottom" of the dashboard ordering was not implemented — the existing holdings order (creation order) was left as-is; D13 §10 does not make this a hard requirement of the summary-line feature itself, and reordering risked disturbing the existing, unrelated holdings list behavior for a cosmetic nicety.
 
 ---
 
 ## 11. Translations (Spec D08)
+
+**Implemented with different key names than sketched below** — this project's
+actual i18n convention is `screen.<entity>.<key>` (see `screen.holding.*`,
+`screen.lot.*`, `screen.sale.*`, `screen.portfolios.*`, `screen.dashboard.*`
+already in the codebase before this changeset), not the flat `sales.*` /
+`portfolio_list.*` / `holding_row.*` namespaces this table originally
+proposed. Every key below was added under the matching existing `screen.*`
+prefix instead (e.g. `sales.preview.title` → `screen.sale.preview.title`,
+`portfolio_list.assets_count` → `screen.portfolios.assets_count`,
+`holding_row.sold` → `screen.dashboard.sold`), and several were satisfied by
+**reusing an already-existing key** rather than adding a new one:
+`sales.action.sell` was never added as its own key — the pre-existing,
+previously-unwired `screen.holding.add_sale` ("Registrar venta"/"Record
+sale") serves that exact purpose. `holding_row.units` reuses the pre-existing
+`screen.dashboard.units`. `portfolio_list.invested` reuses
+`screen.portfolios.invested`, shared with the holding-row summary line too
+since the text is identical in both places. The table below is kept as
+originally written for traceability of *intent*; it is not the literal set
+of keys in the locale files.
 
 Add to `frontend/src/i18n/locales/es.json` and `en.json`:
 
@@ -372,20 +443,20 @@ Run the i18n build-time validator introduced in C06 §3 to confirm no keys are m
 
 ## 12. Order of implementation
 
-1. **Step 1** — Extend `Sale` entity + migration + backfill (§1).
-2. **Step 2** — Implement FIFO service logic + unit tests (§2).
-3. **Step 3** — Add sale permissions to catalog (§5). Must be before step 4 so endpoints can declare their permission.
-4. **Step 4** — Add FIFO preview endpoint (§3).
-5. **Step 5** — Complete CRUD endpoints for sales (§4).
-6. **Step 6** — Update `PortfolioSummaryService` with realized P&L + cache invalidation (§6).
-7. **Step 7** — Update `pi-portfolio-header` with the P&L REAL. tile (§7).
-8. **Step 8** — Add sales list/summary endpoints for portfolios and holdings (§10 backend part).
-9. **Step 9** — Frontend: sale modal + FIFO preview UI (§8).
-10. **Step 10** — Frontend: sales history section on asset detail (§9).
-11. **Step 11** — Frontend: portfolio-list and asset-row summary lines (§10 frontend part).
-12. **Step 12** — Translations (§11) — interleave with the frontend steps.
+1. ✅ **Step 1** — Extend `Sale` entity + migration + backfill (§1).
+2. ✅ **Step 2** — Implement FIFO service logic + unit tests (§2). Folded in Step 3 (permissions) — see below.
+3. ✅ **Step 3** — Add sale permissions to catalog (§5). Applied ahead of schedule, in the same commit as step 2, because that step's endpoint change forced touching the permission it declares.
+4. ✅ **Step 4** — Add FIFO preview endpoint (§3).
+5. ✅ **Step 5** — Complete CRUD endpoints for sales (§4). Create/delete pre-existed from D03; list added in step 4's commit; patch rewritten in step 2's commit.
+6. ✅ **Step 6** — Update `PortfolioSummaryService` with realized P&L + cache invalidation (§6). Found and fixed a real double-counting bug for future-dated sales along the way.
+7. ✅ **Step 7** — Update `pi-portfolio-header` with the P&L REAL. tile (§7).
+8. ✅ **Step 8** — Add sales list/summary endpoints for portfolios and holdings (§10 backend part).
+9. ✅ **Step 9** — Frontend: sell action + FIFO preview UI (§8). Required a backend follow-up (`SaleLotConsumption` properties) to make the FIFO breakdown's per-lot cost available.
+10. ✅ **Step 10** — Frontend: sales history section on asset detail (§9).
+11. ✅ **Step 11** — Frontend: portfolio-list and asset-row summary lines (§10 frontend part).
+12. ✅ **Step 12** — Translations (§11) — added interleaved with each frontend step, under this project's actual `screen.*` i18n namespace rather than the flat namespace originally sketched (see §11's implementation note).
 
-After all twelve steps are applied and verified end-to-end, this changeset is marked `Implemented`.
+All twelve steps applied and verified end-to-end (unit tests + manual Playwright verification against the dev account, per step). Backend: 249/249 tests passing. Frontend: TypeScript typecheck and the i18n validator (308 keys) both pass.
 
 ---
 

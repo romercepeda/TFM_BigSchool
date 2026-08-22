@@ -34,6 +34,9 @@ class Asset(Base):
     )
 
     holdings: Mapped[list["Holding"]] = relationship(back_populates="asset")  # type: ignore[name-defined]
+    dividend_schedule: Mapped["AssetDividendSchedule | None"] = relationship(  # type: ignore[name-defined]
+        back_populates="asset", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Asset ticker={self.ticker!r} name={self.name!r} type={self.asset_type!r}>"
