@@ -125,6 +125,10 @@ export class AssetDetailScreen extends BaseComponent {
   private _confirmDeletePaymentId: string | null = null;
   private _deletePaymentError = '';
 
+  // Guards against re-binding the 'indicator-updated' listener on every
+  // re-render (see afterRender()).
+  private _indicatorListenerBound = false;
+
   set params(p: RouteParams) {
     this._portfolioId = p['portfolioId'] ?? '';
     this._holdingId   = p['holdingId'] ?? '';
@@ -1133,6 +1137,15 @@ export class AssetDetailScreen extends BaseComponent {
 
   protected afterRender(): void {
     const pid = this._portfolioId, hid = this._holdingId;
+    // Admin manual-override on an indicator card (post-v1) — bubbles up
+    // through shadow roots via composed:true. Bound once on `this.shadow`
+    // itself (the persistent ShadowRoot, unlike the elements inside it that
+    // get recreated on every re-render), so this guard stops afterRender()
+    // — called on every re-render — from stacking duplicate listeners.
+    if (!this._indicatorListenerBound) {
+      this._indicatorListenerBound = true;
+      this.shadow.addEventListener('indicator-updated', () => void this._reloadIndicators());
+    }
     this.shadow.getElementById('levels-btn')?.addEventListener('click', () =>
       navigate(`/app/portfolios/${pid}/assets/${hid}/levels`));
     this.shadow.getElementById('analysis-btn')?.addEventListener('click', () =>
@@ -1779,14 +1792,36 @@ export class AssetDetailScreen extends BaseComponent {
     const cards = grid.querySelectorAll('pi-indicator-card') as NodeListOf<HTMLElement & {
       indicator: Indicator;
       snapshots: IndicatorSnapshotHistory['snapshots'];
+      assetId: string;
+      avg3y: string | null;
     }>;
     cards.forEach((card, i) => {
       const ind = indicators[i];
       if (!ind) return;
       const history = this._indicatorHistories.find((h) => h.indicator.code === ind.code);
+      card.assetId = this._holding?.asset.id ?? '';
       card.indicator = ind;
       card.snapshots = history?.snapshots ?? [];
+      card.avg3y = history?.avg_3y ?? null;
     });
+  }
+
+  // Admin manual-override (post-v1): a pi-indicator-card dispatches this
+  // after a successful save. Simplest correct refresh is the same
+  // indicators+histories re-fetch _load() already does — no local merge
+  // logic that could drift from what the backend actually persisted.
+  private async _reloadIndicators(): Promise<void> {
+    if (!this._holding) return;
+    try {
+      const [allInds, histories] = await Promise.all([
+        listIndicators(), getAssetIndicators(this._holding.asset.id),
+      ]);
+      this._indicators = allInds.filter((ind) => ind.scope === 'asset');
+      this._indicatorHistories = histories;
+    } catch {
+      // keep showing the previous values if the reload itself fails
+    }
+    this._rerender();
   }
 }
 

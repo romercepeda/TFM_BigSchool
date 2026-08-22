@@ -190,7 +190,7 @@
   "indicator.rsi_14.name": "RSI (14)",
   "indicator.macd.name": "MACD",
   "indicator.rvol.name": "Relative Volume",
-  "indicator.per.name": "P/E Ratio",
+  "indicator.per.name": "PER",
   "indicator.roe.name": "ROE",
   "indicator.debt_ebitda.name": "Debt / EBITDA",
   "indicator.revenue_growth_yoy.name": "Revenue Growth",
@@ -353,6 +353,10 @@
 
   "indicator.history.title": "History",
   "indicator.history.empty": "No previous readings",
+  "indicator.manual.edit": "Enter value manually",
+  "indicator.manual.value": "Value",
+  "indicator.manual.badge": "(manual)",
+  "indicator.avg_3y.label": "3-year average",
   "indicator.history.previous": "Previous",
 
   "screen.ai_report.upload": "Upload report",

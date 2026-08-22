@@ -293,6 +293,9 @@ export interface IndicatorSnapshot {
 export interface IndicatorSnapshotHistory {
   indicator: Indicator;
   snapshots: IndicatorSnapshot[];
+  // Post-v1: trailing 3-year average of every valued snapshot, any source.
+  // null for qualitative indicators or when nothing falls in the window.
+  avg_3y: string | null;
 }
 
 // ── Price Levels ──────────────────────────────────────────────────────────────

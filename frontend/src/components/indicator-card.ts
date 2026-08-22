@@ -1,6 +1,8 @@
 import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { formatNumber, formatDate } from '../utils/format.js';
+import { hasPermission } from '../state/auth-state.js';
+import { setIndicatorManualValue } from '../api/indicators.js';
 import type { Indicator, IndicatorSnapshot } from '../api/types.js';
 
 const TIP_WIDTH = 240;
@@ -8,15 +10,35 @@ const TIP_WIDTH = 240;
 export class IndicatorCard extends BaseComponent {
   private _indicator: Indicator | null = null;
   private _snapshots: IndicatorSnapshot[] = [];
+  // Post-v1: admin manual-override entry + trailing 3-year average.
+  // assetId is only set for asset-scoped indicators (the only scope the
+  // manual-override endpoint supports) — the edit affordance stays hidden
+  // without it, even for an admin.
+  private _assetId = '';
+  private _avg3y: string | null = null;
+  private _editingManual = false;
+  private _manualDate = new Date().toISOString().slice(0, 10);
+  private _manualValue = '';
+  private _manualError = '';
+  private _manualSaving = false;
 
   set indicator(value: Indicator) {
     this._indicator = value;
-    if (this.shadow) { this.shadow.innerHTML = this.render(); this._bindTooltip(); }
+    if (this.shadow) { this.shadow.innerHTML = this.render(); this.afterRender(); }
   }
 
   set snapshots(value: IndicatorSnapshot[]) {
     this._snapshots = value;
-    if (this.shadow) { this.shadow.innerHTML = this.render(); this._bindTooltip(); }
+    if (this.shadow) { this.shadow.innerHTML = this.render(); this.afterRender(); }
+  }
+
+  set assetId(value: string) {
+    this._assetId = value;
+  }
+
+  set avg3y(value: string | null) {
+    this._avg3y = value;
+    if (this.shadow) { this.shadow.innerHTML = this.render(); this.afterRender(); }
   }
 
   private _displayValue(ind: Indicator, snap: IndicatorSnapshot): string {
@@ -38,6 +60,10 @@ export class IndicatorCard extends BaseComponent {
     const current = snaps[0] ?? null;
     const displayValue = current ? this._displayValue(ind, current) : '—';
     const zone = current?.zone ?? null;
+    // Manual-override edit affordance (post-v1, admin-only): only for
+    // asset-scoped indicators (assetId set) — the manual-value endpoint
+    // doesn't support portfolio-scoped indicators.
+    const canEdit = this._assetId !== '' && hasPermission('indicator.manual_override');
 
     // Changeset C15: always show which period/date the current value belongs
     // to — the report period name for AI-derived fundamentals (e.g. "FY 2025"),
@@ -166,6 +192,32 @@ export class IndicatorCard extends BaseComponent {
           font-size: var(--font-size-xs); font-weight: var(--font-weight-medium);
           color: var(--color-text-secondary);
         }
+        .edit-icon-btn {
+          flex-shrink: 0; border: none; background: transparent; cursor: pointer;
+          color: var(--color-text-muted); font-size: var(--font-size-xs); padding: 0 2px; opacity: 0.6;
+        }
+        .edit-icon-btn:hover { opacity: 1; color: var(--color-accent); }
+        .manual-badge {
+          font-size: 10px; color: var(--color-text-muted); font-style: italic;
+          margin-left: var(--space-1);
+        }
+        .avg-line { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px; }
+        .manual-form {
+          margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--color-border);
+          display: flex; flex-direction: column; gap: var(--space-1);
+        }
+        .manual-form input {
+          border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+          padding: 2px var(--space-2); font-size: var(--font-size-xs);
+          background: var(--color-bg-primary); color: var(--color-text-primary);
+        }
+        .manual-actions { display: flex; gap: var(--space-2); }
+        .manual-actions button {
+          font-size: var(--font-size-xs); padding: 1px var(--space-2); border-radius: var(--radius-sm);
+          border: 1px solid var(--color-border); color: var(--color-text-secondary); cursor: pointer;
+        }
+        .manual-actions button:first-child { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+        .manual-error { font-size: 10px; color: var(--color-danger); }
       </style>
       <div class="card">
         <div class="name-row">
@@ -175,10 +227,29 @@ export class IndicatorCard extends BaseComponent {
         <div class="value-row">
           <div class="value">${displayValue}</div>
           ${ind.unit ? `<div class="unit">${ind.unit}</div>` : ''}
+          ${canEdit && !this._editingManual ? `<button class="edit-icon-btn" id="edit-manual-btn" title="${t('indicator.manual.edit')}">✎</button>` : ''}
         </div>
-        ${currentPeriodLabel ? `<div class="period">${currentPeriodLabel}</div>` : ''}
+        ${currentPeriodLabel ? `<div class="period">${currentPeriodLabel}${current?.source === 'manual_override' ? `<span class="manual-badge">${t('indicator.manual.badge')}</span>` : ''}</div>` : ''}
+        ${this._avg3y != null && ind.nature === 'fundamental'
+          ? `<div class="avg-line">${t('indicator.avg_3y.label')}: ${formatNumber(Number(this._avg3y))}</div>`
+          : ''}
         ${zonePill}
         ${historyHtml}
+        ${this._editingManual ? `
+          <div class="manual-form">
+            <input type="date" id="manual-date" value="${this._manualDate}" />
+            <input
+              type="${ind.data_type === 'quantitative' ? 'number' : 'text'}"
+              id="manual-value" step="any" value="${this._manualValue}"
+              placeholder="${t('indicator.manual.value')}"
+            />
+            <div class="manual-actions">
+              <button id="manual-save-btn" ${this._manualSaving ? 'disabled' : ''}>${t('common.button.save')}</button>
+              <button id="manual-cancel-btn">${t('common.button.cancel')}</button>
+            </div>
+            ${this._manualError ? `<div class="manual-error">${this._manualError}</div>` : ''}
+          </div>
+        ` : ''}
         ${fullTooltip ? `<div class="tip-box" id="tip-box">${fullTooltip}</div>` : ''}
       </div>
     `;
@@ -186,6 +257,7 @@ export class IndicatorCard extends BaseComponent {
 
   protected afterRender(): void {
     this._bindTooltip();
+    this._bindManualForm();
   }
 
   private _bindTooltip(): void {
@@ -218,6 +290,66 @@ export class IndicatorCard extends BaseComponent {
     icon.addEventListener('mouseleave', () => {
       box.style.display = 'none';
     });
+  }
+
+  // ── Manual override (post-v1, admin-only) ────────────────────────────────
+
+  private _rerender(): void {
+    this.shadow.innerHTML = this.render();
+    this.afterRender();
+  }
+
+  private _bindManualForm(): void {
+    this.shadow.getElementById('edit-manual-btn')?.addEventListener('click', () => {
+      this._editingManual = true;
+      this._manualDate = new Date().toISOString().slice(0, 10);
+      this._manualValue = '';
+      this._manualError = '';
+      this._rerender();
+      this.shadow.querySelector<HTMLInputElement>('#manual-value')?.focus();
+    });
+    this.shadow.getElementById('manual-cancel-btn')?.addEventListener('click', () => {
+      this._editingManual = false;
+      this._manualError = '';
+      this._rerender();
+    });
+    this.shadow.getElementById('manual-date')?.addEventListener('input', () => {
+      this._manualDate = (this.shadow.getElementById('manual-date') as HTMLInputElement)?.value ?? '';
+    });
+    this.shadow.getElementById('manual-value')?.addEventListener('input', () => {
+      this._manualValue = (this.shadow.getElementById('manual-value') as HTMLInputElement)?.value ?? '';
+    });
+    this.shadow.getElementById('manual-save-btn')?.addEventListener('click', () => void this._doSaveManual());
+  }
+
+  private async _doSaveManual(): Promise<void> {
+    const ind = this._indicator;
+    if (!ind || !this._assetId || !this._manualDate || !this._manualValue.trim()) {
+      this._manualError = t('validation.required');
+      this._rerender();
+      return;
+    }
+    this._manualSaving = true;
+    this._manualError = '';
+    this._rerender();
+    try {
+      await setIndicatorManualValue(this._assetId, ind.id, {
+        as_of_date: this._manualDate,
+        ...(ind.data_type === 'quantitative'
+          ? { value_numeric: Number(this._manualValue) }
+          : { value_text: this._manualValue.trim() }),
+      });
+      this._editingManual = false;
+      this._manualSaving = false;
+      // Parent screen owns the actual data (indicator + snapshots come from
+      // a batch fetch it made) — ask it to reload rather than guessing a
+      // merged local state here.
+      this.dispatchEvent(new CustomEvent('indicator-updated', { bubbles: true, composed: true }));
+    } catch (ex) {
+      this._manualSaving = false;
+      this._manualError = (ex as Error).message;
+      this._rerender();
+    }
   }
 }
 

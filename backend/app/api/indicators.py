@@ -15,9 +15,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.d05_schemas import IndicatorOut, IndicatorSnapshotHistoryOut, SnapshotOut
+from app.api.d05_schemas import (
+    IndicatorOut,
+    IndicatorSnapshotHistoryOut,
+    ManualIndicatorValueIn,
+    SnapshotOut,
+)
 from app.auth.dependencies import get_current_user
 from app.config import get_config
+from app.db.models.asset import Asset
 from app.db.models.holding import Holding
 from app.db.models.indicator import Indicator
 from app.db.models.portfolio import Portfolio
@@ -26,8 +32,11 @@ from app.db.session import get_db
 from app.roles.dependencies import require_permission
 from app.services.i18n_service import translate_indicator_name, translate_state
 from app.services.indicator_service import (
+    compute_trailing_average,
+    evaluate_zone,
     get_asset_indicator_history,
     get_indicators_by_scope,
+    set_manual_value,
 )
 
 router = APIRouter(tags=["indicators"])
@@ -124,6 +133,13 @@ async def get_asset_indicators(
     result = []
     for indicator in indicators:
         history = await get_asset_indicator_history(db, asset_id, indicator)
+        # Post-v1: trailing 3-year average, quantitative indicators only —
+        # a categorical state (qualitative) has no average.
+        avg_3y = (
+            await compute_trailing_average(db, asset_id, indicator)
+            if indicator.data_type == "quantitative"
+            else None
+        )
         result.append(
             IndicatorSnapshotHistoryOut(
                 indicator=_build_indicator_out(indicator, lang, default_lang),
@@ -131,9 +147,87 @@ async def get_asset_indicators(
                     _build_snapshot_out(s, indicator, lang, default_lang)
                     for s in history
                 ],
+                avg_3y=avg_3y,
             )
         )
     return result
+
+
+@router.put(
+    "/assets/{asset_id}/indicators/{indicator_id}/manual-value",
+    response_model=SnapshotOut,
+    dependencies=[Depends(require_permission("indicator.manual_override"))],
+)
+async def set_asset_indicator_manual_value(
+    asset_id: UUID,
+    indicator_id: UUID,
+    body: ManualIndicatorValueIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SnapshotOut:
+    """Admin-only manual override for an asset-level indicator (post-v1 user
+    request): "the document doesn't disclose it, but I know the value."
+    Writes an IndicatorSnapshot with source='manual_override' — naturally
+    superseded once a scheduled_job/ai_analysis snapshot exists at the same
+    or a later as_of_date (see indicator_service.set_manual_value docstring).
+
+    No per-user ownership check: like PATCH /assets/{id}, Asset is shared
+    reference data and indicator.manual_override is a global admin action,
+    not scoped to holdings the admin personally owns (mirrors system.run_jobs).
+    """
+    asset = await db.scalar(select(Asset).where(Asset.id == asset_id))
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
+
+    indicator = await db.scalar(select(Indicator).where(Indicator.id == indicator_id))
+    if indicator is None or indicator.scope != "asset":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Asset-level indicator not found."
+        )
+
+    if indicator.data_type == "quantitative":
+        if body.value_numeric is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="value_numeric is required for a quantitative indicator.",
+            )
+        value_numeric, value_text = body.value_numeric, None
+    else:
+        if not body.value_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="value_text is required for a qualitative indicator.",
+            )
+        value_numeric, value_text = None, body.value_text
+
+    snapshot = await set_manual_value(
+        db, indicator,
+        subject_type="asset", subject_id=asset_id, as_of_date=body.as_of_date,
+        value_numeric=value_numeric, value_text=value_text,
+    )
+    await db.commit()
+
+    cfg = get_config()
+    lang = current_user.preferred_language
+    default_lang = cfg.i18n.default_language
+    # close_price=None: a price_vs_reference technical indicator's zone needs
+    # that day's close, which this endpoint doesn't fetch — acceptable, since
+    # the frontend reloads the full history (with the real close price) right
+    # after a successful save; this response's zone is a best-effort preview.
+    zone = evaluate_zone(indicator.threshold_config, snapshot.value_numeric, snapshot.value_text)
+    return _build_snapshot_out(
+        {
+            "id": snapshot.id,
+            "as_of_date": snapshot.as_of_date,
+            "value_numeric": snapshot.value_numeric,
+            "value_text": snapshot.value_text,
+            "zone": zone,
+            "source": snapshot.source,
+            "created_at": snapshot.created_at,
+            "source_report_name": None,
+        },
+        indicator, lang, default_lang,
+    )
 
 
 @router.get(

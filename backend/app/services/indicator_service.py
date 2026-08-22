@@ -16,7 +16,7 @@ from typing import Any
 from uuid import UUID
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -396,6 +396,67 @@ async def run_daily_indicators(
     return written
 
 
+# ── Manual override (post-v1, admin-only — Spec D05 §5's `manual_override`
+# source, never wired to any endpoint until now) ──────────────────────────────
+
+
+async def set_manual_value(
+    db: AsyncSession,
+    indicator: Indicator,
+    *,
+    subject_type: str,
+    subject_id: UUID,
+    as_of_date: date,
+    value_numeric: Decimal | None,
+    value_text: str | None,
+) -> IndicatorSnapshot:
+    """Upsert an admin-entered value for one indicator/subject/date.
+
+    Reuses the exact same (indicator_id, subject_id, as_of_date) upsert this
+    module already uses for scheduled_job snapshots (run_daily_indicators
+    above) and the worker uses for ai_analysis snapshots — a manual entry is
+    just a third writer of the same table. "Current" is always resolved as
+    the latest as_of_date with a non-null value (get_asset_indicator_history
+    below), so a manual value is naturally superseded once a real snapshot
+    exists at the same or a later date — no separate tracking is needed for
+    "gets overwritten by a future analysis." Caller must commit.
+    """
+    now = datetime.now(UTC)
+    stmt = (
+        pg_insert(IndicatorSnapshot)
+        .values(
+            indicator_id=indicator.id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            as_of_date=as_of_date,
+            value_numeric=value_numeric,
+            value_text=value_text,
+            source="manual_override",
+            source_ref=None,
+            created_at=now,
+        )
+        .on_conflict_do_update(
+            constraint="uq_snapshot_indicator_subject_date",
+            set_={
+                "value_numeric": value_numeric,
+                "value_text": value_text,
+                "source": "manual_override",
+                "source_ref": None,
+            },
+        )
+    )
+    await db.execute(stmt)
+    await db.flush()
+    result = await db.execute(
+        select(IndicatorSnapshot).where(
+            IndicatorSnapshot.indicator_id == indicator.id,
+            IndicatorSnapshot.subject_id == subject_id,
+            IndicatorSnapshot.as_of_date == as_of_date,
+        )
+    )
+    return result.scalar_one()
+
+
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
 
@@ -503,3 +564,44 @@ async def get_asset_indicator_history(
         })
 
     return result
+
+
+def _years_ago(d: date, years: int) -> date:
+    try:
+        return d.replace(year=d.year - years)
+    except ValueError:
+        # d was Feb 29 and (d.year - years) isn't a leap year.
+        return d.replace(month=2, day=28, year=d.year - years)
+
+
+async def compute_trailing_average(
+    db: AsyncSession,
+    asset_id: UUID,
+    indicator: Indicator,
+    *,
+    years: int = 3,
+    today: date | None = None,
+) -> Decimal | None:
+    """Average of every valued `per`-like quantitative snapshot for this asset
+    over the trailing N years (user request, post-v1) — e.g. "PER promedio de
+    los últimos 3 años". Every source counts (scheduled_job, ai_analysis,
+    manual_override alike): the ask is "what has this ratio averaged while I
+    held/watched this stock", not "what did documents alone say".
+
+    Only meaningful for quantitative indicators; callers should skip calling
+    this for qualitative ones (a categorical state has no average). None if
+    there's no valued snapshot in the window.
+    """
+    as_of = today or date.today()
+    window_start = _years_ago(as_of, years)
+    avg = await db.scalar(
+        select(func.avg(IndicatorSnapshot.value_numeric)).where(
+            IndicatorSnapshot.indicator_id == indicator.id,
+            IndicatorSnapshot.subject_type == "asset",
+            IndicatorSnapshot.subject_id == asset_id,
+            IndicatorSnapshot.as_of_date >= window_start,
+            IndicatorSnapshot.as_of_date <= as_of,
+            IndicatorSnapshot.value_numeric.is_not(None),
+        )
+    )
+    return avg

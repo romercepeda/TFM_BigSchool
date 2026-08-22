@@ -53,3 +53,18 @@ class IndicatorSnapshotHistoryOut(BaseModel):
     """An indicator catalog entry paired with its current + last 2 snapshots (D05 §7)."""
     indicator: IndicatorOut
     snapshots: list[SnapshotOut]
+    # Post-v1 user request ("PER promedio de los últimos 3 años"): average of
+    # every valued snapshot over the trailing 3 years, any source. None for
+    # qualitative indicators or when no snapshot falls in the window.
+    avg_3y: Decimal | None = None
+
+
+class ManualIndicatorValueIn(BaseModel):
+    """Body for PUT .../indicators/{indicator_id}/manual-value — admin-only
+    (permission indicator.manual_override). Exactly one of value_numeric/
+    value_text must be set, matching the indicator's data_type; enforced at
+    the endpoint since it needs the indicator's data_type to know which.
+    """
+    as_of_date: date
+    value_numeric: Decimal | None = None
+    value_text: str | None = None

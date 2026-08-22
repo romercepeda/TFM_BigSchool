@@ -164,6 +164,17 @@ permissions:
     name_key: "permission.role.revoke.name"
     description_key: "permission.role.revoke.description"
 
+  # ── indicator (Spec D05, extended post-v1) ──────────────────────────────────
+  # Admin-only, deliberately not granted to investor: a manually-entered value
+  # is shared reference data (same IndicatorSnapshot row every holder of the
+  # asset sees, mirrors Asset's shared-data model per D15 §8.1's dividend
+  # schedule), not scoped to the caller's own holdings the way lot.*/sale.*
+  # are — same "global, no per-user ownership scope" reasoning as
+  # system.run_jobs below.
+  - code: indicator.manual_override
+    name_key: "permission.indicator.manual_override.name"
+    description_key: "permission.indicator.manual_override.description"
+
   # ── system (Spec 00f) ───────────────────────────────────────────────────────
   - code: system.view_config
     name_key: "permission.system.view_config.name"
@@ -234,12 +245,14 @@ roles:
       - role.list
       - role.assign
       - role.revoke
+      - indicator.manual_override
       - system.view_config
       - system.view_audit_log
       - system.run_jobs
 
   # The typical personal-portfolio user (D11 §5.2). Auto-assigned to every new
-  # registration (D11 §6.2). Does not hold any user.*/role.*/system.* permission.
+  # registration (D11 §6.2). Does not hold any user.*/role.*/system.* permission,
+  # nor indicator.manual_override (admin-only, see that permission's comment above).
   - code: investor
     name_key: "role.investor.name"
     description_key: "role.investor.description"

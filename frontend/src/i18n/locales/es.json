@@ -353,6 +353,10 @@
 
   "indicator.history.title": "Histórico",
   "indicator.history.empty": "Sin lecturas anteriores",
+  "indicator.manual.edit": "Introducir valor manualmente",
+  "indicator.manual.value": "Valor",
+  "indicator.manual.badge": "(manual)",
+  "indicator.avg_3y.label": "Promedio 3 años",
   "indicator.history.previous": "Anterior",
 
   "screen.ai_report.upload": "Subir informe",
