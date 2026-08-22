@@ -49,3 +49,6 @@ logs/
 # Playwright manual-verification screenshots (see .claude/skills/verify-playwright)
 verification-screenshots/
 frontend/.playwright-scratch.*
+
+# Playwright MCP session artifacts (screenshots, snapshots, console/network logs)
+.playwright-mcp/
