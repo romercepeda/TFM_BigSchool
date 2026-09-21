@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.roles.validation import validate_permission_coverage
     from app.services import settings_overlay
     from app.services.indicator_service import seed_indicators
+    from app.services.scheduler import shutdown_scheduler, start_scheduler
 
     async with AsyncSessionLocal() as db:
         # Load the system_settings DB overlay (Changeset C04 §5) before the
@@ -88,7 +89,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await ensure_admin_exists(db)
         await verify_always_one_admin(db)
 
+    start_scheduler()
     yield
+    shutdown_scheduler()
 
 
 app = FastAPI(

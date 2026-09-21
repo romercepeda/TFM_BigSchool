@@ -606,7 +606,11 @@ def _build_market_provider_adapter(name: str, cfg: AppConfig) -> MarketDataProvi
     api_key = os.environ.get("MARKET_DATA_TWELVE_DATA_API_KEY", "")
     if not api_key:
         logger.warning("MARKET_DATA_TWELVE_DATA_API_KEY not set — provider calls will fail.")
-    return TwelveDataProvider(base_url=cfg.market_data.twelve_data.base_url, api_key=api_key)
+    return TwelveDataProvider(
+        base_url=cfg.market_data.twelve_data.base_url,
+        api_key=api_key,
+        per_minute_call_budget=cfg.market_data.twelve_data.per_minute_call_budget,
+    )
 
 
 def _build_service() -> MarketDataService:

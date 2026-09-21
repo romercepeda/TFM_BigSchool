@@ -75,6 +75,7 @@ market_data:
   twelve_data:
     base_url: https://api.twelvedata.com
     daily_call_budget: 800
+    per_minute_call_budget: 8
   finnhub:
     base_url: https://finnhub.io/api/v1
     per_minute_call_budget: 60

@@ -1,6 +1,9 @@
 """Twelve Data market data provider adapter — Spec D09 §3.1."""
 
+import asyncio
 import logging
+import time
+from collections import deque
 from datetime import date
 from decimal import Decimal
 
@@ -10,6 +13,41 @@ from app.services.market_data.providers.base import MarketDataProvider
 from app.services.market_data.types import AssetSearchResult, PricePoint, ProviderError
 
 logger = logging.getLogger(__name__)
+
+
+class _PerMinuteRateLimiter:
+    """Sliding-window throttle for Twelve Data's free-tier 8-credits/minute cap.
+
+    The daily call budget is tracked separately (and is generous — 800/day);
+    this is the tighter limit that actually bites a batch job like the daily
+    price update, which used to blow through it in seconds and 429 for every
+    remaining asset in that run. Waiting here (instead of failing fast, as
+    the EODHD adapter does for its daily budget) lets an unattended nightly
+    run patiently get every asset through Twelve Data alone.
+    """
+
+    def __init__(self, calls_per_minute: int) -> None:
+        self._limit = max(calls_per_minute, 1)
+        self._call_times: deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            while self._call_times and now - self._call_times[0] >= 60:
+                self._call_times.popleft()
+            if len(self._call_times) >= self._limit:
+                wait_seconds = 60 - (now - self._call_times[0])
+                if wait_seconds > 0:
+                    logger.info(
+                        "Twelve Data: %d calls in the last minute (limit %d) — waiting %.1fs.",
+                        len(self._call_times), self._limit, wait_seconds,
+                    )
+                    await asyncio.sleep(wait_seconds)
+                now = time.monotonic()
+                while self._call_times and now - self._call_times[0] >= 60:
+                    self._call_times.popleft()
+            self._call_times.append(time.monotonic())
 
 _ASSET_TYPE_MAP: dict[str, str] = {
     "common stock": "stock",
@@ -29,9 +67,10 @@ def _map_type(raw: str) -> str:
 
 
 class TwelveDataProvider(MarketDataProvider):
-    def __init__(self, base_url: str, api_key: str) -> None:
+    def __init__(self, base_url: str, api_key: str, per_minute_call_budget: int = 8) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self._rate_limiter = _PerMinuteRateLimiter(per_minute_call_budget)
 
     def _params(self, **extra: object) -> dict:
         return {"apikey": self._api_key, **extra}
@@ -44,6 +83,7 @@ class TwelveDataProvider(MarketDataProvider):
         raise ProviderError(error_kind=kind, retryable=retryable, upstream_message=f"{context}: {msg}")
 
     async def search_assets(self, query: str) -> list[AssetSearchResult]:
+        await self._rate_limiter.acquire()
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(
@@ -70,6 +110,7 @@ class TwelveDataProvider(MarketDataProvider):
         ]
 
     async def get_current_price(self, ticker: str) -> PricePoint:
+        await self._rate_limiter.acquire()
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(
@@ -99,6 +140,7 @@ class TwelveDataProvider(MarketDataProvider):
                 retryable=False,
                 upstream_message="MARKET_DATA_TWELVE_DATA_API_KEY no está configurado — edita el fichero .env y reinicia el backend.",
             )
+        await self._rate_limiter.acquire()
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(

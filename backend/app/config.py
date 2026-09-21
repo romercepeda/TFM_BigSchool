@@ -156,6 +156,11 @@ class I18nConfig(BaseModel):
 class TwelveDataConfig(BaseModel):
     base_url: str = "https://api.twelvedata.com"
     daily_call_budget: int = 800
+    # Free-tier plans are capped at 8 API credits/minute — separate from, and
+    # far tighter than, the daily budget above. Unpaced batch calls (the
+    # daily update job) blow through this within seconds and 429 for the
+    # rest of the run. The provider adapter throttles to this instead.
+    per_minute_call_budget: int = 8
 
 
 class FinnhubConfig(BaseModel):

@@ -29,6 +29,10 @@ httpx==0.28.1
 # ── Async task queue (Spec D07) ───────────────────────────────────────────────
 celery[redis]==5.4.0
 
+# ── In-process scheduler (daily market-data update job) ───────────────────────
+APScheduler==3.11.0
+tzdata==2024.2           # IANA timezone DB — python:3.12-slim doesn't ship one
+
 # ── AI provider SDKs (Spec D07) ───────────────────────────────────────────────
 anthropic==0.40.0         # Anthropic Claude (default provider)
 openai==1.57.0            # OpenAI GPT (alternative provider)
