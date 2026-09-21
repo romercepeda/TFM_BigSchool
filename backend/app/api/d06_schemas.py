@@ -18,10 +18,16 @@ EventType = Literal["created", "edited", "touched", "removed"]
 
 
 class PriceLevelIn(BaseModel):
-    """One price level in a batch-create request (Spec D06 §8)."""
+    """One price level in a batch-create request (Spec D06 §8).
+
+    valid_until is required (2026-09 changeset): the cutoff date the
+    condition must be met by to count as "on time" rather than a late,
+    retrospective-only crossing. Service layer also rejects a past date.
+    """
     direction: Direction
     target_price: Decimal = Field(gt=0, decimal_places=8)
     note: str | None = None
+    valid_until: date
 
 
 class PriceLevelBatchIn(BaseModel):
@@ -33,11 +39,13 @@ class PriceLevelBatchIn(BaseModel):
 class PriceLevelPatch(BaseModel):
     """PATCH body — only provided fields are updated.
 
-    direction and target_price are ignored when level is 'touched' (Spec D06 §3.2).
+    direction, target_price, and valid_until are rejected when the level is
+    'touched' (Spec D06 §3.2; valid_until per the 2026-09 changeset).
     """
     direction: Direction | None = None
     target_price: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     note: str | None = None
+    valid_until: date | None = None
     asset_price_at_event: Decimal | None = Field(default=None, gt=0, decimal_places=8)
 
 
@@ -67,12 +75,19 @@ class PriceLevelResponse(BaseModel):
     direction: str
     target_price: Decimal
     note: str | None
+    # Null only on the handful of levels created before this field existed
+    # (2026-09 changeset) — treated as "no expiry defined".
+    valid_until: date | None
     status: str
     created_at: datetime
     updated_at: datetime
     touched_at: datetime | None
     touched_at_close_price: Decimal | None
     touched_at_close_date: date | None
+    # None while armed. True if touched with no valid_until, or touched on/
+    # before it. False if touched after it — a late, retrospective-only
+    # crossing (2026-09 changeset; drives the green/gray shading).
+    touched_within_validity: bool | None
     # Null = unread alert. Only meaningful while status = 'touched' (Changeset C12).
     alert_seen_at: datetime | None
 
@@ -88,6 +103,7 @@ class PriceLevelHistoryEntryResponse(BaseModel):
     direction: str
     target_price: Decimal
     note: str | None
+    valid_until: date | None
     asset_price_at_event: Decimal | None
     created_at: datetime
 

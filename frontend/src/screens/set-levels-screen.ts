@@ -65,7 +65,12 @@ export class SetLevelsScreen extends BaseComponent {
         .level { display: flex; align-items: center; justify-content: space-between;
           padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
           margin-bottom: var(--space-2); }
+        /* Touched within the level's own valid_until — met the condition on time. */
+        .level-touched-on-time { background: var(--color-success-light); border-color: var(--color-success); }
+        /* Touched after valid_until — still a real crossing, just late; retrospective-only. */
+        .level-touched-expired { background: var(--color-bg-secondary); border-color: var(--color-border); opacity: 0.75; }
         .level-status { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-left: var(--space-2); }
+        .level-valid-until { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-left: var(--space-2); }
         .del-btn { padding: 1px var(--space-2); border-radius: var(--radius-sm);
           font-size: var(--font-size-xs); border: 1px solid var(--color-danger); color: var(--color-danger); }
         .del-btn:hover { background: var(--color-danger); color: #fff; }
@@ -86,16 +91,25 @@ export class SetLevelsScreen extends BaseComponent {
         <pi-price-level-form id="form"></pi-price-level-form>
         <h3>${t('set_levels.existing')}</h3>
         <div id="levels-list">
-          ${this._levels.length === 0 ? `<div class="level">${t('alerts.empty')}</div>` : this._levels.map((l) => `
-            <div class="level">
+          ${this._levels.length === 0 ? `<div class="level">${t('alerts.empty')}</div>` : this._levels.map((l) => {
+            const rowClass = l.status === 'touched'
+              ? (l.touched_within_validity === false ? ' level-touched-expired' : ' level-touched-on-time')
+              : '';
+            const statusKey = l.status === 'touched'
+              ? (l.touched_within_validity === false ? 'screen.price_level.status.touched_expired' : 'screen.price_level.status.touched_on_time')
+              : 'screen.price_level.status.armed';
+            return `
+            <div class="level${rowClass}">
               <span>
                 ${formatCurrency(l.target_price, this._quoteCurrency)} ${t('screen.price_level.direction.' + l.direction)}
                 ${l.note ? `— ${l.note}` : ''}
-                <span class="level-status">${t('screen.price_level.status.' + l.status)}</span>
+                <span class="level-status">${t(statusKey)}</span>
+                ${l.valid_until ? `<span class="level-valid-until">${t('screen.price_level.valid_until_label', { date: this._fmtDate(l.valid_until) })}</span>` : ''}
               </span>
               <button class="del-btn" data-id="${l.id}">${t('common.button.delete')}</button>
             </div>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
 
         <hr class="section-divider" />

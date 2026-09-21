@@ -115,7 +115,12 @@ async def create_price_levels(
     await _require_holding(portfolio_id, holding_id, current_user, db)
 
     level_dicts = [
-        {"direction": lv.direction, "target_price": lv.target_price, "note": lv.note}
+        {
+            "direction": lv.direction,
+            "target_price": lv.target_price,
+            "note": lv.note,
+            "valid_until": lv.valid_until,
+        }
         for lv in body.levels
     ]
 
@@ -166,6 +171,7 @@ async def edit_price_level(
             direction=body.direction,
             target_price=body.target_price,
             note=body.note,
+            valid_until=body.valid_until,
             asset_price_at_event=body.asset_price_at_event,
         )
     except ValueError as exc:

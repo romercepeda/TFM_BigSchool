@@ -27,6 +27,13 @@ export function nonNegativeNumber(value: string): string | null {
   return !isNaN(n) && n >= 0 ? null : 'validation.non_negative_number';
 }
 
+export function notPastDate(value: string): string | null {
+  // Plain string compare — both sides are YYYY-MM-DD, so lexicographic order
+  // matches chronological order. Avoids Date/timezone parsing entirely.
+  const today = new Date().toISOString().slice(0, 10);
+  return value >= today ? null : 'validation.date.not_past';
+}
+
 export function first(...validators: Array<() => string | null>): string | null {
   for (const v of validators) {
     const err = v();

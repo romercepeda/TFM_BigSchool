@@ -5,6 +5,7 @@ export interface PriceLevelInput {
   direction: PriceLevelDirection;
   target_price: number;
   note?: string;
+  valid_until: string; // ISO date — required (2026-09 changeset)
 }
 
 export interface CreatePriceLevelsBody {
@@ -16,6 +17,7 @@ export interface UpdatePriceLevelBody {
   direction?: PriceLevelDirection;
   target_price?: number;
   note?: string;
+  valid_until?: string; // ISO date
   asset_price_at_event?: number;
 }
 

@@ -414,7 +414,13 @@ export class AssetDetailScreen extends BaseComponent {
   }
 
   private _renderAssetAlerts(quoteCurrency: string): string {
-    const touchedLevels = this._priceLevels.filter((l) => l.status === 'touched');
+    // Touched-after-valid_until levels are retrospective-only (2026-09
+    // changeset) — not actionable, so they're excluded from this "needs
+    // review" list. They're still visible on the full list in
+    // set-levels-screen.ts, shaded gray.
+    const touchedLevels = this._priceLevels.filter(
+      (l) => l.status === 'touched' && l.touched_within_validity !== false
+    );
     const dueAlerts = this._dateAlerts.filter((a) => a.status === 'due');
     if (touchedLevels.length === 0 && dueAlerts.length === 0) return '';
 

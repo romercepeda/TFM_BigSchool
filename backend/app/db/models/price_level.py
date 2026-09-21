@@ -47,6 +47,12 @@ class PriceLevel(Base):
     direction: Mapped[str] = mapped_column(_DIRECTION_ENUM, nullable=False)
     target_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Cutoff date the level's condition must be met by to count as "on time"
+    # (2026-09 changeset). Required for new levels at the API layer; nullable
+    # here so the handful of pre-existing levels (created before this field
+    # existed) keep working as "no expiry defined" rather than needing a
+    # backfilled value. Only editable while armed — see edit_price_level.
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(_STATUS_ENUM, nullable=False, server_default="armed")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -64,6 +70,20 @@ class PriceLevel(Base):
     alert_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     holding: Mapped["Holding"] = relationship(back_populates="price_levels")  # type: ignore[name-defined]
+
+    @property
+    def touched_within_validity(self) -> bool | None:
+        """None while armed (not applicable). True if touched with no expiry
+
+        set, or touched on/before valid_until. False if touched after
+        valid_until — still a real crossing, just outside the window the
+        user set when they created the level (2026-09 changeset).
+        """
+        if self.status != "touched":
+            return None
+        if self.valid_until is None or self.touched_at_close_date is None:
+            return True
+        return self.touched_at_close_date <= self.valid_until
 
     def __repr__(self) -> str:
         return (
@@ -100,6 +120,7 @@ class PriceLevelHistoryEntry(Base):
     direction: Mapped[str] = mapped_column(_DIRECTION_ENUM, nullable=False)
     target_price: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     # The asset's quote-currency price at the time of the event (when available).
     asset_price_at_event: Mapped[Decimal | None] = mapped_column(Numeric(18, 8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

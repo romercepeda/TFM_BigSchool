@@ -309,12 +309,18 @@ export interface PriceLevel {
   direction: PriceLevelDirection;
   target_price: number;
   note: string | null;
+  // Cutoff date the condition must be met by to count as "on time" (2026-09
+  // changeset). Null only on levels created before this field existed.
+  valid_until: string | null;
   status: PriceLevelStatus;
   created_at: string;
   updated_at: string;
   touched_at: string | null;
   touched_at_close_price: number | null;
   touched_at_close_date: string | null;
+  // Null while armed. True if touched on time (or no valid_until set),
+  // false if touched after valid_until — drives the green/gray shading.
+  touched_within_validity: boolean | null;
   // Null = unread alert. Only meaningful while status is 'touched' (Changeset C12).
   alert_seen_at: string | null;
 }

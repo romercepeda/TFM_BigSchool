@@ -42,6 +42,7 @@ def _history(
         direction=level.direction,
         target_price=level.target_price,
         note=level.note,
+        valid_until=level.valid_until,
         asset_price_at_event=asset_price_at_event,
     )
 
@@ -95,23 +96,31 @@ async def create_price_levels(
 ) -> list[PriceLevel]:
     """Create one or more price levels in a single atomic operation (Spec D06 §8).
 
-    Each dict must have: direction (str), target_price (Decimal), note (str|None).
-    Raises ValueError if the list is empty or target_price is not > 0.
+    Each dict must have: direction (str), target_price (Decimal), note (str|None),
+    valid_until (date). Raises ValueError if the list is empty, target_price is
+    not > 0, or valid_until is in the past (2026-09 changeset — a level's
+    validity window is meant to be set looking forward from creation time).
     """
     if not levels:
         raise ValueError("At least one price level must be provided.")
 
+    today = date.today()
     created: list[PriceLevel] = []
     for item in levels:
         target = item["target_price"]
         if target <= Decimal("0"):
             raise ValueError("target_price must be greater than zero.")
 
+        valid_until = item["valid_until"]
+        if valid_until < today:
+            raise ValueError("valid_until cannot be in the past.")
+
         level = PriceLevel(
             holding_id=holding_id,
             direction=item["direction"],
             target_price=target,
             note=item.get("note"),
+            valid_until=valid_until,
             status="armed",
         )
         db.add(level)
@@ -131,18 +140,23 @@ async def edit_price_level(
     direction: str | None = None,
     target_price: Decimal | None = None,
     note: str | None = None,
+    valid_until: date | None = None,
     asset_price_at_event: Decimal | None = None,
 ) -> PriceLevel:
     """Edit a price level and write an 'edited' history entry (Spec D06 §3.2).
 
     Raises ValueError if the level is 'touched' and a field other than note
-    is being changed (Spec D06 §3.2).
+    is being changed (Spec D06 §3.2). valid_until is grouped with
+    direction/target_price, not note: changing it after the level is
+    touched would retroactively flip touched_within_validity for an event
+    that already happened (2026-09 changeset).
     """
     if level.status == "touched":
-        if direction is not None or target_price is not None:
+        if direction is not None or target_price is not None or valid_until is not None:
             raise ValueError(
                 "A touched level can only have its note edited. "
-                "To change direction or target price, delete this level and create a new one."
+                "To change direction, target price, or the validity date, "
+                "delete this level and create a new one."
             )
 
     changed = False
@@ -153,6 +167,9 @@ async def edit_price_level(
         if target_price <= Decimal("0"):
             raise ValueError("target_price must be greater than zero.")
         level.target_price = target_price
+        changed = True
+    if valid_until is not None:
+        level.valid_until = valid_until
         changed = True
     if note is not None:
         level.note = note
@@ -326,19 +343,24 @@ async def list_portfolio_alerts(
             "direction": level.direction,
             "target_price": level.target_price,
             "note": level.note,
+            "valid_until": level.valid_until,
             "status": level.status,
             "created_at": level.created_at,
             "updated_at": level.updated_at,
             "touched_at": level.touched_at,
             "touched_at_close_price": level.touched_at_close_price,
             "touched_at_close_date": level.touched_at_close_date,
+            "touched_within_validity": level.touched_within_validity,
             "alert_seen_at": level.alert_seen_at,
             "asset_ticker": ticker,
             "asset_name": name,
             "asset_quote_currency": quote_currency,
             "current_price": current_price,
         }
-        if level.status == "touched":
+        # A level touched after its own valid_until is retrospective-only
+        # value (2026-09 changeset) — it no longer belongs in the actionable
+        # Alerts Panel, only in the asset's price-levels list/history.
+        if level.status == "touched" and level.touched_within_validity is not False:
             touched.append({**item, "gap_pct": None})
         elif level.status == "armed" and current_price:
             gap = abs(current_price - level.target_price) / current_price

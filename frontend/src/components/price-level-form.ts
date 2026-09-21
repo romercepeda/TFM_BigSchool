@@ -2,7 +2,7 @@ import { BaseComponent } from './common/base-component.js';
 import { t } from '../i18n/i18n.js';
 import { createPriceLevels } from '../api/price-levels.js';
 import type { PriceLevelDirection } from '../api/types.js';
-import { required, positiveNumber } from '../utils/validation.js';
+import { required, positiveNumber, notPastDate, first } from '../utils/validation.js';
 
 export class PriceLevelForm extends BaseComponent {
   private _portfolioId = '';
@@ -54,6 +54,9 @@ export class PriceLevelForm extends BaseComponent {
         <label>${t('screen.price_level.notes')}
           <input type="text" id="note" />
         </label>
+        <label>${t('screen.price_level.valid_until')}
+          <input type="date" id="valid-until" min="${new Date().toISOString().slice(0, 10)}" required />
+        </label>
         <div id="error" class="error"></div>
         <button type="submit">${t('common.button.save')}</button>
       </form>
@@ -66,15 +69,20 @@ export class PriceLevelForm extends BaseComponent {
       const targetPrice = (this.shadow.getElementById('target-price') as HTMLInputElement).value;
       const direction = (this.shadow.getElementById('direction') as HTMLSelectElement).value as PriceLevelDirection;
       const note = (this.shadow.getElementById('note') as HTMLInputElement).value;
+      const validUntil = (this.shadow.getElementById('valid-until') as HTMLInputElement).value;
       const errEl = this.shadow.getElementById('error')!;
 
-      const err = required(targetPrice) ?? positiveNumber(targetPrice);
+      const err = first(
+        () => required(targetPrice) ?? positiveNumber(targetPrice),
+        () => required(validUntil),
+        () => notPastDate(validUntil),
+      );
       if (err) { errEl.textContent = t(err); return; }
       errEl.textContent = '';
 
       try {
         await createPriceLevels(this._portfolioId, this._holdingId, {
-          levels: [{ direction, target_price: Number(targetPrice), note: note || undefined }],
+          levels: [{ direction, target_price: Number(targetPrice), note: note || undefined, valid_until: validUntil }],
           asset_price_at_event: this._currentPrice ?? undefined,
         });
         this.dispatchEvent(new CustomEvent('level-created', { bubbles: true, composed: true }));
